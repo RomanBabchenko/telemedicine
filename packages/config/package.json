@@ -1,0 +1,15 @@
+{
+  "name": "@telemed/config",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "files": [
+    "tailwind-preset.cjs",
+    "eslint-preset.cjs",
+    "tsconfig.base.json"
+  ],
+  "exports": {
+    "./tailwind": "./tailwind-preset.cjs",
+    "./eslint": "./eslint-preset.cjs"
+  }
+}

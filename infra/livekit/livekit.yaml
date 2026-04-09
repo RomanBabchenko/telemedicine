@@ -1,0 +1,32 @@
+port: 7880
+# Listen for the signaling websocket on both the LAN IP (so phones on
+# Wi-Fi connect) and loopback (so desktop browsers using ws://localhost:7880
+# still work). Empty string would mean "all interfaces", which on a host
+# with docker bridges + VPN ends up publishing useless extra candidates.
+bind_addresses:
+  - '192.168.88.251'
+  - '127.0.0.1'
+rtc:
+  tcp_port: 7881
+  # UDP range published as ICE candidates. Keep it small in dev so the
+  # firewall rule is easy to reason about.
+  port_range_start: 50000
+  port_range_end: 50100
+  # Do NOT autodiscover via STUN. On a multi-interface host (LAN + docker
+  # bridges + WAN behind NAT) `use_external_ip: true` ends up publishing
+  # the public WAN IP and all docker bridge IPs as ICE candidates, which
+  # the phone can never reach. The result is a "3 seconds, then dead"
+  # connection. Pin to the LAN IP via --node-ip on the command line so
+  # there is exactly one candidate and it actually points at the dev box.
+  use_external_ip: false
+  # Restrict the RTC media sockets to one physical interface. Without this
+  # LiveKit binds UDP on every interface (docker bridges, VPN tun0…) and
+  # RTP replies sometimes leave through the wrong NIC, which from the
+  # client looks like "video freezes every 3 seconds". Edit `wlan0` to
+  # match your dev machine's NIC name (`ip -4 -o addr show`).
+  interfaces:
+    includes:
+      - wlan0
+keys:
+  devkey: devsecretdevsecretdevsecretdevsecret
+log_level: info

@@ -1,0 +1,27 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "ES2022",
+    "outDir": "./dist",
+    "baseUrl": "./",
+    "incremental": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "esModuleInterop": true,
+    "declaration": false,
+    "sourceMap": true,
+    "skipLibCheck": true,
+    "strictNullChecks": true,
+    "strictPropertyInitialization": false,
+    "noImplicitAny": true,
+    "paths": {
+      "@telemed/shared-types": ["../../packages/shared-types/src/index.ts"],
+      "@telemed/shared-types/*": ["../../packages/shared-types/src/*"],
+      "@telemed/utils": ["../../packages/utils/src/index.ts"],
+      "@telemed/utils/*": ["../../packages/utils/src/*"]
+    }
+  },
+  "include": ["src/**/*", "test/**/*", "../../packages/shared-types/src/**/*", "../../packages/utils/src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

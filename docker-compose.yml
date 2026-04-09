@@ -1,0 +1,96 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: telemed-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: telemed
+      POSTGRES_PASSWORD: telemed
+      POSTGRES_DB: telemed
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U telemed']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: telemed-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: telemed-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: telemed
+      MINIO_ROOT_PASSWORD: telemed-secret
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: telemed-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 telemed telemed-secret &&
+      (mc mb local/telemed-files || true) &&
+      mc anonymous set download local/telemed-files &&
+      exit 0
+      "
+
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: telemed-livekit
+    restart: unless-stopped
+    # host network mode is the simplest way to make the WebRTC RTC port range
+    # (50000-50100/UDP) reachable from the browser without enumerating every
+    # port in `ports:`. Works on Linux out of the box. On macOS/Windows
+    # (where docker runs in a VM) you need to switch to bridge mode and add
+    # `ports: ["7880:7880", "7881:7881", "50000-50100:50000-50100/udp"]`.
+    network_mode: host
+    # Pin LiveKit to a single IP — the dev box's LAN address. Override at
+    # runtime via the LIVEKIT_NODE_IP env var if your LAN address changes,
+    # e.g. `LIVEKIT_NODE_IP=192.168.1.42 docker compose up -d livekit`.
+    command: --config /etc/livekit.yaml --node-ip ${LIVEKIT_NODE_IP:-192.168.88.251}
+    volumes:
+      - ./infra/livekit/livekit.yaml:/etc/livekit.yaml:ro
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: telemed-mailhog
+    restart: unless-stopped
+    ports:
+      - '1025:1025'
+      - '8025:8025'
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:

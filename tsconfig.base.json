@@ -1,0 +1,37 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "moduleResolution": "node",
+    "strict": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": false,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "declaration": true,
+    "sourceMap": true,
+    "removeComments": false,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": false,
+    "baseUrl": ".",
+    "paths": {
+      "@telemed/shared-types": ["packages/shared-types/src/index.ts"],
+      "@telemed/shared-types/*": ["packages/shared-types/src/*"],
+      "@telemed/api-client": ["packages/api-client/src/index.ts"],
+      "@telemed/api-client/*": ["packages/api-client/src/*"],
+      "@telemed/ui": ["packages/ui/src/index.ts"],
+      "@telemed/ui/*": ["packages/ui/src/*"],
+      "@telemed/utils": ["packages/utils/src/index.ts"],
+      "@telemed/utils/*": ["packages/utils/src/*"]
+    }
+  },
+  "exclude": ["node_modules", "dist", "build", ".next", "coverage"]
+}

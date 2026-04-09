@@ -1,0 +1,15 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": ".",
+  "testEnvironment": "node",
+  "testRegex": ".e2e-spec.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "moduleNameMapper": {
+    "^@telemed/shared-types$": "<rootDir>/../../../packages/shared-types/src/index.ts",
+    "^@telemed/shared-types/(.*)$": "<rootDir>/../../../packages/shared-types/src/$1",
+    "^@telemed/utils$": "<rootDir>/../../../packages/utils/src/index.ts",
+    "^@telemed/utils/(.*)$": "<rootDir>/../../../packages/utils/src/$1"
+  }
+}
