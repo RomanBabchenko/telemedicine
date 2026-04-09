@@ -6,7 +6,12 @@ import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { Auditable } from '../../../common/audit/decorators';
 import { ProviderService } from '../application/provider.service';
-import { CreateAvailabilityRuleBodyDto, DoctorSearchQueryDto, UpdateDoctorBodyDto } from './dto';
+import {
+  CreateAvailabilityRuleBodyDto,
+  CreateDoctorBodyDto,
+  DoctorSearchQueryDto,
+  UpdateDoctorBodyDto,
+} from './dto';
 
 @ApiTags('doctors')
 @Controller('doctors')
@@ -16,13 +21,32 @@ export class ProviderController {
   @Get()
   @Public()
   search(@Query() query: DoctorSearchQueryDto) {
-    return this.service.search(query);
+    return this.service.search({ ...query, includeUnverified: false });
+  }
+
+  // NOTE: declared before `@Get(':id')` so the static `admin/list` segment
+  // is matched before the param route.
+  @ApiBearerAuth()
+  @Get('admin/list')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
+  searchForAdmin(@Query() query: DoctorSearchQueryDto) {
+    return this.service.search({ ...query, includeUnverified: true });
   }
 
   @Get(':id')
   @Public()
   getById(@Param('id') id: string) {
     return this.service.getById(id);
+  }
+
+  @ApiBearerAuth()
+  @Post()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
+  @Auditable({ action: 'doctor.created', resource: 'Doctor', captureBody: true })
+  create(@Body() body: CreateDoctorBodyDto) {
+    return this.service.create(body);
   }
 
   @ApiBearerAuth()
@@ -35,12 +59,30 @@ export class ProviderController {
   }
 
   @ApiBearerAuth()
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
+  @Auditable({ action: 'doctor.deleted', resource: 'Doctor' })
+  remove(@Param('id') id: string) {
+    return this.service.remove(id);
+  }
+
+  @ApiBearerAuth()
   @Post(':id/documents/verify')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
   @Auditable({ action: 'doctor.verified', resource: 'Doctor' })
   verify(@Param('id') id: string) {
     return this.service.verify(id);
+  }
+
+  @ApiBearerAuth()
+  @Post(':id/slots/regenerate')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
+  @Auditable({ action: 'doctor.slots.regenerated', resource: 'Doctor' })
+  regenerateSlots(@Param('id') id: string) {
+    return this.service.regenerateSlots(id);
   }
 
   @ApiBearerAuth()

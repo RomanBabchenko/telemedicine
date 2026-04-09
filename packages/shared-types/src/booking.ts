@@ -33,6 +33,19 @@ export interface ReserveAppointmentDto {
   reasonText?: string;
 }
 
+export interface AppointmentPatientSummary {
+  firstName: string;
+  lastName: string;
+  phone: string | null;
+  email: string | null;
+}
+
+export interface AppointmentDoctorSummary {
+  firstName: string;
+  lastName: string;
+  specializations: string[];
+}
+
 export interface AppointmentDto {
   id: string;
   tenantId: string;
@@ -47,6 +60,12 @@ export interface AppointmentDto {
   paymentId: string | null;
   consultationSessionId: string | null;
   createdAt: string;
+  // Joined summaries — populated by list endpoints so admin/doctor UIs
+  // don't have to make N+1 follow-up requests. Optional for backwards
+  // compatibility with reserve/confirm/cancel responses that still return
+  // a bare appointment row.
+  patient?: AppointmentPatientSummary;
+  doctor?: AppointmentDoctorSummary;
 }
 
 export interface CancelAppointmentDto {

@@ -75,13 +75,15 @@ export const createApiClient = (options: ApiClientOptions): ApiClient => {
 
   return {
     raw: instance,
-    get: async <T,>(url, config) => (await instance.get<T>(url, config)).data,
-    post: async <T,>(url, body, config) =>
+    get: async <T,>(url: string, config?: AxiosRequestConfig) =>
+      (await instance.get<T>(url, config)).data,
+    post: async <T,>(url: string, body?: unknown, config?: AxiosRequestConfig) =>
       (await instance.post<T>(url, body, config)).data,
-    patch: async <T,>(url, body, config) =>
+    patch: async <T,>(url: string, body?: unknown, config?: AxiosRequestConfig) =>
       (await instance.patch<T>(url, body, config)).data,
-    put: async <T,>(url, body, config) =>
+    put: async <T,>(url: string, body?: unknown, config?: AxiosRequestConfig) =>
       (await instance.put<T>(url, body, config)).data,
-    delete: async <T,>(url, config) => (await instance.delete<T>(url, config)).data,
+    delete: async <T,>(url: string, config?: AxiosRequestConfig) =>
+      (await instance.delete<T>(url, config)).data,
   };
 };

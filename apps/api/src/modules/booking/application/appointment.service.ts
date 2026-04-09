@@ -7,12 +7,13 @@ import {
 } from '@nestjs/common';
 import { EventBus } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { AppointmentStatus, SlotStatus } from '@telemed/shared-types';
 import { Slot } from '../domain/entities/slot.entity';
 import { Appointment } from '../domain/entities/appointment.entity';
 import { ServiceType } from '../domain/entities/service-type.entity';
 import { Patient } from '../../patient/domain/entities/patient.entity';
+import { ProviderService } from '../../provider/application/provider.service';
 import { TenantContextService } from '../../../common/tenant/tenant-context.service';
 import { SlotHoldService } from './slot-hold.service';
 import {
@@ -81,14 +82,60 @@ export class AppointmentService {
     private readonly slotHold: SlotHoldService,
     private readonly eventBus: EventBus,
     private readonly dataSource: DataSource,
+    private readonly providerService: ProviderService,
   ) {}
 
-  async listForRole(filters: { patientId?: string; doctorId?: string }): Promise<Appointment[]> {
+  async listForRole(filters: { patientId?: string; doctorId?: string }) {
     const tenantId = this.tenantContext.getTenantId();
     const where: Record<string, unknown> = { tenantId };
     if (filters.patientId) where.patientId = filters.patientId;
     if (filters.doctorId) where.doctorId = filters.doctorId;
-    return this.appointments.find({ where, order: { startAt: 'DESC' } });
+    const rows = await this.appointments.find({ where, order: { startAt: 'DESC' } });
+    if (rows.length === 0) return [];
+
+    const patientIds = Array.from(new Set(rows.map((r) => r.patientId)));
+    const doctorIds = Array.from(new Set(rows.map((r) => r.doctorId)));
+
+    const [patientRows, doctorMap] = await Promise.all([
+      this.patients.find({ where: { id: In(patientIds) } }),
+      this.providerService.getDoctorsByIds(doctorIds),
+    ]);
+    const patientMap = new Map(patientRows.map((p) => [p.id, p]));
+
+    return rows.map((r) => {
+      const patient = patientMap.get(r.patientId);
+      const doctor = doctorMap.get(r.doctorId);
+      return {
+        id: r.id,
+        tenantId: r.tenantId,
+        doctorId: r.doctorId,
+        patientId: r.patientId,
+        serviceTypeId: r.serviceTypeId,
+        slotId: r.slotId,
+        status: r.status,
+        reasonText: r.reasonText,
+        startAt: r.startAt,
+        endAt: r.endAt,
+        paymentId: r.paymentId,
+        consultationSessionId: r.consultationSessionId,
+        createdAt: r.createdAt,
+        patient: patient
+          ? {
+              firstName: patient.firstName,
+              lastName: patient.lastName,
+              phone: patient.phone,
+              email: patient.email,
+            }
+          : undefined,
+        doctor: doctor
+          ? {
+              firstName: doctor.firstName,
+              lastName: doctor.lastName,
+              specializations: doctor.specializations,
+            }
+          : undefined,
+      };
+    });
   }
 
   async getById(id: string): Promise<Appointment> {

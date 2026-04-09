@@ -15,12 +15,22 @@ export class AppConfig {
   get globalPrefix(): string {
     return this.config.get('API_GLOBAL_PREFIX', { infer: true });
   }
-  get corsOrigins(): string[] {
+  /**
+   * CORS origins parsed from env. Supports two forms per comma-separated entry:
+   *   - exact origin string, e.g. `http://localhost:5173`
+   *   - regex prefixed with `regex:`, e.g. `regex:^http://192\.168\.\d+\.\d+:5173$`
+   * Useful in dev when the LAN IP changes — you can whitelist a whole subnet
+   * once instead of editing .env each time.
+   */
+  get corsOrigins(): (string | RegExp)[] {
     return this.config
       .get('CORS_ORIGINS', { infer: true })
       .split(',')
       .map((s: string) => s.trim())
-      .filter(Boolean);
+      .filter(Boolean)
+      .map((entry: string) =>
+        entry.startsWith('regex:') ? new RegExp(entry.slice('regex:'.length)) : entry,
+      );
   }
 
   get db() {

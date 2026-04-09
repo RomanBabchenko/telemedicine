@@ -1,22 +1,116 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { doctorsApi } from '@telemed/api-client';
-import { Badge, Card, EmptyState, PageHeader, Spinner, Table, TBody, TD, TH, THead, TR } from '@telemed/ui';
+import type {
+  CreateDoctorDto,
+  DoctorDto,
+  UpdateDoctorDto,
+} from '@telemed/shared-types';
+import {
+  Alert,
+  Badge,
+  Button,
+  EmptyState,
+  Modal,
+  PageHeader,
+  Spinner,
+  Table,
+  TBody,
+  TD,
+  TH,
+  THead,
+  TR,
+} from '@telemed/ui';
 import { apiClient } from '../../lib/api';
+import { DoctorFormModal } from './DoctorFormModal';
 
 const doctors = doctorsApi(apiClient);
 
+type ModalState =
+  | { kind: 'closed' }
+  | { kind: 'create' }
+  | { kind: 'edit'; doctor: DoctorDto }
+  | { kind: 'delete'; doctor: DoctorDto }
+  | { kind: 'verify'; doctor: DoctorDto };
+
+const errorMessage = (error: unknown): string => {
+  if (!error) return '';
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const m = (error as { message?: unknown }).message;
+    if (typeof m === 'string') return m;
+  }
+  return 'Сталася помилка';
+};
+
 export const DoctorsPage = () => {
-  const { data, isLoading } = useQuery({
+  const qc = useQueryClient();
+  const [modal, setModal] = useState<ModalState>({ kind: 'closed' });
+
+  const listQ = useQuery({
     queryKey: ['admin-doctors'],
-    queryFn: () => doctors.search({ pageSize: 100 }),
+    queryFn: () => doctors.searchAdmin({ pageSize: 100 }),
   });
+
+  const close = () => setModal({ kind: 'closed' });
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['admin-doctors'] });
+
+  const createM = useMutation({
+    mutationFn: (dto: CreateDoctorDto) => doctors.create(dto),
+    onSuccess: () => {
+      invalidate();
+      close();
+    },
+  });
+
+  const updateM = useMutation({
+    mutationFn: ({ id, dto }: { id: string; dto: UpdateDoctorDto }) =>
+      doctors.update(id, dto),
+    onSuccess: () => {
+      invalidate();
+      close();
+    },
+  });
+
+  const deleteM = useMutation({
+    mutationFn: (id: string) => doctors.delete(id),
+    onSuccess: () => {
+      invalidate();
+      close();
+    },
+  });
+
+  const verifyM = useMutation({
+    mutationFn: (id: string) => doctors.verify(id),
+    onSuccess: () => {
+      invalidate();
+      close();
+    },
+  });
+
+  const regenSlotsM = useMutation({
+    mutationFn: (id: string) => doctors.regenerateSlots(id),
+  });
+
+  const isFormOpen = modal.kind === 'create' || modal.kind === 'edit';
+  const editingDoctor = modal.kind === 'edit' ? modal.doctor : null;
+  const deletingDoctor = modal.kind === 'delete' ? modal.doctor : null;
+  const verifyingDoctor = modal.kind === 'verify' ? modal.doctor : null;
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Лікарі клініки" />
-      {isLoading ? (
+      <PageHeader
+        title="Лікарі клініки"
+        actions={
+          <Button onClick={() => setModal({ kind: 'create' })}>Додати лікаря</Button>
+        }
+      />
+
+      {listQ.isLoading ? (
         <Spinner />
-      ) : (data?.items.length ?? 0) === 0 ? (
+      ) : listQ.isError ? (
+        <Alert variant="danger">{errorMessage(listQ.error)}</Alert>
+      ) : (listQ.data?.items.length ?? 0) === 0 ? (
         <EmptyState title="У клініці поки немає лікарів" />
       ) : (
         <Table>
@@ -27,25 +121,149 @@ export const DoctorsPage = () => {
               <TH>Стаж</TH>
               <TH>Ціна</TH>
               <TH>Статус</TH>
+              <TH>Дії</TH>
             </TR>
           </THead>
           <TBody>
-            {data?.items.map((d) => (
+            {listQ.data?.items.map((d) => (
               <TR key={d.id}>
-                <TD>{d.firstName} {d.lastName}</TD>
+                <TD>
+                  {d.firstName} {d.lastName}
+                </TD>
                 <TD>{d.specializations.join(', ')}</TD>
                 <TD>{d.yearsOfExperience} років</TD>
                 <TD>{d.basePrice} ₴</TD>
                 <TD>
-                  <Badge variant={d.verificationStatus === 'VERIFIED' ? 'success' : 'warning'}>
+                  <Badge
+                    variant={d.verificationStatus === 'VERIFIED' ? 'success' : 'warning'}
+                  >
                     {d.verificationStatus}
                   </Badge>
+                </TD>
+                <TD>
+                  <div className="flex gap-2">
+                    {d.verificationStatus !== 'VERIFIED' ? (
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={() => setModal({ kind: 'verify', doctor: d })}
+                      >
+                        Підтвердити
+                      </Button>
+                    ) : null}
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setModal({ kind: 'edit', doctor: d })}
+                    >
+                      Редагувати
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      isLoading={regenSlotsM.isPending && regenSlotsM.variables === d.id}
+                      onClick={() => regenSlotsM.mutate(d.id)}
+                    >
+                      Слоти
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={() => setModal({ kind: 'delete', doctor: d })}
+                    >
+                      Видалити
+                    </Button>
+                  </div>
                 </TD>
               </TR>
             ))}
           </TBody>
         </Table>
       )}
+
+      <DoctorFormModal
+        open={isFormOpen}
+        mode={modal.kind === 'edit' ? 'edit' : 'create'}
+        initial={editingDoctor}
+        isPending={modal.kind === 'edit' ? updateM.isPending : createM.isPending}
+        error={modal.kind === 'edit' ? updateM.error : createM.error}
+        onClose={close}
+        onSubmitCreate={(dto) => createM.mutate(dto)}
+        onSubmitUpdate={(dto) => {
+          if (editingDoctor) updateM.mutate({ id: editingDoctor.id, dto });
+        }}
+      />
+
+      <Modal
+        open={modal.kind === 'verify'}
+        onClose={close}
+        title="Підтвердити лікаря?"
+        footer={
+          <>
+            <Button variant="secondary" onClick={close} disabled={verifyM.isPending}>
+              Скасувати
+            </Button>
+            <Button
+              variant="primary"
+              isLoading={verifyM.isPending}
+              onClick={() => {
+                if (verifyingDoctor) verifyM.mutate(verifyingDoctor.id);
+              }}
+            >
+              Підтвердити
+            </Button>
+          </>
+        }
+      >
+        {verifyingDoctor ? (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-700">
+              Документи лікаря{' '}
+              <strong>
+                {verifyingDoctor.firstName} {verifyingDoctor.lastName}
+              </strong>{' '}
+              перевірені, кваліфікація підтверджена. Статус буде змінено на VERIFIED.
+            </p>
+            {verifyM.isError ? (
+              <Alert variant="danger">{errorMessage(verifyM.error)}</Alert>
+            ) : null}
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={modal.kind === 'delete'}
+        onClose={close}
+        title="Видалити лікаря?"
+        footer={
+          <>
+            <Button variant="secondary" onClick={close} disabled={deleteM.isPending}>
+              Скасувати
+            </Button>
+            <Button
+              variant="danger"
+              isLoading={deleteM.isPending}
+              onClick={() => {
+                if (deletingDoctor) deleteM.mutate(deletingDoctor.id);
+              }}
+            >
+              Видалити
+            </Button>
+          </>
+        }
+      >
+        {deletingDoctor ? (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-700">
+              Лікар <strong>{deletingDoctor.firstName} {deletingDoctor.lastName}</strong>{' '}
+              буде прихований у клініці. Історія прийомів збережеться.
+            </p>
+            {deleteM.isError ? (
+              <Alert variant="danger">{errorMessage(deleteM.error)}</Alert>
+            ) : null}
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 };

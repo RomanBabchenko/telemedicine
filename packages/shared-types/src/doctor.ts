@@ -38,11 +38,30 @@ export interface DoctorSearchQuery {
 }
 
 export interface UpdateDoctorDto {
+  firstName?: string;
+  lastName?: string;
   bio?: string;
   photoUrl?: string;
   specializations?: string[];
   subspecializations?: string[];
   languages?: string[];
+  licenseNumber?: string | null;
+  yearsOfExperience?: number;
+  basePrice?: number;
+  defaultDurationMin?: number;
+}
+
+export interface CreateDoctorDto {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  specializations: string[];
+  languages?: string[];
+  licenseNumber?: string;
+  yearsOfExperience?: number;
+  bio?: string;
+  photoUrl?: string;
   basePrice?: number;
   defaultDurationMin?: number;
 }

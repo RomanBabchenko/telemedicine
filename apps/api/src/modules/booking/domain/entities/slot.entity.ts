@@ -3,7 +3,11 @@ import { SlotStatus } from '@telemed/shared-types';
 import { TenantOwnedEntity } from '../../../../common/entities/tenant-owned.entity';
 
 @Entity('slots')
-@Unique('uq_slot_doctor_start', ['doctorId', 'startAt'])
+// Unique per tenant: the same physical doctor can be exposed in multiple
+// clinics simultaneously, each with its own slot row. Without `tenantId`
+// in the constraint a second tenant's INSERT silently collapses on
+// `ON CONFLICT` and one of the clinics ends up with zero slots.
+@Unique('uq_slot_doctor_start', ['tenantId', 'doctorId', 'startAt'])
 @Index('idx_slot_tenant_doctor_start', ['tenantId', 'doctorId', 'startAt'])
 export class Slot extends TenantOwnedEntity {
   @Column({ name: 'doctor_id', type: 'uuid' })

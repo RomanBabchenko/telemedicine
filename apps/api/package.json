@@ -11,10 +11,10 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
-    "db:migration:generate": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/config/typeorm.config.ts migration:generate",
-    "db:migration:create": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:create",
-    "db:migration:run": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/config/typeorm.config.ts migration:run",
-    "db:migration:revert": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/config/typeorm.config.ts migration:revert",
+    "db:migration:generate": "typeorm-ts-node-commonjs -d src/config/typeorm.config.ts migration:generate",
+    "db:migration:create": "typeorm-ts-node-commonjs migration:create",
+    "db:migration:run": "typeorm-ts-node-commonjs -d src/config/typeorm.config.ts migration:run",
+    "db:migration:revert": "typeorm-ts-node-commonjs -d src/config/typeorm.config.ts migration:revert",
     "db:seed": "ts-node -r tsconfig-paths/register src/database/seeds/seed.ts"
   },
   "dependencies": {

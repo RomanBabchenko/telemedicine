@@ -1,0 +1,26 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+
+region        = "eu-central-1"
+domain        = "testing-core.link"
+instance_type = "t3.medium"
+root_volume_gb = 30
+
+# cat ~/.ssh/id_ed25519.pub
+ssh_pubkey = "ssh-ed25519 AAAA... your-key-comment"
+
+# curl -s ifconfig.me  → wrap in /32
+ssh_cidr = "203.0.113.42/32"
+
+# For a private repo use the SSH form:
+#   git@github.com:youruser/telemedicine.git
+# For a public repo the HTTPS form is fine:
+#   https://github.com/youruser/telemedicine.git
+repo_url    = "git@github.com:youruser/telemedicine.git"
+repo_branch = "main"
+
+le_email = "you@example.com"
+
+# Private repo only — set via env var, NOT in this file:
+#   export TF_VAR_git_ssh_private_key="$(cat ~/.ssh/id_ed25519)"
+# Then `terraform apply` picks it up automatically. Leave commented here.
+# git_ssh_private_key = "..."
