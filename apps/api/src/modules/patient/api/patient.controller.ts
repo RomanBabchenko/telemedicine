@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser, AuthUser } from '../../../common/auth/decorators';
 import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
@@ -54,6 +54,14 @@ export class PatientController {
   @Get('documents')
   async myDocuments(@CurrentUser() user: AuthUser) {
     return this.service.myDocuments(user.id);
+  }
+
+  @Get('documents/:id/pdf')
+  async myDocumentPdf(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+  ) {
+    return this.service.getMyDocumentPdfUrl(user.id, id);
   }
 
   @Get('consents')

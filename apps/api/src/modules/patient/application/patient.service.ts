@@ -7,6 +7,8 @@ import { PatientTenantProfile } from '../domain/entities/patient-tenant-profile.
 import { Consent } from '../domain/entities/consent.entity';
 import { Appointment } from '../../booking/domain/entities/appointment.entity';
 import { MedicalDocument } from '../../documentation/domain/entities/medical-document.entity';
+import { ProviderService } from '../../provider/application/provider.service';
+import { FileStorageService } from '../../file-storage/application/file-storage.service';
 import { TenantContextService } from '../../../common/tenant/tenant-context.service';
 
 @Injectable()
@@ -20,6 +22,8 @@ export class PatientService {
     @InjectRepository(MedicalDocument)
     private readonly documents: Repository<MedicalDocument>,
     private readonly tenantContext: TenantContextService,
+    private readonly providers: ProviderService,
+    private readonly files: FileStorageService,
   ) {}
 
   async getByUserId(userId: string): Promise<Patient> {
@@ -68,13 +72,68 @@ export class PatientService {
     });
   }
 
-  async myDocuments(userId: string): Promise<MedicalDocument[]> {
+  async myDocuments(userId: string) {
     const tenantId = this.tenantContext.getTenantId();
     const patient = await this.getByUserId(userId);
-    return this.documents.find({
+    const docs = await this.documents.find({
       where: { patientId: patient.id, tenantId },
       order: { createdAt: 'DESC' },
     });
+    if (docs.length === 0) return [];
+
+    const doctorIds = Array.from(new Set(docs.map((d) => d.authorDoctorId)));
+    const doctorMap = await this.providers.getDoctorsByIds(doctorIds);
+
+    return docs.map((d) => {
+      const author = doctorMap.get(d.authorDoctorId);
+      return {
+        id: d.id,
+        appointmentId: d.appointmentId,
+        authorDoctorId: d.authorDoctorId,
+        patientId: d.patientId,
+        type: d.type,
+        status: d.status,
+        structuredContent: d.structuredContent,
+        // The entity stores `pdfFileAssetId` (a MinIO key); turning it into a
+        // signed URL is a separate file-storage concern that hasn't been wired
+        // through to this endpoint yet. Returning null keeps the DTO contract
+        // intact for the patient list view.
+        pdfUrl: null,
+        signedAt: d.signedAt,
+        version: d.version,
+        parentDocumentId: d.parentDocumentId,
+        createdAt: d.createdAt,
+        doctor: author
+          ? {
+              firstName: author.firstName,
+              lastName: author.lastName,
+              specializations: author.specializations,
+            }
+          : undefined,
+      };
+    });
+  }
+
+  /**
+   * Resolve a signed download URL for one of the patient's own medical
+   * documents. Ownership is enforced by the patient_id filter — a request
+   * for somebody else's document yields 404, not 403, so attackers can't
+   * tell whether the id exists.
+   */
+  async getMyDocumentPdfUrl(
+    userId: string,
+    documentId: string,
+  ): Promise<{ url: string }> {
+    const tenantId = this.tenantContext.getTenantId();
+    const patient = await this.getByUserId(userId);
+    const doc = await this.documents.findOne({
+      where: { id: documentId, tenantId, patientId: patient.id },
+    });
+    if (!doc) throw new NotFoundException('Document not found');
+    if (!doc.pdfFileAssetId) {
+      throw new NotFoundException('PDF is not generated yet');
+    }
+    return this.files.getDownloadUrl(doc.pdfFileAssetId);
   }
 
   async myConsents(userId: string): Promise<Consent[]> {

@@ -13,6 +13,8 @@ export const patientsApi = (client: ApiClient) => ({
   updateMe: (dto: UpdatePatientDto) => client.patch<PatientDto>('/patients/me', dto),
   myAppointments: () => client.get<AppointmentDto[]>('/patients/me/appointments'),
   myDocuments: () => client.get<MedicalDocumentDto[]>('/patients/me/documents'),
+  myDocumentPdf: (id: string) =>
+    client.get<{ url: string }>(`/patients/me/documents/${id}/pdf`),
   myConsents: () => client.get<ConsentDto[]>('/patients/me/consents'),
   grantConsent: (dto: GrantConsentDto) =>
     client.post<ConsentDto>('/patients/me/consents', dto),

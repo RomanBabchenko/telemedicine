@@ -1,5 +1,11 @@
 import { DocumentStatus, DocumentType, ReferralTargetType } from './enums';
 
+export interface MedicalDocumentDoctorSummary {
+  firstName: string;
+  lastName: string;
+  specializations: string[];
+}
+
 export interface MedicalDocumentDto {
   id: string;
   appointmentId: string;
@@ -13,6 +19,8 @@ export interface MedicalDocumentDto {
   version: number;
   parentDocumentId: string | null;
   createdAt: string;
+  // Joined for the patient list view so we don't have to fan out per row.
+  doctor?: MedicalDocumentDoctorSummary;
 }
 
 export interface CreateConclusionDto {
