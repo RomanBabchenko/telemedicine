@@ -52,8 +52,10 @@ export class SyncJobService {
         for (const ext of await connector.listDoctors()) {
           let doctor = await this.findInternalDoctor(tenantId, connector.id, ext.externalId);
           if (!doctor) {
+            // Placeholder system user for MIS-imported doctor records that
+            // don't have a real platform login yet. Valid RFC v4 format.
             doctor = this.doctors.create({
-              userId: '00000000-0000-0000-0000-000000000000',
+              userId: '00000000-0000-4000-8000-000000000000',
               firstName: ext.firstName,
               lastName: ext.lastName,
               specializations: [ext.specialization],

@@ -8,9 +8,11 @@ import { hashPassword } from '../../common/crypto/password.util';
 loadEnv({ path: join(process.cwd(), '..', '..', '.env') });
 loadEnv({ path: join(process.cwd(), '.env'), override: false });
 
+// Deterministic RFC-4122 v4 UUIDs (third block starts with 4, fourth with 8)
+// — they survive @IsUUID() validation but stay readable in logs / SQL traces.
 const PLATFORM_TENANT_ID =
-  process.env.PLATFORM_TENANT_ID ?? '00000000-0000-0000-0000-000000000001';
-const CLINIC_TENANT_ID = '00000000-0000-0000-0000-000000000002';
+  process.env.PLATFORM_TENANT_ID ?? '11111111-1111-4111-8111-111111111111';
+const CLINIC_TENANT_ID = '22222222-2222-4222-8222-222222222222';
 const DEMO_PASSWORD = 'demo1234';
 
 async function seed(ds: DataSource): Promise<void> {
@@ -18,7 +20,7 @@ async function seed(ds: DataSource): Promise<void> {
 
   await ds.transaction(async (em) => {
     // ---------- billing plan ----------
-    const billingPlanId = '00000000-0000-0000-0000-000000000010';
+    const billingPlanId = '33333333-3333-4333-8333-333333333333';
     await em.query(
       `INSERT INTO tenant_billing_plans (id, name, monthly_fee, per_consultation_fee, included_modules, revenue_share_pct)
        VALUES ($1, $2, $3, $4, $5, $6)
@@ -70,7 +72,7 @@ async function seed(ds: DataSource): Promise<void> {
     );
 
     // ---------- platform super admin ----------
-    const superAdminId = '00000000-0000-0000-0000-0000000000a0';
+    const superAdminId = 'aaaaaaa0-0000-4000-8000-000000000000';
     await em.query(
       `INSERT INTO users (id, email, password_hash, first_name, last_name, mfa_enabled, email_verified_at)
        VALUES ($1, 'super@telemed.local', $2, 'Платформа', 'Адмін', false, now())
@@ -85,7 +87,7 @@ async function seed(ds: DataSource): Promise<void> {
     );
 
     // ---------- clinic admin ----------
-    const clinicAdminId = '00000000-0000-0000-0000-0000000000a1';
+    const clinicAdminId = 'aaaaaaa1-0000-4000-8000-000000000000';
     await em.query(
       `INSERT INTO users (id, email, password_hash, first_name, last_name, mfa_enabled, email_verified_at)
        VALUES ($1, 'admin@clinic-a.local', $2, 'Олена', 'Адміністратор', false, now())
@@ -102,8 +104,8 @@ async function seed(ds: DataSource): Promise<void> {
     // ---------- doctors ----------
     const doctors = [
       {
-        userId: '00000000-0000-0000-0000-0000000000d1',
-        doctorId: '00000000-0000-0000-0000-0000000000d1',
+        userId: 'dddddd01-0000-4000-8000-000000000000',
+        doctorId: 'dddddd01-0000-4000-8000-000000000000',
         email: 'doctor1@demo.local',
         firstName: 'Ірина',
         lastName: 'Коваленко',
@@ -113,8 +115,8 @@ async function seed(ds: DataSource): Promise<void> {
         price: 500,
       },
       {
-        userId: '00000000-0000-0000-0000-0000000000d2',
-        doctorId: '00000000-0000-0000-0000-0000000000d2',
+        userId: 'dddddd02-0000-4000-8000-000000000000',
+        doctorId: 'dddddd02-0000-4000-8000-000000000000',
         email: 'doctor2@demo.local',
         firstName: 'Андрій',
         lastName: 'Шевченко',
@@ -124,8 +126,8 @@ async function seed(ds: DataSource): Promise<void> {
         price: 800,
       },
       {
-        userId: '00000000-0000-0000-0000-0000000000d3',
-        doctorId: '00000000-0000-0000-0000-0000000000d3',
+        userId: 'dddddd03-0000-4000-8000-000000000000',
+        doctorId: 'dddddd03-0000-4000-8000-000000000000',
         email: 'doctor3@demo.local',
         firstName: 'Ольга',
         lastName: 'Бондар',
@@ -207,7 +209,8 @@ async function seed(ds: DataSource): Promise<void> {
 
     // ---------- patients ----------
     for (let i = 1; i <= 10; i += 1) {
-      const userId = `00000000-0000-0000-0000-0000000000${(0xb0 + i).toString(16).padStart(2, '0')}`;
+      // bbbbbb01..bbbbbb0a — same RFC v4 shape as the other seed UUIDs.
+      const userId = `bbbbbb${i.toString(16).padStart(2, '0')}-0000-4000-8000-000000000000`;
       const patientId = userId;
       const email = `patient${i}@demo.local`;
       const phone = `+38050000000${i}`;

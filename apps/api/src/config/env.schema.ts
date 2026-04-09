@@ -54,7 +54,7 @@ export const envSchema = z.object({
   PLATFORM_TENANT_ID: z
     .string()
     .uuid()
-    .default('00000000-0000-0000-0000-000000000001'),
+    .default('11111111-1111-4111-8111-111111111111'),
 
   PAYMENT_PROVIDER: z.enum(['stub', 'liqpay', 'fondy']).default('stub'),
   DOCDREAM_STUB_ENABLED: z
