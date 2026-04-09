@@ -9,7 +9,7 @@ import {
   RoomAudioRenderer,
   useTracks,
 } from '@livekit/components-react';
-import { Track } from 'livekit-client';
+import { Track, VideoPreset } from 'livekit-client';
 import { bookingApi, consultationApi } from '@telemed/api-client';
 import { Alert, Button, Card, PageHeader, Spinner } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
@@ -115,8 +115,8 @@ export const AppointmentJoinPage = () => {
           publishDefaults: {
             videoCodec: 'vp8',
             videoSimulcastLayers: [
-              { width: 320, height: 180, encoding: { maxBitrate: 150_000, maxFramerate: 15 } },
-              { width: 640, height: 360, encoding: { maxBitrate: 400_000, maxFramerate: 20 } },
+              new VideoPreset(320, 180, 150_000, 15),
+              new VideoPreset(640, 360, 400_000, 20),
             ],
           },
         }}

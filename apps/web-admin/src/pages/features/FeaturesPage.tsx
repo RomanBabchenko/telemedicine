@@ -27,7 +27,7 @@ export const FeaturesPage = () => {
   const [features, setFeatures] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    if (tenantQ.data) setFeatures(tenantQ.data.features as Record<string, boolean>);
+    if (tenantQ.data) setFeatures(tenantQ.data.features as unknown as Record<string, boolean>);
   }, [tenantQ.data]);
 
   const saveM = useMutation({

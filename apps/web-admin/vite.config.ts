@@ -14,7 +14,6 @@ export default defineConfig({
     tsconfigRaw: {
       compilerOptions: {
         target: 'ES2022',
-        module: 'ESNext',
         useDefineForClassFields: true,
       },
     },
