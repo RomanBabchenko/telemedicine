@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
@@ -51,6 +51,16 @@ export const AppointmentJoinPage = () => {
   const [joined, setJoined] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [disconnectReason, setDisconnectReason] = useState<string | null>(null);
+
+  // LiveKit's CSS variables (--lk-bg / --lk-fg / etc.) only kick in when an
+  // ancestor has data-lk-theme. Their device-pickers render through React
+  // portals straight into <body>, so the attribute has to live on body to
+  // cover them. Without this the camera/mic dropdown shows as transparent
+  // background + black text on top of the dark video.
+  useEffect(() => {
+    document.body.setAttribute('data-lk-theme', 'default');
+    return () => document.body.removeAttribute('data-lk-theme');
+  }, []);
 
   const apptQ = useQuery({
     queryKey: ['appointment', id],
