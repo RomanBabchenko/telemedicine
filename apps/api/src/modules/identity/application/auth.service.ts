@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthResponseDto, Role } from '@telemed/shared-types';
 import { AppConfig } from '../../../config/env.config';
+import { TenantContextService } from '../../../common/tenant/tenant-context.service';
 import { User } from '../domain/entities/user.entity';
 import { Patient } from '../../patient/domain/entities/patient.entity';
 import { PasswordService } from './password.service';
@@ -29,6 +30,7 @@ export class AuthService {
     private readonly mfa: MfaService,
     private readonly userService: UserService,
     private readonly config: AppConfig,
+    private readonly tenantContext: TenantContextService,
   ) {}
 
   async registerPatient(input: {
@@ -71,14 +73,16 @@ export class AuthService {
     });
     await this.patients.save(patient);
 
-    await this.userService.ensureMembership(
-      user.id,
-      this.config.platformTenantId,
-      Role.PATIENT,
-      true,
-    );
+    // Use the tenant from the inbound request (X-Tenant-Id header or
+    // subdomain) instead of hardcoding the platform tenant. The patient
+    // app sends the clinic id, so this lands the new patient as a member
+    // of that clinic — staying in sync with whatever tenant the SPA is
+    // talking to. Falls back to platformTenantId only when nothing was
+    // resolved (curl/Swagger without a header).
+    const tenantId = this.tenantContext.getTenantId();
+    await this.userService.ensureMembership(user.id, tenantId, Role.PATIENT, true);
 
-    return this.buildAuthResponse(user, [Role.PATIENT], this.config.platformTenantId, meta);
+    return this.buildAuthResponse(user, [Role.PATIENT], tenantId, meta);
   }
 
   async login(input: {
@@ -143,7 +147,7 @@ export class AuthService {
       await this.patients.save(patient);
       await this.userService.ensureMembership(
         user.id,
-        this.config.platformTenantId,
+        this.tenantContext.getTenantId(),
         Role.PATIENT,
         true,
       );
@@ -187,7 +191,7 @@ export class AuthService {
       await this.patients.save(patient);
       await this.userService.ensureMembership(
         user.id,
-        this.config.platformTenantId,
+        this.tenantContext.getTenantId(),
         Role.PATIENT,
         true,
       );
