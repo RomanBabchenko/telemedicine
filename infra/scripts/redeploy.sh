@@ -18,10 +18,8 @@ git pull --ff-only
 
 npm ci
 
-# packages first
-npm run build -w @telemed/shared-types -w @telemed/api-client -w @telemed/ui -w @telemed/utils
-
-# frontends + api
+# packages/{shared-types,api-client,ui,utils} are source-only — no build script.
+# Vite path aliases pull them straight from src/ into the app bundles.
 NODE_OPTIONS=--max-old-space-size=2048 npm run build -w @telemed/web-patient
 NODE_OPTIONS=--max-old-space-size=2048 npm run build -w @telemed/web-doctor
 NODE_OPTIONS=--max-old-space-size=2048 npm run build -w @telemed/web-admin

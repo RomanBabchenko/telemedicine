@@ -13,11 +13,6 @@ output "acm_certificate_arn" {
   value       = aws_acm_certificate_validation.wildcard.certificate_arn
 }
 
-output "ns_records" {
-  description = "Nameservers to set at the registrar of testing-core.link"
-  value       = aws_route53_zone.main.name_servers
-}
-
 output "ssh_command" {
   description = "SSH into the instance"
   value       = "ssh ubuntu@${aws_eip.app.public_ip}"

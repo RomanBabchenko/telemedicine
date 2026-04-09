@@ -178,12 +178,12 @@ for i in $(seq 1 30); do
 done
 
 # ---------- 9. Install + build monorepo ----------
+# packages/{shared-types,api-client,ui,utils} are source-only TypeScript —
+# Vite resolves them via path aliases in each app's vite.config.ts, and
+# the API webpack bundle inlines them too. So we only build the leaf
+# workspaces (3 frontends + api).
 sudo -u ubuntu -- bash -lc "cd $APP_DIR && npm ci"
 
-# Build packages first (workspace deps)
-sudo -u ubuntu -- bash -lc "cd $APP_DIR && npm run build -w @telemed/shared-types -w @telemed/api-client -w @telemed/ui -w @telemed/utils"
-
-# Build frontends and api
 sudo -u ubuntu -- bash -lc "cd $APP_DIR && NODE_OPTIONS=--max-old-space-size=2048 npm run build -w @telemed/web-patient"
 sudo -u ubuntu -- bash -lc "cd $APP_DIR && NODE_OPTIONS=--max-old-space-size=2048 npm run build -w @telemed/web-doctor"
 sudo -u ubuntu -- bash -lc "cd $APP_DIR && NODE_OPTIONS=--max-old-space-size=2048 npm run build -w @telemed/web-admin"

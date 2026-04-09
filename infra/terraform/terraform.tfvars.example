@@ -1,9 +1,13 @@
 # Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
 
-region        = "eu-central-1"
-domain        = "testing-core.link"
-instance_type = "t3.medium"
+region         = "eu-central-1"
+domain         = "demo.testing-core.link"
+instance_type  = "t3.medium"
 root_volume_gb = 30
+
+# Pre-existing Route 53 hosted zone for the domain above. Find it in
+# Route 53 console → Hosted zones → copy the Zone ID column.
+route53_zone_id = "Z0058263YQNR3DJVQWFI"
 
 # cat ~/.ssh/id_ed25519.pub
 ssh_pubkey = "ssh-ed25519 AAAA... your-key-comment"

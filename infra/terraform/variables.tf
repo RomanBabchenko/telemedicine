@@ -6,8 +6,13 @@ variable "region" {
 
 variable "domain" {
   type        = string
-  description = "Apex domain. Subdomains patient/doctor/admin/api/livekit will be created under it."
-  default     = "testing-core.link"
+  description = "Domain under which subdomains patient/doctor/admin/api/livekit are created. The Route 53 hosted zone for this domain must already exist (referenced via route53_zone_id)."
+  default     = "demo.testing-core.link"
+}
+
+variable "route53_zone_id" {
+  type        = string
+  description = "ID of an existing Route 53 hosted zone whose name matches var.domain. We do NOT create the zone — we add records into it."
 }
 
 variable "instance_type" {

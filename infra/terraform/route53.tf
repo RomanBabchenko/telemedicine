@@ -1,9 +1,7 @@
-resource "aws_route53_zone" "main" {
-  name = var.domain
-
-  tags = {
-    Name = var.domain
-  }
+# Look up the existing hosted zone (created out-of-band, e.g. in the AWS console).
+# We don't manage the zone itself, only records inside it.
+data "aws_route53_zone" "main" {
+  zone_id = var.route53_zone_id
 }
 
 locals {
@@ -17,7 +15,7 @@ locals {
 resource "aws_route53_record" "subdomains" {
   for_each = toset(local.subdomains)
 
-  zone_id = aws_route53_zone.main.zone_id
+  zone_id = data.aws_route53_zone.main.zone_id
   name    = "${each.key}.${var.domain}"
   type    = "A"
 
