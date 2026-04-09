@@ -1,0 +1,23 @@
+port: 7880
+# Listen on all interfaces — on a single-tenant EC2 box (host network mode)
+# there are no extra docker bridges to worry about, and we need 0.0.0.0
+# so nginx on 127.0.0.1 can reach the signaling port AND the public IP
+# can answer SDP/ICE offers.
+bind_addresses:
+  - '0.0.0.0'
+rtc:
+  tcp_port: 7881
+  # UDP range that ICE candidates will use. Must match the EC2 security
+  # group rule for udp 50000-50100 + LiveKit firewall rule.
+  port_range_start: 50000
+  port_range_end: 50100
+  # Don't try to autodetect public IP via STUN. We pin it to the EIP via
+  # --node-ip on the command line (LIVEKIT_NODE_IP env var, set by
+  # cloud-init from the Terraform aws_eip.app.public_ip).
+  use_external_ip: false
+  # No interfaces.includes — let LiveKit bind on every interface that the
+  # host network namespace exposes. On EC2 there's basically just ens5
+  # and lo, so this is fine.
+keys:
+  devkey: devsecretdevsecretdevsecretdevsecret
+log_level: info

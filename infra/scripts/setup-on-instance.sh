@@ -46,6 +46,20 @@ if [[ "$SKIP_PULL" != "1" ]]; then
   sudo -u "$APP_USER" git pull --ff-only
 fi
 
+# ---------- 1a. LiveKit config for prod ----------
+# infra/livekit/livekit.yaml is committed for the developer's local box
+# (binds to a specific LAN IP, restricts to wlan0). On EC2 those bindings
+# don't exist, so LiveKit silently skips listening and the WSS handshake
+# from the browser dies with "could not establish signal connection".
+# We swap in livekit.prod.yaml (bind 0.0.0.0, no interface restriction)
+# and recreate the container so it picks the new file up.
+if [[ -f "$APP_DIR/infra/livekit/livekit.prod.yaml" ]]; then
+  echo "==> swap LiveKit config to prod variant"
+  cp "$APP_DIR/infra/livekit/livekit.prod.yaml" "$APP_DIR/infra/livekit/livekit.yaml"
+  chown "$APP_USER:$APP_USER" "$APP_DIR/infra/livekit/livekit.yaml"
+  sudo -u "$APP_USER" -- bash -lc "cd $APP_DIR && docker compose --env-file .env up -d --force-recreate livekit"
+fi
+
 # ---------- 2. Install + build ----------
 echo "==> npm ci"
 sudo -u "$APP_USER" -- bash -lc "cd $APP_DIR && npm ci"
