@@ -12,3 +12,4 @@ export * from './endpoints/integrations';
 export * from './endpoints/analytics';
 export * from './endpoints/audit';
 export * from './endpoints/admin';
+export * from './endpoints/admin-users';

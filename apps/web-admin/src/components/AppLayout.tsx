@@ -3,10 +3,11 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@telemed/ui';
 import { useAuthStore } from '../stores/auth.store';
 
-const NAV: Array<{ to: string; label: string }> = [
+const CLINIC_NAV: Array<{ to: string; label: string }> = [
   { to: '/', label: 'Дашборд' },
   { to: '/doctors', label: 'Лікарі' },
   { to: '/appointments', label: 'Прийоми' },
+  { to: '/users', label: 'Користувачі' },
   { to: '/integrations', label: 'МІС' },
   { to: '/billing', label: 'Білінг' },
   { to: '/analytics', label: 'Аналітика' },
@@ -15,11 +16,17 @@ const NAV: Array<{ to: string; label: string }> = [
   { to: '/audit', label: 'Аудит' },
 ];
 
+const PLATFORM_NAV: Array<{ to: string; label: string }> = [
+  { to: '/platform/tenants', label: 'Клініки' },
+  { to: '/platform/users', label: 'Усі користувачі' },
+];
+
 export const AppLayout = ({ children }: { children: ReactNode }) => {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
   const loc = useLocation();
+  const isPlatformAdmin = user?.roles?.includes('PLATFORM_SUPER_ADMIN') ?? false;
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
@@ -46,21 +53,47 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
           </div>
         </div>
         <nav className="mx-auto max-w-7xl px-4">
-          <div className="flex gap-1 overflow-x-auto py-2 text-sm">
-            {NAV.map((item) => {
+          <div className="flex flex-wrap items-center gap-1 py-2 text-sm">
+            {CLINIC_NAV.map((item) => {
               const active = loc.pathname === item.to;
               return (
                 <Link
                   key={item.to}
                   to={item.to}
                   className={`rounded-md px-3 py-1.5 ${
-                    active ? 'bg-[color:var(--color-primary)] text-white' : 'text-slate-700 hover:bg-slate-100'
+                    active
+                      ? 'bg-[color:var(--color-primary)] text-white'
+                      : 'text-slate-700 hover:bg-slate-100'
                   }`}
                 >
                   {item.label}
                 </Link>
               );
             })}
+            {isPlatformAdmin ? (
+              <>
+                <span className="mx-2 h-5 w-px bg-slate-300" aria-hidden />
+                <span className="px-1 text-xs uppercase tracking-wider text-slate-400">
+                  Платформа
+                </span>
+                {PLATFORM_NAV.map((item) => {
+                  const active = loc.pathname.startsWith(item.to);
+                  return (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      className={`rounded-md px-3 py-1.5 ${
+                        active
+                          ? 'bg-amber-500 text-white'
+                          : 'text-amber-700 hover:bg-amber-50'
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </>
+            ) : null}
           </div>
         </nav>
       </header>
