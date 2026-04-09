@@ -25,6 +25,12 @@ export interface DoctorSearchInput {
    * doctors that still need verification.
    */
   includeUnverified?: boolean;
+  /**
+   * Include doctors whose tenant profile has isPublished=false (i.e.
+   * deactivated). Default false — public listings only show active
+   * doctors. Admin endpoints pass true so the clinic can re-activate them.
+   */
+  includeUnpublished?: boolean;
 }
 
 export interface CreateDoctorInput {
@@ -111,10 +117,13 @@ export class ProviderService {
 
     // Step 2: paginate over profiles in this tenant. Plain findAndCount — no joins,
     // no broken subqueries.
+    const includeUnpublished = input.includeUnpublished ?? false;
     const where: Record<string, unknown> = {
       tenantId,
-      isPublished: true,
     };
+    if (!includeUnpublished) {
+      where.isPublished = true;
+    }
     if (doctorIdFilter) {
       where.doctorId = In(doctorIdFilter);
     }
@@ -409,6 +418,15 @@ export class ProviderService {
     return this.getById(id);
   }
 
+  /**
+   * Deactivate the doctor in the current tenant. Sets isPublished=false on
+   * DoctorTenantProfile so the doctor disappears from public listings, but
+   * keeps the User row intact — the same email can't be re-registered, the
+   * doctor history stays, and `activate()` brings them back.
+   *
+   * Method is named `remove` for backwards compatibility with the existing
+   * DELETE /doctors/:id route.
+   */
   async remove(id: string) {
     const tenantId = this.tenantContext.getTenantId();
     const doctor = await this.doctors.findOne({ where: { id } });
@@ -418,7 +436,18 @@ export class ProviderService {
       { doctorId: id, tenantId },
       { isPublished: false },
     );
-    await this.doctors.softRemove(doctor);
+    return { ok: true as const };
+  }
+
+  async activate(id: string) {
+    const tenantId = this.tenantContext.getTenantId();
+    const doctor = await this.doctors.findOne({ where: { id } });
+    if (!doctor) throw new NotFoundException('Doctor not found');
+
+    await this.profiles.update(
+      { doctorId: id, tenantId },
+      { isPublished: true },
+    );
     return { ok: true as const };
   }
 
@@ -510,6 +539,7 @@ export class ProviderService {
       rating: d.rating ? Number(d.rating) : null,
       basePrice: Number(profile.price),
       defaultDurationMin: d.defaultDurationMin,
+      isPublished: profile.isPublished,
     };
   }
 }

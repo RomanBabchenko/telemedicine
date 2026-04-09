@@ -15,6 +15,8 @@ export interface DoctorDto {
   rating: number | null;
   basePrice: number;
   defaultDurationMin: number;
+  /** Whether the doctor is active (published) in the current tenant. */
+  isPublished: boolean;
   tenantProfiles?: DoctorTenantProfileDto[];
 }
 

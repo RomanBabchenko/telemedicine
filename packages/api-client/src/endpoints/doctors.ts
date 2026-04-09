@@ -19,6 +19,7 @@ export const doctorsApi = (client: ApiClient) => ({
   update: (id: string, dto: UpdateDoctorDto) =>
     client.patch<DoctorDto>(`/doctors/${id}`, dto),
   delete: (id: string) => client.delete<{ ok: true }>(`/doctors/${id}`),
+  activate: (id: string) => client.post<{ ok: true }>(`/doctors/${id}/activate`),
   listAvailabilityRules: (id: string) =>
     client.get<AvailabilityRuleDto[]>(`/doctors/${id}/availability`),
   createAvailabilityRule: (id: string, dto: CreateAvailabilityRuleDto) =>

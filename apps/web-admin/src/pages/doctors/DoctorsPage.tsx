@@ -30,7 +30,7 @@ type ModalState =
   | { kind: 'closed' }
   | { kind: 'create' }
   | { kind: 'edit'; doctor: DoctorDto }
-  | { kind: 'delete'; doctor: DoctorDto }
+  | { kind: 'deactivate'; doctor: DoctorDto }
   | { kind: 'verify'; doctor: DoctorDto };
 
 const errorMessage = (error: unknown): string => {
@@ -72,12 +72,18 @@ export const DoctorsPage = () => {
     },
   });
 
-  const deleteM = useMutation({
+  const deactivateM = useMutation({
     mutationFn: (id: string) => doctors.delete(id),
     onSuccess: () => {
       invalidate();
       close();
     },
+  });
+
+  // Direct activate, no confirmation modal — re-publishing is harmless.
+  const activateM = useMutation({
+    mutationFn: (id: string) => doctors.activate(id),
+    onSuccess: () => invalidate(),
   });
 
   const verifyM = useMutation({
@@ -94,7 +100,7 @@ export const DoctorsPage = () => {
 
   const isFormOpen = modal.kind === 'create' || modal.kind === 'edit';
   const editingDoctor = modal.kind === 'edit' ? modal.doctor : null;
-  const deletingDoctor = modal.kind === 'delete' ? modal.doctor : null;
+  const deactivatingDoctor = modal.kind === 'deactivate' ? modal.doctor : null;
   const verifyingDoctor = modal.kind === 'verify' ? modal.doctor : null;
 
   return (
@@ -120,7 +126,8 @@ export const DoctorsPage = () => {
               <TH>Спеціальність</TH>
               <TH>Стаж</TH>
               <TH>Ціна</TH>
-              <TH>Статус</TH>
+              <TH>Верифікація</TH>
+              <TH>Активність</TH>
               <TH>Дії</TH>
             </TR>
           </THead>
@@ -138,6 +145,11 @@ export const DoctorsPage = () => {
                     variant={d.verificationStatus === 'VERIFIED' ? 'success' : 'warning'}
                   >
                     {d.verificationStatus}
+                  </Badge>
+                </TD>
+                <TD>
+                  <Badge variant={d.isPublished ? 'success' : 'default'}>
+                    {d.isPublished ? 'АКТИВНИЙ' : 'НЕАКТИВНИЙ'}
                   </Badge>
                 </TD>
                 <TD>
@@ -166,13 +178,24 @@ export const DoctorsPage = () => {
                     >
                       Слоти
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      onClick={() => setModal({ kind: 'delete', doctor: d })}
-                    >
-                      Видалити
-                    </Button>
+                    {d.isPublished ? (
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        onClick={() => setModal({ kind: 'deactivate', doctor: d })}
+                      >
+                        Деактивувати
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        isLoading={activateM.isPending && activateM.variables === d.id}
+                        onClick={() => activateM.mutate(d.id)}
+                      >
+                        Активувати
+                      </Button>
+                    )}
                   </div>
                 </TD>
               </TR>
@@ -232,34 +255,39 @@ export const DoctorsPage = () => {
       </Modal>
 
       <Modal
-        open={modal.kind === 'delete'}
+        open={modal.kind === 'deactivate'}
         onClose={close}
-        title="Видалити лікаря?"
+        title="Деактивувати лікаря?"
         footer={
           <>
-            <Button variant="secondary" onClick={close} disabled={deleteM.isPending}>
+            <Button variant="secondary" onClick={close} disabled={deactivateM.isPending}>
               Скасувати
             </Button>
             <Button
               variant="danger"
-              isLoading={deleteM.isPending}
+              isLoading={deactivateM.isPending}
               onClick={() => {
-                if (deletingDoctor) deleteM.mutate(deletingDoctor.id);
+                if (deactivatingDoctor) deactivateM.mutate(deactivatingDoctor.id);
               }}
             >
-              Видалити
+              Деактивувати
             </Button>
           </>
         }
       >
-        {deletingDoctor ? (
+        {deactivatingDoctor ? (
           <div className="space-y-3">
             <p className="text-sm text-slate-700">
-              Лікар <strong>{deletingDoctor.firstName} {deletingDoctor.lastName}</strong>{' '}
-              буде прихований у клініці. Історія прийомів збережеться.
+              Лікар{' '}
+              <strong>
+                {deactivatingDoctor.firstName} {deactivatingDoctor.lastName}
+              </strong>{' '}
+              буде прихований у публічному каталозі клініки. Обліковий запис, історія
+              прийомів і email залишаються — у будь-який момент можна повернути врача
+              кнопкою «Активувати».
             </p>
-            {deleteM.isError ? (
-              <Alert variant="danger">{errorMessage(deleteM.error)}</Alert>
+            {deactivateM.isError ? (
+              <Alert variant="danger">{errorMessage(deactivateM.error)}</Alert>
             ) : null}
           </div>
         ) : null}

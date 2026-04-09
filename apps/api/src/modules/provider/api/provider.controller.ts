@@ -31,7 +31,11 @@ export class ProviderController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
   searchForAdmin(@Query() query: DoctorSearchQueryDto) {
-    return this.service.search({ ...query, includeUnverified: true });
+    return this.service.search({
+      ...query,
+      includeUnverified: true,
+      includeUnpublished: true,
+    });
   }
 
   @Get(':id')
@@ -62,9 +66,18 @@ export class ProviderController {
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
-  @Auditable({ action: 'doctor.deleted', resource: 'Doctor' })
+  @Auditable({ action: 'doctor.deactivated', resource: 'Doctor' })
   remove(@Param('id') id: string) {
     return this.service.remove(id);
+  }
+
+  @ApiBearerAuth()
+  @Post(':id/activate')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
+  @Auditable({ action: 'doctor.activated', resource: 'Doctor' })
+  activate(@Param('id') id: string) {
+    return this.service.activate(id);
   }
 
   @ApiBearerAuth()
