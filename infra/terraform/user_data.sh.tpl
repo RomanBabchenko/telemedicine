@@ -25,10 +25,16 @@ export DEBIAN_FRONTEND=noninteractive
 # ---------- 1. Base packages ----------
 # TLS is terminated by the AWS ALB in front of us using an ACM wildcard cert,
 # so no certbot here — nginx only listens on plain HTTP :80 and ALB talks to it.
+#
+# fonts-dejavu-core ships DejaVuSans.ttf / DejaVuSans-Bold.ttf with full
+# Cyrillic coverage — PdfService picks them up automatically and uses them
+# instead of the built-in Helvetica (which would render Ukrainian text as
+# garbage). Don't drop this package unless you know what's replacing it.
 apt-get update
 apt-get install -y \
   git curl ufw nginx \
-  build-essential ca-certificates gnupg openssl
+  build-essential ca-certificates gnupg openssl \
+  fonts-dejavu-core
 
 # ---------- 2. Node.js 20 (NodeSource) ----------
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
@@ -131,7 +137,7 @@ SMTP_PASSWORD=
 SMTP_FROM="Telemed Demo <noreply@$DOMAIN>"
 
 # ---- Tenant ----
-PLATFORM_TENANT_ID=00000000-0000-0000-0000-000000000001
+PLATFORM_TENANT_ID=11111111-1111-4111-8111-111111111111
 
 # ---- Adapters ----
 PAYMENT_PROVIDER=stub
@@ -145,11 +151,11 @@ chown ubuntu:ubuntu "$APP_DIR/.env"
 chmod 600 "$APP_DIR/.env"
 
 # ---------- 7. Per-frontend .env.production ----------
-# Patient — single-clinic override stays so anonymous browsers see clinic doctors
+# All three apps are auth-gated. No tenant override is required — the
+# JWT carries the membership tenant on every request.
 cat > "$APP_DIR/apps/web-patient/.env.production" <<EOF
 VITE_API_URL=https://api.$DOMAIN/api/v1
 VITE_LIVEKIT_URL=wss://livekit.$DOMAIN
-VITE_TENANT_ID=00000000-0000-0000-0000-000000000002
 EOF
 
 cat > "$APP_DIR/apps/web-doctor/.env.production" <<EOF

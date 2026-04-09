@@ -1,6 +1,43 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { existsSync } from 'node:fs';
 import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
+
+// Standard PDF Type 1 fonts (Helvetica/Times/Courier) only ship Western
+// Latin glyphs, so any Cyrillic text we feed them gets remapped onto random
+// latin shapes. We need a real TrueType font with WGL4/Cyrillic coverage.
+//
+// We don't ship a font in the repo (binary bloat) — instead we look for the
+// first available system font from a short list of distros' default paths.
+// Override via PDF_FONT_REGULAR_PATH / PDF_FONT_BOLD_PATH env vars if your
+// host has them somewhere unusual.
+const FONT_CANDIDATES_REGULAR = [
+  process.env.PDF_FONT_REGULAR_PATH,
+  '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+  '/usr/share/fonts/dejavu/DejaVuSans.ttf',
+  '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+  '/usr/share/fonts/liberation/LiberationSans-Regular.ttf',
+  '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf',
+  '/usr/share/fonts/noto/NotoSans-Regular.ttf',
+].filter((p): p is string => !!p);
+
+const FONT_CANDIDATES_BOLD = [
+  process.env.PDF_FONT_BOLD_PATH,
+  '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+  '/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf',
+  '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+  '/usr/share/fonts/liberation/LiberationSans-Bold.ttf',
+  '/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf',
+  '/usr/share/fonts/noto/NotoSans-Bold.ttf',
+].filter((p): p is string => !!p);
+
+const findFirstExisting = (paths: string[]): string | null => {
+  for (const p of paths) if (existsSync(p)) return p;
+  return null;
+};
+
+const FONT_REGULAR = 'CyrSans';
+const FONT_BOLD = 'CyrSans-Bold';
 
 export interface RenderConclusionInput {
   documentId: string;
@@ -38,25 +75,49 @@ export interface RenderReferralInput {
 
 @Injectable()
 export class PdfService {
+  private readonly logger = new Logger(PdfService.name);
+  private readonly regularPath: string | null;
+  private readonly boldPath: string | null;
+  private readonly regularFont: string;
+  private readonly boldFont: string;
+
+  constructor() {
+    this.regularPath = findFirstExisting(FONT_CANDIDATES_REGULAR);
+    this.boldPath = findFirstExisting(FONT_CANDIDATES_BOLD);
+    this.regularFont = this.regularPath ? FONT_REGULAR : 'Helvetica';
+    this.boldFont = this.boldPath ? FONT_BOLD : 'Helvetica-Bold';
+
+    if (!this.regularPath) {
+      this.logger.warn(
+        'No Cyrillic-capable TTF found on this host — PDFs will use Helvetica and Cyrillic text will render as garbage. ' +
+          'Install fonts-dejavu / fonts-liberation, or set PDF_FONT_REGULAR_PATH / PDF_FONT_BOLD_PATH env vars.',
+      );
+    } else {
+      this.logger.log(
+        `PDF font: regular=${this.regularPath}, bold=${this.boldPath ?? '(falling back to Helvetica-Bold)'}`,
+      );
+    }
+  }
+
   async renderConclusion(input: RenderConclusionInput): Promise<Buffer> {
     return this.render(async (doc) => {
       this.header(doc, input.clinic.brandName, 'Медичний висновок');
       this.patientBlock(doc, input.patient);
       doc.moveDown(0.5);
-      doc.fontSize(11).font('Helvetica-Bold').text('Діагноз:');
-      doc.font('Helvetica').text(input.diagnosis);
+      doc.fontSize(11).font(this.boldFont).text('Діагноз:');
+      doc.font(this.regularFont).text(input.diagnosis);
       doc.moveDown();
-      doc.font('Helvetica-Bold').text('Рекомендації:');
-      doc.font('Helvetica').text(input.recommendations);
+      doc.font(this.boldFont).text('Рекомендації:');
+      doc.font(this.regularFont).text(input.recommendations);
       if (input.notes) {
         doc.moveDown();
-        doc.font('Helvetica-Bold').text('Нотатки:');
-        doc.font('Helvetica').text(input.notes);
+        doc.font(this.boldFont).text('Нотатки:');
+        doc.font(this.regularFont).text(input.notes);
       }
       if (input.followUpInDays) {
         doc.moveDown();
-        doc.font('Helvetica-Bold').text('Повторний візит:');
-        doc.font('Helvetica').text(`Через ${input.followUpInDays} днів`);
+        doc.font(this.boldFont).text('Повторний візит:');
+        doc.font(this.regularFont).text(`Через ${input.followUpInDays} днів`);
       }
       this.signatureBlock(doc, input.doctor, input.signedAt);
       await this.qr(doc, input.verificationUrl, input.documentId);
@@ -68,10 +129,10 @@ export class PdfService {
       this.header(doc, input.clinic.brandName, 'Електронний рецепт');
       this.patientBlock(doc, input.patient);
       doc.moveDown(0.5);
-      doc.font('Helvetica-Bold').text('Призначення:');
+      doc.font(this.boldFont).text('Призначення:');
       input.items.forEach((it, i) => {
         doc.moveDown(0.25);
-        doc.font('Helvetica').text(
+        doc.font(this.regularFont).text(
           `${i + 1}. ${it.drug} — ${it.dosage}, ${it.frequency}, ${it.durationDays} дн.${it.notes ? ` (${it.notes})` : ''}`,
         );
       });
@@ -85,20 +146,26 @@ export class PdfService {
       this.header(doc, input.clinic.brandName, 'Направлення');
       this.patientBlock(doc, input.patient);
       doc.moveDown(0.5);
-      doc.font('Helvetica-Bold').text('Тип направлення:');
-      doc.font('Helvetica').text(input.targetType);
+      doc.font(this.boldFont).text('Тип направлення:');
+      doc.font(this.regularFont).text(input.targetType);
       doc.moveDown();
-      doc.font('Helvetica-Bold').text('Інструкції:');
-      doc.font('Helvetica').text(input.instructions);
+      doc.font(this.boldFont).text('Інструкції:');
+      doc.font(this.regularFont).text(input.instructions);
       this.signatureBlock(doc, input.doctor, null);
       await this.qr(doc, input.verificationUrl, input.documentId);
     });
+  }
+
+  private registerFonts(doc: PDFKit.PDFDocument): void {
+    if (this.regularPath) doc.registerFont(FONT_REGULAR, this.regularPath);
+    if (this.boldPath) doc.registerFont(FONT_BOLD, this.boldPath);
   }
 
   private async render(builder: (doc: PDFKit.PDFDocument) => Promise<void>): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       try {
         const doc = new PDFDocument({ size: 'A4', margin: 50 });
+        this.registerFonts(doc);
         const chunks: Buffer[] = [];
         doc.on('data', (chunk) => chunks.push(chunk));
         doc.on('end', () => resolve(Buffer.concat(chunks)));
@@ -113,7 +180,7 @@ export class PdfService {
   }
 
   private header(doc: PDFKit.PDFDocument, brand: string, title: string): void {
-    doc.fontSize(16).font('Helvetica-Bold').text(brand, { align: 'right' });
+    doc.fontSize(16).font(this.boldFont).text(brand, { align: 'right' });
     doc.moveDown(0.25);
     doc.fontSize(20).text(title, { align: 'left' });
     doc.moveDown(0.5);
@@ -125,8 +192,8 @@ export class PdfService {
     doc: PDFKit.PDFDocument,
     patient: { firstName: string; lastName: string; dateOfBirth?: string | null },
   ): void {
-    doc.fontSize(11).font('Helvetica-Bold').text('Пацієнт:');
-    doc.font('Helvetica').text(`${patient.lastName} ${patient.firstName}`);
+    doc.fontSize(11).font(this.boldFont).text('Пацієнт:');
+    doc.font(this.regularFont).text(`${patient.lastName} ${patient.firstName}`);
     if (patient.dateOfBirth) {
       doc.text(`Дата народження: ${patient.dateOfBirth}`);
     }
@@ -139,9 +206,9 @@ export class PdfService {
   ): void {
     doc.moveDown(1.5);
     doc
-      .font('Helvetica-Bold')
+      .font(this.boldFont)
       .text(`Лікар: ${doctor.lastName} ${doctor.firstName}`);
-    doc.font('Helvetica').text(`Спеціальність: ${doctor.specialization}`);
+    doc.font(this.regularFont).text(`Спеціальність: ${doctor.specialization}`);
     if (signedAt) {
       doc.text(`Підписано: ${signedAt.toISOString()}`);
     }
