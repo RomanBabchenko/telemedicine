@@ -175,6 +175,12 @@ export class AdminUserController {
       body.role,
       body.isDefault ?? false,
     );
+    // For DOCTOR role we also need to materialise the tenant-specific
+    // catalog entries (DoctorTenantProfile, ServiceType, AvailabilityRule,
+    // demo slots) — otherwise patients in this tenant won't see them.
+    if (body.role === Role.DOCTOR) {
+      await this.providers.attachToTenant(userId, body.tenantId);
+    }
     const detail = await this.users.getDetail(userId);
     return summarize(detail);
   }
@@ -189,7 +195,18 @@ export class AdminUserController {
     const scope = isPlatformActor(actor.roles)
       ? undefined
       : this.tenantContext.getTenantId();
+
+    // Capture the membership BEFORE deletion so we know if we need to
+    // tear down doctor-side catalog entries afterwards.
+    const detailBefore = await this.users.getDetail(userId);
+    const target = detailBefore.memberships.find((m) => m.id === membershipId);
+
     await this.users.revokeMembership(membershipId, scope);
+
+    if (target?.role === Role.DOCTOR) {
+      await this.providers.detachFromTenant(userId, target.tenantId);
+    }
+
     const detail = await this.users.getDetail(userId);
     return summarize(detail);
   }

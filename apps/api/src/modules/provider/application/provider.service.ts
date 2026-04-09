@@ -320,6 +320,115 @@ export class ProviderService {
   }
 
   /**
+   * Wire an existing Doctor record into a tenant: create the
+   * DoctorTenantProfile + default ServiceType + Mon–Fri AvailabilityRules
+   * + 14 days of demo slots. Idempotent: if a profile already exists
+   * we just make sure it's published and noop on the rest.
+   *
+   * Called from AdminUserController.addMembership when an admin grants
+   * the DOCTOR role on an existing user — without this the user has the
+   * membership row but no catalog presence in the new clinic, so the
+   * patient app shows them nothing.
+   *
+   * Returns null when the user is not a doctor (no Doctor entity).
+   */
+  async attachToTenant(userId: string, tenantId: string) {
+    const doctor = await this.doctors.findOne({ where: { userId } });
+    if (!doctor) return null;
+
+    return this.dataSource.transaction(async (manager) => {
+      const profileRepo = manager.getRepository(DoctorTenantProfile);
+      const serviceTypeRepo = manager.getRepository(ServiceType);
+      const ruleRepo = manager.getRepository(AvailabilityRule);
+      const slotRepo = manager.getRepository(Slot);
+
+      // Idempotent: profile already exists → just re-publish if needed.
+      const existing = await profileRepo.findOne({
+        where: { doctorId: doctor.id, tenantId },
+      });
+      if (existing) {
+        if (!existing.isPublished) {
+          existing.isPublished = true;
+          await profileRepo.save(existing);
+        }
+        return existing;
+      }
+
+      const profile = profileRepo.create({
+        tenantId,
+        doctorId: doctor.id,
+        displayName: `${doctor.firstName} ${doctor.lastName}`,
+        price: doctor.basePrice,
+        isPublished: true,
+        slotSourceIsMis: false,
+      });
+      await profileRepo.save(profile);
+
+      const serviceType = serviceTypeRepo.create({
+        tenantId,
+        doctorId: doctor.id,
+        code: 'INITIAL',
+        name: 'Первинна онлайн-консультація',
+        durationMin: doctor.defaultDurationMin,
+        price: doctor.basePrice,
+        mode: ServiceMode.VIDEO,
+        isFollowUp: false,
+      });
+      await serviceTypeRepo.save(serviceType);
+
+      const rules = [1, 2, 3, 4, 5].map((weekday) =>
+        ruleRepo.create({
+          tenantId,
+          doctorId: doctor.id,
+          weekday,
+          startTime: '09:00',
+          endTime: '17:00',
+          bufferMin: 0,
+          serviceTypeId: serviceType.id,
+          validFrom: null,
+          validUntil: null,
+        }),
+      );
+      await ruleRepo.save(rules);
+
+      const slots = this.buildDemoSlots(slotRepo, tenantId, doctor.id, serviceType.id);
+      if (slots.length) {
+        await slotRepo.save(slots);
+      }
+
+      return profile;
+    });
+  }
+
+  /**
+   * Counterpart to attachToTenant — used when the admin revokes a DOCTOR
+   * membership from a user. We unpublish the tenant profile and drop
+   * future OPEN slots in that tenant. History (HELD / BOOKED slots,
+   * appointments, prescriptions) stays intact so audit/billing don't
+   * break.
+   */
+  async detachFromTenant(userId: string, tenantId: string) {
+    const doctor = await this.doctors.findOne({ where: { userId } });
+    if (!doctor) return { ok: true as const, doctor: false };
+
+    await this.profiles.update(
+      { doctorId: doctor.id, tenantId },
+      { isPublished: false },
+    );
+    await this.dataSource
+      .getRepository(Slot)
+      .createQueryBuilder()
+      .delete()
+      .where('tenant_id = :tenantId', { tenantId })
+      .andWhere('doctor_id = :doctorId', { doctorId: doctor.id })
+      .andWhere('status = :status', { status: SlotStatus.OPEN })
+      .andWhere('source_is_mis = false')
+      .andWhere('start_at > now()')
+      .execute();
+    return { ok: true as const, doctor: true };
+  }
+
+  /**
    * Regenerate the next 14 days of OPEN slots for an existing doctor.
    * Useful for doctors created before slot generation was wired into
    * `create()`, or when the demo data goes stale.
