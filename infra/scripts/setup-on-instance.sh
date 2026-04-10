@@ -199,6 +199,33 @@ server {
         proxy_send_timeout 7d;
     }
 }
+
+# MinIO S3 API. Proxies straight to the in-host MinIO container. Critical:
+#   - 'proxy_set_header Host \$host' MUST stay — MinIO validates AWS Sigv4
+#     signatures using the Host header, so rewriting it breaks every
+#     presigned URL with SignatureDoesNotMatch.
+#   - large body size for object uploads via presigned PUTs.
+#   - 'proxy_request_buffering off' so streaming uploads don't get buffered
+#     to disk on nginx before being forwarded.
+#   - long timeouts for big downloads / slow links.
+server {
+    listen 80;
+    server_name minio.$DOMAIN;
+    client_max_body_size 100M;
+
+    location / {
+        proxy_pass http://127.0.0.1:9000;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$http_x_forwarded_proto;
+        proxy_request_buffering off;
+        proxy_buffering off;
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+    }
+}
 NGINX
 
 ln -sf /etc/nginx/sites-available/testing-core.conf /etc/nginx/sites-enabled/

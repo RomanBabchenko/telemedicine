@@ -5,7 +5,14 @@ data "aws_route53_zone" "main" {
 }
 
 locals {
-  subdomains = ["patient", "doctor", "admin", "api", "livekit"]
+  # All public subdomains terminate on the ALB. The wildcard ACM cert
+  # (*.${var.domain}) covers every entry here automatically. Adding a new
+  # subdomain is a one-line change here + a matching nginx server block in
+  # infra/scripts/setup-on-instance.sh.
+  #
+  # `minio` proxies to MinIO's S3 API on the box (localhost:9000) so the
+  # API can hand out presigned URLs that browsers can actually reach.
+  subdomains = ["patient", "doctor", "admin", "api", "livekit", "minio"]
 }
 
 # All subdomains point at the ALB. The LiveKit subdomain is also on the ALB

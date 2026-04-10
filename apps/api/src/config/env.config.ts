@@ -70,6 +70,7 @@ export class AppConfig {
       secretKey: this.config.get('MINIO_SECRET_KEY', { infer: true }),
       bucket: this.config.get('MINIO_BUCKET', { infer: true }),
       region: this.config.get('MINIO_REGION', { infer: true }),
+      publicUrl: this.config.get('MINIO_PUBLIC_URL', { infer: true }) ?? null,
     };
   }
 

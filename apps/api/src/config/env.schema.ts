@@ -40,6 +40,13 @@ export const envSchema = z.object({
   MINIO_SECRET_KEY: z.string().default('telemed-secret'),
   MINIO_BUCKET: z.string().default('telemed-files'),
   MINIO_REGION: z.string().default('us-east-1'),
+  // Optional public-facing base URL for presigned URLs. When set, the API
+  // signs download / upload links against this host instead of the internal
+  // MINIO_ENDPOINT, so links handed to browsers point at the publicly
+  // reachable proxy (e.g. https://minio.demo.testing-core.link) while the
+  // API itself still talks to MinIO over loopback for actual byte transfer.
+  // Leave empty in dev — presigned URLs will use MINIO_ENDPOINT directly.
+  MINIO_PUBLIC_URL: z.string().url().optional(),
 
   LIVEKIT_URL: z.string().default('ws://localhost:7880'),
   LIVEKIT_API_KEY: z.string().default('devkey'),

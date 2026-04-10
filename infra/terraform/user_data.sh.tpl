@@ -115,6 +115,11 @@ JWT_REFRESH_SECRET=$JWT_REFRESH
 JWT_REFRESH_TTL=30d
 
 # ---- MinIO ----
+# Internal endpoint — the API talks to MinIO over loopback for actual byte
+# transfer (fast, no TLS overhead, no ALB hop). MINIO_PUBLIC_URL below is
+# the host that the API uses ONLY to sign presigned URLs handed back to
+# browsers, so the patient's "Завантажити" button hits an externally
+# reachable hostname. Both must use the same access/secret keys.
 MINIO_ENDPOINT=localhost
 MINIO_PORT=9000
 MINIO_USE_SSL=false
@@ -122,6 +127,7 @@ MINIO_ACCESS_KEY=telemed
 MINIO_SECRET_KEY=telemed-secret
 MINIO_BUCKET=telemed-files
 MINIO_REGION=us-east-1
+MINIO_PUBLIC_URL=https://minio.$DOMAIN
 
 # ---- LiveKit ----
 LIVEKIT_URL=wss://livekit.$DOMAIN
