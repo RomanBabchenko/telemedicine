@@ -19,6 +19,7 @@ import { RolesGuard } from '../../../common/auth/roles.guard';
 import { Auditable } from '../../../common/audit/decorators';
 import { TenantContextService } from '../../../common/tenant/tenant-context.service';
 import { ProviderService } from '../../provider/application/provider.service';
+import { PatientService } from '../../patient/application/patient.service';
 import { UserService, UserDetail } from '../application/user.service';
 import {
   AddMembershipBodyDto,
@@ -55,6 +56,7 @@ export class AdminUserController {
   constructor(
     private readonly users: UserService,
     private readonly providers: ProviderService,
+    private readonly patientService: PatientService,
     private readonly tenantContext: TenantContextService,
   ) {}
 
@@ -153,6 +155,14 @@ export class AdminUserController {
       role: body.role,
       isDefault: body.isDefault,
     });
+
+    if (body.role === Role.PATIENT) {
+      const user = await this.users.findByEmail(body.email);
+      if (user) {
+        await this.patientService.ensurePatientProfile(user);
+      }
+    }
+
     return {
       user: summarize(result.user),
       reused: result.reused,
@@ -180,6 +190,14 @@ export class AdminUserController {
     // demo slots) — otherwise patients in this tenant won't see them.
     if (body.role === Role.DOCTOR) {
       await this.providers.attachToTenant(userId, body.tenantId);
+    }
+    // For PATIENT role, ensure the Patient record exists — otherwise booking
+    // endpoints will 404 with "Patient profile not found".
+    if (body.role === Role.PATIENT) {
+      const user = await this.users.findById(userId);
+      if (user) {
+        await this.patientService.ensurePatientProfile(user);
+      }
     }
     const detail = await this.users.getDetail(userId);
     return summarize(detail);

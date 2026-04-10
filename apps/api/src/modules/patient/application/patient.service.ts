@@ -32,6 +32,31 @@ export class PatientService {
     return patient;
   }
 
+  /**
+   * Ensure a Patient record exists for the given user. Used by admin flows
+   * where a User is created (or gets a PATIENT membership) without going
+   * through the self-registration path that normally creates the Patient row.
+   */
+  async ensurePatientProfile(user: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    email: string | null;
+    phone: string | null;
+  }): Promise<Patient> {
+    const existing = await this.patients.findOne({ where: { userId: user.id } });
+    if (existing) return existing;
+    const patient = this.patients.create({
+      userId: user.id,
+      firstName: user.firstName ?? '',
+      lastName: user.lastName ?? '',
+      email: user.email,
+      phone: user.phone,
+      preferredLocale: 'uk',
+    });
+    return this.patients.save(patient);
+  }
+
   async getById(id: string): Promise<Patient> {
     const patient = await this.patients.findOne({ where: { id } });
     if (!patient) throw new NotFoundException('Patient not found');
