@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, NotFoundException, Param, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { IsString } from 'class-validator';
 import { Role } from '@telemed/shared-types';
@@ -33,5 +33,13 @@ export class RecordingController {
   async stop(@Param('id') sessionId: string) {
     await this.service.stop(sessionId);
     return { ok: true };
+  }
+
+  @Get(':id/recording')
+  @Roles(Role.DOCTOR, Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
+  async getRecording(@Param('id') sessionId: string) {
+    const info = await this.service.getRecordingInfo(sessionId);
+    if (!info) throw new NotFoundException('Recording not found');
+    return info;
   }
 }

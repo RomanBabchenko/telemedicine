@@ -82,6 +82,16 @@ services:
     volumes:
       - ./infra/livekit/livekit.yaml:/etc/livekit.yaml:ro
 
+  livekit-egress:
+    image: livekit/egress:latest
+    container_name: telemed-livekit-egress
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./infra/livekit/egress.yaml:/etc/egress.yaml:ro
+    environment:
+      EGRESS_CONFIG_FILE: /etc/egress.yaml
+
   mailhog:
     image: mailhog/mailhog:latest
     container_name: telemed-mailhog

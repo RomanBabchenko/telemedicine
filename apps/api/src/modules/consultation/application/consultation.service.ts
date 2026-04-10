@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConsultationStatus, ParticipantRole, Role } from '@telemed/shared-types';
@@ -8,10 +8,13 @@ import { Appointment } from '../../booking/domain/entities/appointment.entity';
 import { LiveKitClientService } from '../../../infrastructure/livekit/livekit-client.service';
 import { TenantContextService } from '../../../common/tenant/tenant-context.service';
 import { AppointmentService } from '../../booking/application/appointment.service';
+import { RecordingService } from '../../recording/application/recording.service';
 import { AuthUser } from '../../../common/auth/decorators';
 
 @Injectable()
 export class ConsultationService {
+  private readonly logger = new Logger(ConsultationService.name);
+
   constructor(
     @InjectRepository(ConsultationSession)
     private readonly sessions: Repository<ConsultationSession>,
@@ -20,6 +23,7 @@ export class ConsultationService {
     private readonly livekit: LiveKitClientService,
     private readonly tenantContext: TenantContextService,
     private readonly appointmentService: AppointmentService,
+    private readonly recording: RecordingService,
   ) {}
 
   async ensureForAppointment(appointmentId: string): Promise<ConsultationSession> {
@@ -77,6 +81,12 @@ export class ConsultationService {
       } catch {
         // already in progress
       }
+      // Auto-start audio recording
+      try {
+        await this.recording.startAuto(session.id);
+      } catch (e) {
+        this.logger.warn(`Auto-recording failed for session ${session.id}: ${(e as Error).message}`);
+      }
     } else if (session.status === ConsultationStatus.SCHEDULED) {
       session.status = ConsultationStatus.WAITING;
     }
@@ -115,6 +125,12 @@ export class ConsultationService {
     session.status = ConsultationStatus.ENDED;
     session.endedAt = new Date();
     await this.sessions.save(session);
+    // Stop recording before deleting the room
+    try {
+      await this.recording.stop(sessionId);
+    } catch (e) {
+      this.logger.warn(`Stop recording failed for session ${sessionId}: ${(e as Error).message}`);
+    }
     await this.livekit.deleteRoom(session.livekitRoomName);
     try {
       await this.appointmentService.complete(session.appointmentId);

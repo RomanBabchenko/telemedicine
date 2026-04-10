@@ -1,10 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   AccessToken,
   EgressClient,
   EncodedFileOutput,
   EncodedFileType,
   RoomServiceClient,
+  S3Upload,
   VideoGrant,
 } from 'livekit-server-sdk';
 import { AppConfig } from '../../config/env.config';
@@ -20,6 +21,7 @@ interface IssueTokenInput {
 
 @Injectable()
 export class LiveKitClientService {
+  private readonly logger = new Logger(LiveKitClientService.name);
   private roomService: RoomServiceClient;
   private egressClient: EgressClient;
 
@@ -37,7 +39,7 @@ export class LiveKitClientService {
   }
 
   private toHttpUrl(wsUrl: string): string {
-    return wsUrl.replace(/^ws/, 'http');
+    return wsUrl.replace(/^ws/, 'http').replace('//localhost:', '//127.0.0.1:');
   }
 
   get publicUrl(): string {
@@ -75,17 +77,30 @@ export class LiveKitClientService {
   }
 
   async startAudioEgress(roomName: string, objectKey: string): Promise<{ egressId: string }> {
+    const s3 = new S3Upload({
+      accessKey: this.config.minio.accessKey,
+      secret: this.config.minio.secretKey,
+      region: this.config.minio.region,
+      endpoint: `http://${this.config.minio.endpoint}:${this.config.minio.port}`,
+      bucket: this.config.minio.bucket,
+      forcePathStyle: true,
+    });
     const out = new EncodedFileOutput({
       fileType: EncodedFileType.OGG,
       filepath: objectKey,
+      output: { case: 's3', value: s3 },
     });
     try {
       const info = await this.egressClient.startRoomCompositeEgress(roomName, out, {
         audioOnly: true,
       });
       return { egressId: info.egressId };
-    } catch {
-      // Egress not available in dev — return a stub id so the flow continues.
+    } catch (e) {
+      const err = e as Error;
+      this.logger.warn(
+        `Egress start failed for room ${roomName} (using stub): ${err.message}`,
+        err.cause ? `cause: ${JSON.stringify(err.cause)}` : '',
+      );
       return { egressId: `stub-egress-${Date.now()}` };
     }
   }

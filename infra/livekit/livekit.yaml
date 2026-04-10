@@ -29,4 +29,6 @@ rtc:
       - wlan0
 keys:
   devkey: devsecretdevsecretdevsecretdevsecret
+redis:
+  address: localhost:6379
 log_level: info

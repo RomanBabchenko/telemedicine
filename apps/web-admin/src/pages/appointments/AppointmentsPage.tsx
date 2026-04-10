@@ -1,14 +1,54 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
-import { bookingApi } from '@telemed/api-client';
-import { Badge, EmptyState, PageHeader, Spinner, Table, TBody, TD, TH, THead, TR } from '@telemed/ui';
+import { bookingApi, consultationApi } from '@telemed/api-client';
+import { Badge, Button, EmptyState, PageHeader, Spinner, Table, TBody, TD, TH, THead, TR } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
 
 const booking = bookingApi(apiClient);
+const consultation = consultationApi(apiClient);
 
 const fullName = (first?: string, last?: string): string => {
   const value = `${first ?? ''} ${last ?? ''}`.trim();
   return value || '—';
+};
+
+const RecordingCell = ({ sessionId }: { sessionId: string }) => {
+  const [url, setUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [notFound, setNotFound] = useState(false);
+
+  const handleClick = async () => {
+    setLoading(true);
+    try {
+      const res = await consultation.getRecording(sessionId);
+      if (res.downloadUrl) {
+        setUrl(res.downloadUrl);
+      } else {
+        setNotFound(true);
+      }
+    } catch {
+      setNotFound(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (notFound) return <span className="text-sm text-gray-400">—</span>;
+
+  if (url) {
+    return (
+      <audio controls preload="none" className="h-8 w-48">
+        <source src={url} type="audio/ogg" />
+      </audio>
+    );
+  }
+
+  return (
+    <Button size="sm" variant="secondary" onClick={handleClick} disabled={loading}>
+      {loading ? '...' : 'Прослухати'}
+    </Button>
+  );
 };
 
 export const AppointmentsPage = () => {
@@ -34,6 +74,7 @@ export const AppointmentsPage = () => {
               <TH>Лікар</TH>
               <TH>Спеціальність</TH>
               <TH>Статус</TH>
+              <TH>Запис</TH>
             </TR>
           </THead>
           <TBody>
@@ -46,6 +87,13 @@ export const AppointmentsPage = () => {
                 <TD>{a.doctor?.specializations?.join(', ') || '—'}</TD>
                 <TD>
                   <Badge>{a.status}</Badge>
+                </TD>
+                <TD>
+                  {a.consultationSessionId ? (
+                    <RecordingCell sessionId={a.consultationSessionId} />
+                  ) : (
+                    '—'
+                  )}
                 </TD>
               </TR>
             ))}

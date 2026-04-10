@@ -7,6 +7,7 @@ import { ConsultationSession } from '../../consultation/domain/entities/consulta
 import { Consent } from '../../patient/domain/entities/consent.entity';
 import { Tenant } from '../../tenant/domain/entities/tenant.entity';
 import { LiveKitClientService } from '../../../infrastructure/livekit/livekit-client.service';
+import { MinioService } from '../../../infrastructure/minio/minio.service';
 import { TenantContextService } from '../../../common/tenant/tenant-context.service';
 
 @Injectable()
@@ -20,6 +21,7 @@ export class RecordingService {
     @InjectRepository(Consent) private readonly consents: Repository<Consent>,
     @InjectRepository(Tenant) private readonly tenants: Repository<Tenant>,
     private readonly livekit: LiveKitClientService,
+    private readonly minio: MinioService,
     private readonly tenantContext: TenantContextService,
   ) {}
 
@@ -60,6 +62,40 @@ export class RecordingService {
     return saved;
   }
 
+  /**
+   * Auto-start recording when a session becomes ACTIVE.
+   * Skips consent and audioPolicy checks — used for automatic recording.
+   */
+  async startAuto(sessionId: string): Promise<SessionRecording> {
+    const tenantId = this.tenantContext.getTenantId();
+
+    const session = await this.sessions.findOne({ where: { id: sessionId, tenantId } });
+    if (!session) throw new NotFoundException('Session not found');
+
+    // Already recording — idempotent
+    const existing = await this.recordings.findOne({ where: { sessionId, tenantId } });
+    if (existing) return existing;
+
+    const objectKey = `${tenantId}/recordings/${session.id}.ogg`;
+    const { egressId } = await this.livekit.startAudioEgress(session.livekitRoomName, objectKey);
+
+    const retentionUntil = new Date(Date.now() + 30 * 86400_000);
+
+    const recording = this.recordings.create({
+      tenantId,
+      sessionId: session.id,
+      consentId: null,
+      egressId,
+      retentionUntil,
+      status: 'RECORDING',
+    });
+    const saved = await this.recordings.save(recording);
+    session.recordingId = saved.id;
+    await this.sessions.save(session);
+    this.logger.log(`Auto-recording started for session ${sessionId}, egress: ${egressId}`);
+    return saved;
+  }
+
   async stop(sessionId: string): Promise<SessionRecording | null> {
     const tenantId = this.tenantContext.getTenantId();
     const recording = await this.recordings.findOne({ where: { sessionId, tenantId } });
@@ -67,5 +103,33 @@ export class RecordingService {
     if (recording.egressId) await this.livekit.stopEgress(recording.egressId);
     recording.status = 'STORED';
     return this.recordings.save(recording);
+  }
+
+  async getRecordingInfo(sessionId: string): Promise<{
+    recordingId: string;
+    status: string;
+    durationSec: number;
+    downloadUrl: string | null;
+  } | null> {
+    const tenantId = this.tenantContext.getTenantId();
+    const recording = await this.recordings.findOne({ where: { sessionId, tenantId } });
+    if (!recording) return null;
+
+    let downloadUrl: string | null = null;
+    if (recording.status === 'STORED') {
+      const objectKey = `${tenantId}/recordings/${sessionId}.ogg`;
+      try {
+        downloadUrl = await this.minio.presignedGet(objectKey);
+      } catch {
+        // file may not exist yet
+      }
+    }
+
+    return {
+      recordingId: recording.id,
+      status: recording.status,
+      durationSec: recording.durationSec,
+      downloadUrl,
+    };
   }
 }

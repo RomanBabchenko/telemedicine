@@ -15,5 +15,9 @@ export const consultationApi = (client: ApiClient) => ({
     client.post<{ ok: true; recordingId: string }>(`/sessions/${id}/start-recording`, dto),
   stopRecording: (id: string) =>
     client.post<{ ok: true }>(`/sessions/${id}/stop-recording`),
+  getRecording: (id: string) =>
+    client.get<{ recordingId: string; status: string; durationSec: number; downloadUrl: string | null }>(
+      `/sessions/${id}/recording`,
+    ),
   end: (id: string) => client.post<{ ok: true }>(`/sessions/${id}/end`),
 });
