@@ -6,8 +6,11 @@ import { Public, Roles } from '../../../common/auth/decorators';
 import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { Auditable } from '../../../common/audit/decorators';
+import { TenantContextService } from '../../../common/tenant/tenant-context.service';
 import { SyncJobService } from '../application/sync-job.service';
 import { ConnectorRegistry } from '../application/connector.registry';
+import { WebhookEventHandler } from '../application/webhook-event.handler';
+import { OnlineAppointmentPayload } from '../domain/ports/mis-connector';
 
 @ApiTags('mis-integration')
 @Controller('integrations')
@@ -15,6 +18,8 @@ export class MisController {
   constructor(
     private readonly sync: SyncJobService,
     private readonly registry: ConnectorRegistry,
+    private readonly webhookHandler: WebhookEventHandler,
+    private readonly tenantContext: TenantContextService,
   ) {}
 
   @ApiBearerAuth()
@@ -57,7 +62,7 @@ export class MisController {
   @Public()
   @Auditable({ action: 'mis.webhook.received', resource: 'MisSyncJob' })
   async webhook(
-    @Param('tenantId') _tenantId: string,
+    @Param('tenantId') tenantId: string,
     @Param('connector') connectorId: string,
     @Req() req: Request,
     @Body() body: unknown,
@@ -71,6 +76,18 @@ export class MisController {
       return { received: false };
     }
     const event = connector.parseWebhookEvent(JSON.stringify(body));
+    if (!event) return { received: false };
+
+    if (event.type === 'appointment.online') {
+      return this.tenantContext.run({ tenantId }, () =>
+        this.webhookHandler.handleOnlineAppointment(
+          tenantId,
+          connectorId,
+          event.payload as unknown as OnlineAppointmentPayload,
+        ),
+      );
+    }
+
     return { received: true, event };
   }
 }

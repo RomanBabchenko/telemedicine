@@ -32,4 +32,9 @@ export const authApi = (client: ApiClient) => ({
   refresh: (dto: RefreshDto) => client.post<AuthTokensDto>('/auth/refresh', dto),
   logout: () => client.post<{ ok: true }>('/auth/logout'),
   me: () => client.get<AuthUserDto>('/auth/me'),
+  consumeInvite: (dto: { token: string }) =>
+    client.post<AuthResponseDto & { appointmentId: string; consultationSessionId: string }>(
+      '/auth/invite/consume',
+      dto,
+    ),
 });

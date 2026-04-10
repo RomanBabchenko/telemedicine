@@ -149,6 +149,10 @@ PLATFORM_TENANT_ID=11111111-1111-4111-8111-111111111111
 PAYMENT_PROVIDER=stub
 DOCDREAM_STUB_ENABLED=true
 
+# ---- MIS Integration (invite link URLs) ----
+PATIENT_APP_URL=https://patient.$DOMAIN
+DOCTOR_APP_URL=https://doctor.$DOMAIN
+
 # ---- Frontend (used by Vite during build below) ----
 VITE_API_URL=https://api.$DOMAIN/api/v1
 VITE_LIVEKIT_URL=wss://livekit.$DOMAIN

@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { ThemeProvider } from '@telemed/ui';
 import { AppLayout } from './components/AppLayout';
 import { LoginPage } from './pages/auth/LoginPage';
+import { InvitePage } from './pages/invite/InvitePage';
 import { DashboardPage } from './pages/dashboard/DashboardPage';
 import { AppointmentsPage } from './pages/appointments/AppointmentsPage';
 import { ConsultationPage } from './pages/consultation/ConsultationPage';
@@ -47,6 +48,7 @@ const InnerApp = () => {
     >
       <Routes>
         <Route path="/auth/login" element={<LoginPage />} />
+        <Route path="/invite" element={<InvitePage />} />
         <Route path="/*" element={<ProtectedRoutes />} />
       </Routes>
     </ThemeProvider>

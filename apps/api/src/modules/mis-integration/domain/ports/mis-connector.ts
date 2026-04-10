@@ -33,8 +33,24 @@ export interface ExternalSlot {
   endAt: string;
 }
 
+export interface OnlineAppointmentPayload {
+  externalAppointmentId?: string;
+  doctorExternalId: string;
+  patientExternalId?: string;
+  patientFirstName: string;
+  patientLastName: string;
+  patientEmail?: string;
+  patientPhone?: string;
+  doctorFirstName: string;
+  doctorLastName: string;
+  doctorSpecialization: string;
+  startAt: string;
+  endAt: string;
+  serviceTypeName?: string;
+}
+
 export interface NormalizedMisEvent {
-  type: 'appointment.status' | 'slot.updated';
+  type: 'appointment.status' | 'slot.updated' | 'appointment.online';
   payload: Record<string, unknown>;
 }
 

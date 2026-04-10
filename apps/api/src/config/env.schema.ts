@@ -68,6 +68,9 @@ export const envSchema = z.object({
     .string()
     .transform((v) => v === 'true')
     .default('true'),
+
+  PATIENT_APP_URL: z.string().url().default('http://localhost:5173'),
+  DOCTOR_APP_URL: z.string().url().default('http://localhost:5174'),
 });
 
 export type Env = z.infer<typeof envSchema>;

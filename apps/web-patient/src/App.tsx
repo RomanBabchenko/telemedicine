@@ -14,6 +14,7 @@ import { DocumentsPage } from './pages/documents/DocumentsPage';
 import { ProfilePage } from './pages/profile/ProfilePage';
 import { LoginPage } from './pages/auth/LoginPage';
 import { OtpPage } from './pages/auth/OtpPage';
+import { InvitePage } from './pages/invite/InvitePage';
 import { useAuthStore } from './stores/auth.store';
 import { useTenant } from './hooks/useTenant';
 
@@ -59,6 +60,7 @@ const InnerApp = () => {
       <Routes>
         <Route path="/auth/login" element={<LoginPage />} />
         <Route path="/auth/otp" element={<OtpPage />} />
+        <Route path="/invite" element={<InvitePage />} />
         <Route path="/*" element={<ProtectedRoutes />} />
       </Routes>
     </ThemeProvider>

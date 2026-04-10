@@ -103,4 +103,12 @@ export class AppConfig {
   get docdreamStubEnabled(): boolean {
     return this.config.get('DOCDREAM_STUB_ENABLED', { infer: true });
   }
+
+  get patientAppUrl(): string {
+    return this.config.get('PATIENT_APP_URL', { infer: true });
+  }
+
+  get doctorAppUrl(): string {
+    return this.config.get('DOCTOR_APP_URL', { infer: true });
+  }
 }
