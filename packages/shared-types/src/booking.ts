@@ -60,6 +60,13 @@ export interface AppointmentDto {
   paymentId: string | null;
   consultationSessionId: string | null;
   createdAt: string;
+  // MIS-originated payment fields. Set only when the appointment was created
+  // via an MIS webhook (e.g. DocDream) with explicit payment instructions.
+  // When misPaymentType === 'prepaid' and misPaymentStatus !== 'paid', the
+  // patient is blocked from joining the video session until the clinic marks
+  // the appointment as paid.
+  misPaymentType?: 'prepaid' | 'postpaid' | null;
+  misPaymentStatus?: 'paid' | 'unpaid' | null;
   // Joined summaries — populated by list endpoints so admin/doctor UIs
   // don't have to make N+1 follow-up requests. Optional for backwards
   // compatibility with reserve/confirm/cancel responses that still return

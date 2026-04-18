@@ -118,6 +118,8 @@ export class AppointmentService {
         endAt: r.endAt,
         paymentId: r.paymentId,
         consultationSessionId: r.consultationSessionId,
+        misPaymentType: r.misPaymentType,
+        misPaymentStatus: r.misPaymentStatus,
         createdAt: r.createdAt,
         patient: patient
           ? {

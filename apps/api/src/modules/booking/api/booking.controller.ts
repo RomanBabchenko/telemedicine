@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Role } from '@telemed/shared-types';
-import { CurrentUser, AuthUser, Roles } from '../../../common/auth/decorators';
+import { CurrentUser, AuthUser, InviteAccessible, Roles } from '../../../common/auth/decorators';
 import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { Auditable } from '../../../common/audit/decorators';
@@ -95,6 +95,7 @@ export class BookingController {
 
   @Get('appointments/:id')
   @UseGuards(JwtAuthGuard)
+  @InviteAccessible('appointmentId')
   getById(@Param('id') id: string) {
     return this.appointments.getById(id);
   }

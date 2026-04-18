@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -9,7 +10,12 @@ import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 import { AppConfig } from '../../config/env.config';
 import { TenantContextService } from '../tenant/tenant-context.service';
-import { IS_PUBLIC_KEY, AuthUser } from './decorators';
+import {
+  INVITE_ACCESSIBLE_KEY,
+  IS_PUBLIC_KEY,
+  AuthUser,
+  InviteContextField,
+} from './decorators';
 
 interface JwtPayload {
   sub: string;
@@ -18,6 +24,8 @@ interface JwtPayload {
   roles: string[];
   tenantId: string | null;
   mfaEnabled: boolean;
+  scope?: 'full' | 'invite';
+  inviteCtx?: { appointmentId: string; consultationSessionId: string };
 }
 
 @Injectable()
@@ -58,10 +66,37 @@ export class JwtAuthGuard implements CanActivate {
       roles: (payload.roles ?? []) as AuthUser['roles'],
       tenantId: payload.tenantId,
       mfaEnabled: payload.mfaEnabled,
+      ...(payload.scope ? { scope: payload.scope } : {}),
+      ...(payload.inviteCtx ? { inviteCtx: payload.inviteCtx } : {}),
     };
 
     (req as Request & { user?: AuthUser }).user = user;
     this.tenantContext.setActor(user.id);
+
+    // Invite-scoped tokens are blocked from every endpoint that is not
+    // explicitly marked with @InviteAccessible.
+    if (user.scope === 'invite') {
+      const inviteMeta = this.reflector.getAllAndOverride<
+        InviteContextField | true | undefined
+      >(INVITE_ACCESSIBLE_KEY, [context.getHandler(), context.getClass()]);
+
+      if (inviteMeta === undefined) {
+        throw new ForbiddenException(
+          'This resource is not available in an invite-only session.',
+        );
+      }
+
+      if (typeof inviteMeta === 'string') {
+        const expected = user.inviteCtx?.[inviteMeta];
+        const actual = req.params?.id;
+        if (!expected || !actual || expected !== actual) {
+          throw new ForbiddenException(
+            'This resource does not belong to the invited session.',
+          );
+        }
+      }
+    }
+
     return true;
   }
 }

@@ -52,8 +52,16 @@ export interface RefreshDto {
 
 export interface AuthTokensDto {
   accessToken: string;
-  refreshToken: string;
+  // null when the session was opened via an invite link — invite holders
+  // re-authenticate by consuming the same invite URL again rather than
+  // refreshing a long-lived token.
+  refreshToken: string | null;
   expiresIn: number;
+}
+
+export interface InviteContextDto {
+  appointmentId: string;
+  consultationSessionId: string;
 }
 
 export interface AuthUserDto {
@@ -65,6 +73,10 @@ export interface AuthUserDto {
   roles: Role[];
   tenantId: string | null;
   mfaEnabled: boolean;
+  // When set to 'invite', the user came in via a one-time invite link and
+  // can only access the waiting room + video session for inviteCtx.
+  scope?: 'full' | 'invite';
+  inviteCtx?: InviteContextDto;
 }
 
 export interface AuthResponseDto {

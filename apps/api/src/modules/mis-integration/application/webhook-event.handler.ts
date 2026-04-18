@@ -119,15 +119,27 @@ export class WebhookEventHandler {
       });
       if (existingAppt) return existingAppt;
 
+      const paymentType = payload.paymentType ?? 'postpaid';
+      const paymentStatus = payload.paymentStatus ?? 'unpaid';
+      // Prepaid + unpaid → hold the appointment until the clinic confirms
+      // payment via PATCH /integrations/:tenantId/appointments/:id/payment-status.
+      // Postpaid or prepaid+paid → confirmed, patient can join immediately.
+      const initialStatus =
+        paymentType === 'prepaid' && paymentStatus !== 'paid'
+          ? AppointmentStatus.AWAITING_PAYMENT
+          : AppointmentStatus.CONFIRMED;
+
       const appt = apptRepo.create({
         tenantId,
         slotId: slot.id,
         patientId,
         doctorId,
         serviceTypeId,
-        status: AppointmentStatus.CONFIRMED,
+        status: initialStatus,
         startAt,
         endAt,
+        misPaymentType: paymentType,
+        misPaymentStatus: paymentStatus,
       });
       return apptRepo.save(appt);
     });
@@ -148,7 +160,7 @@ export class WebhookEventHandler {
       );
     }
 
-    // 7. Generate invite links
+    // 7. Generate invite links (TTL = appointment.endAt + grace)
     const [patientToken, doctorToken] = await Promise.all([
       this.invites.issue({
         tenantId,
@@ -156,6 +168,7 @@ export class WebhookEventHandler {
         consultationSessionId: session.id,
         userId: patientUserId,
         role: 'PATIENT',
+        appointmentEndAt: endAt,
       }),
       this.invites.issue({
         tenantId,
@@ -163,6 +176,7 @@ export class WebhookEventHandler {
         consultationSessionId: session.id,
         userId: doctorUserId,
         role: 'DOCTOR',
+        appointmentEndAt: endAt,
       }),
     ]);
 
@@ -211,6 +225,7 @@ export class WebhookEventHandler {
         consultationSessionId: session.id,
         userId: patient.userId,
         role: 'PATIENT',
+        appointmentEndAt: appointment.endAt,
       }),
       this.invites.issue({
         tenantId,
@@ -218,6 +233,7 @@ export class WebhookEventHandler {
         consultationSessionId: session.id,
         userId: doctor.userId,
         role: 'DOCTOR',
+        appointmentEndAt: appointment.endAt,
       }),
     ]);
 

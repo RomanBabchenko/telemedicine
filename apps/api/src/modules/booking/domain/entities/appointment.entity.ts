@@ -40,6 +40,12 @@ export class Appointment extends TenantOwnedEntity {
   @Column({ name: 'payment_id', type: 'uuid', nullable: true })
   paymentId!: string | null;
 
+  @Column({ name: 'mis_payment_type', type: 'varchar', length: 16, nullable: true })
+  misPaymentType!: 'prepaid' | 'postpaid' | null;
+
+  @Column({ name: 'mis_payment_status', type: 'varchar', length: 16, nullable: true })
+  misPaymentStatus!: 'paid' | 'unpaid' | null;
+
   @Column({ name: 'consultation_session_id', type: 'uuid', nullable: true })
   consultationSessionId!: string | null;
 

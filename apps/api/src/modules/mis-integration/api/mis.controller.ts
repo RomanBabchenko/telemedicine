@@ -1,7 +1,20 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { Request } from 'express';
-import { Role } from '@telemed/shared-types';
+import { AppointmentStatus, Role } from '@telemed/shared-types';
 import { Public, Roles } from '../../../common/auth/decorators';
 import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { RolesGuard } from '../../../common/auth/roles.guard';
@@ -11,6 +24,9 @@ import { SyncJobService } from '../application/sync-job.service';
 import { ConnectorRegistry } from '../application/connector.registry';
 import { WebhookEventHandler } from '../application/webhook-event.handler';
 import { OnlineAppointmentPayload } from '../domain/ports/mis-connector';
+import { Appointment } from '../../booking/domain/entities/appointment.entity';
+import { AppointmentService } from '../../booking/application/appointment.service';
+import { TenantService } from '../../tenant/application/tenant.service';
 
 @ApiTags('mis-integration')
 @Controller('integrations')
@@ -20,6 +36,10 @@ export class MisController {
     private readonly registry: ConnectorRegistry,
     private readonly webhookHandler: WebhookEventHandler,
     private readonly tenantContext: TenantContextService,
+    private readonly tenants: TenantService,
+    @InjectRepository(Appointment)
+    private readonly appointmentsRepo: Repository<Appointment>,
+    private readonly appointments: AppointmentService,
   ) {}
 
   @ApiBearerAuth()
@@ -67,6 +87,7 @@ export class MisController {
     @Req() req: Request,
     @Body() body: unknown,
   ) {
+    await this.tenants.getOrThrow(tenantId);
     const connector = this.registry.get(connectorId);
     const headers: Record<string, string> = {};
     for (const [k, v] of Object.entries(req.headers)) {
@@ -89,5 +110,57 @@ export class MisController {
     }
 
     return { received: true, event };
+  }
+
+  // Clinic (MIS) server-to-server call to mark an MIS-originated prepaid
+  // appointment as paid. On success the appointment is transitioned from
+  // AWAITING_PAYMENT → CONFIRMED, which unblocks the patient's join-token.
+  @Patch(':tenantId/appointments/:appointmentId/payment-status')
+  @Public()
+  @Auditable({ action: 'mis.payment.updated', resource: 'Appointment' })
+  async updatePaymentStatus(
+    @Param('tenantId') tenantId: string,
+    @Param('appointmentId') appointmentId: string,
+    @Body() body: { paymentStatus: 'paid' | 'unpaid' },
+  ) {
+    if (body.paymentStatus !== 'paid' && body.paymentStatus !== 'unpaid') {
+      throw new BadRequestException('paymentStatus must be "paid" or "unpaid"');
+    }
+
+    await this.tenants.getOrThrow(tenantId);
+
+    return this.tenantContext.run({ tenantId }, async () => {
+      const appt = await this.appointmentsRepo.findOne({
+        where: { id: appointmentId, tenantId },
+      });
+      if (!appt) throw new NotFoundException('Appointment not found');
+      if (appt.misPaymentType !== 'prepaid') {
+        throw new BadRequestException(
+          'Appointment is not MIS-prepaid — nothing to update.',
+        );
+      }
+
+      appt.misPaymentStatus = body.paymentStatus;
+      await this.appointmentsRepo.save(appt);
+
+      // Flip status only when transitioning to 'paid' and currently held.
+      if (
+        body.paymentStatus === 'paid' &&
+        appt.status === AppointmentStatus.AWAITING_PAYMENT
+      ) {
+        await this.appointments.confirm(appointmentId);
+      }
+
+      return {
+        ok: true,
+        appointmentId,
+        misPaymentStatus: body.paymentStatus,
+        status:
+          body.paymentStatus === 'paid' &&
+          appt.status === AppointmentStatus.AWAITING_PAYMENT
+            ? AppointmentStatus.CONFIRMED
+            : appt.status,
+      };
+    });
   }
 }

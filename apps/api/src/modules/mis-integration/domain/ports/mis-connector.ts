@@ -47,6 +47,13 @@ export interface OnlineAppointmentPayload {
   startAt: string;
   endAt: string;
   serviceTypeName?: string;
+  // MIS-controlled payment flow.
+  //   postpaid (default): patient can join immediately.
+  //   prepaid + paid: same as postpaid — appointment is CONFIRMED.
+  //   prepaid + unpaid: appointment is AWAITING_PAYMENT — patient is blocked
+  //     from joining until the clinic calls the payment-status endpoint.
+  paymentType?: 'prepaid' | 'postpaid';
+  paymentStatus?: 'paid' | 'unpaid';
 }
 
 export interface NormalizedMisEvent {

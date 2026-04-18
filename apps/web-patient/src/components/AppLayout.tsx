@@ -8,12 +8,13 @@ export const AppLayout = () => {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
+  const isInviteScope = user?.scope === 'invite';
 
   return (
     <div className="min-h-full flex flex-col bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <Link to="/" className="flex items-center gap-2">
+          <Link to={isInviteScope ? '#' : '/'} className="flex items-center gap-2">
             {tenant?.logoUrl ? (
               <img src={tenant.logoUrl} alt={tenant.brandName} className="h-8" />
             ) : (
@@ -28,10 +29,12 @@ export const AppLayout = () => {
             </span>
           </Link>
           <nav className="flex items-center gap-3 text-sm">
-            <Link to="/doctors" className="text-slate-700 hover:underline">
-              Лікарі
-            </Link>
-            {user && (
+            {!isInviteScope && (
+              <Link to="/doctors" className="text-slate-700 hover:underline">
+                Лікарі
+              </Link>
+            )}
+            {user && !isInviteScope && (
               <>
                 <Link to="/appointments" className="text-slate-700 hover:underline">
                   Мої консультації
@@ -42,17 +45,19 @@ export const AppLayout = () => {
                 <Link to="/profile" className="text-slate-700 hover:underline">
                   Профіль
                 </Link>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    logout();
-                    navigate('/');
-                  }}
-                >
-                  Вийти
-                </Button>
               </>
+            )}
+            {user && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  logout();
+                  navigate('/auth/login');
+                }}
+              >
+                Вийти
+              </Button>
             )}
             {!user && (
               <Button size="sm" onClick={() => navigate('/auth/login')}>

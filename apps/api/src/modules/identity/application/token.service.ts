@@ -8,6 +8,11 @@ import { AppConfig } from '../../../config/env.config';
 import { Session } from '../domain/entities/session.entity';
 import { User } from '../domain/entities/user.entity';
 
+export interface InviteContext {
+  appointmentId: string;
+  consultationSessionId: string;
+}
+
 export interface AccessTokenPayload {
   sub: string;
   email: string | null;
@@ -15,11 +20,18 @@ export interface AccessTokenPayload {
   roles: Role[];
   tenantId: string | null;
   mfaEnabled: boolean;
+  // scope === 'invite' means the token was issued from a one-time invite link
+  // and grants access only to the waiting room + video session identified by
+  // inviteCtx. Default (absent or 'full') is normal unrestricted access.
+  scope?: 'full' | 'invite';
+  inviteCtx?: InviteContext;
 }
 
 export interface IssuedTokens {
   accessToken: string;
-  refreshToken: string;
+  // null when the caller passed skipRefresh (invite-scoped sessions don't
+  // get a refresh token — the invite link itself is the re-auth mechanism).
+  refreshToken: string | null;
   expiresIn: number;
 }
 
@@ -57,8 +69,22 @@ export class TokenService {
     deviceFingerprint?: string | null,
     ip?: string | null,
     userAgent?: string | null,
+    scope?: {
+      scope: 'invite';
+      inviteCtx: InviteContext;
+      // Cap the access-token TTL at this value (seconds). Used for invites so
+      // a JWT minted from the link expires near the end of the appointment.
+      accessTtlOverrideSec?: number;
+      // Skip creating a Session + refresh token. Invite holders re-auth by
+      // consuming the same invite URL again — no server-stored refresh needed.
+      skipRefresh?: boolean;
+    },
   ): Promise<IssuedTokens> {
-    const accessTtlSec = this.parseTtlSeconds(this.config.jwt.accessTtl);
+    const defaultAccessTtl = this.parseTtlSeconds(this.config.jwt.accessTtl);
+    const accessTtlSec =
+      scope?.accessTtlOverrideSec !== undefined
+        ? Math.max(60, Math.min(defaultAccessTtl, scope.accessTtlOverrideSec))
+        : defaultAccessTtl;
     const refreshTtlSec = this.parseTtlSeconds(this.config.jwt.refreshTtl);
 
     const payload: AccessTokenPayload = {
@@ -68,11 +94,16 @@ export class TokenService {
       roles,
       tenantId,
       mfaEnabled: user.mfaEnabled,
+      ...(scope ? { scope: scope.scope, inviteCtx: scope.inviteCtx } : {}),
     };
     const accessToken = await this.jwt.signAsync(payload, {
       secret: this.config.jwt.accessSecret,
       expiresIn: accessTtlSec,
     });
+
+    if (scope?.skipRefresh) {
+      return { accessToken, refreshToken: null, expiresIn: accessTtlSec };
+    }
 
     const refreshTokenRaw = crypto.randomBytes(48).toString('hex');
     const refreshToken = await this.jwt.signAsync(

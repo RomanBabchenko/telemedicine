@@ -19,6 +19,21 @@ const queryClient = new QueryClient({
 const ProtectedRoutes = () => {
   const user = useAuthStore((s) => s.user);
   if (!user) return <Navigate to="/auth/login" replace />;
+
+  // Invite-scoped doctor: only the consultation screen. Finish-page and the
+  // rest of the cabinet are reserved for normally logged-in doctors.
+  if (user.scope === 'invite' && user.inviteCtx) {
+    const sessionPath = `/consultation/${user.inviteCtx.consultationSessionId}`;
+    return (
+      <AppLayout>
+        <Routes>
+          <Route path="/consultation/:sessionId" element={<ConsultationPage />} />
+          <Route path="*" element={<Navigate to={sessionPath} replace />} />
+        </Routes>
+      </AppLayout>
+    );
+  }
+
   return (
     <AppLayout>
       <Routes>

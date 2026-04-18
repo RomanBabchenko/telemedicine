@@ -10,11 +10,30 @@ import {
   useTracks,
 } from '@livekit/components-react';
 import { Track, VideoPreset } from 'livekit-client';
-import { consultationApi } from '@telemed/api-client';
+import dayjs from 'dayjs';
+import { bookingApi, consultationApi } from '@telemed/api-client';
 import { Alert, Button, Card, PageHeader, Spinner } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
+import { useAuthStore } from '../../stores/auth.store';
 
 const consultation = consultationApi(apiClient);
+const booking = bookingApi(apiClient);
+
+// Mirror ConsultationService.issueJoinToken — UI phases flip on the same
+// boundaries as the backend gate.
+const JOIN_OPENS_BEFORE_START_MIN = 15;
+const JOIN_CLOSES_AFTER_END_MIN = 30;
+
+const formatUntil = (targetMs: number, nowMs: number): string => {
+  const totalMinutes = Math.max(0, Math.ceil((targetMs - nowMs) / 60_000));
+  if (totalMinutes < 60) return `${totalMinutes} хв`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours < 24) return minutes ? `${hours} год ${minutes} хв` : `${hours} год`;
+  const days = Math.floor(hours / 24);
+  const remHours = hours % 24;
+  return remHours ? `${days} дн ${remHours} год` : `${days} дн`;
+};
 
 const VideoGrid = () => {
   const tracks = useTracks(
@@ -62,6 +81,7 @@ export const ConsultationPage = () => {
   const [joined, setJoined] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [disconnectReason, setDisconnectReason] = useState<string | null>(null);
+  const isInviteScope = useAuthStore((s) => s.user?.scope === 'invite');
 
   // LiveKit's CSS variables (--lk-bg / --lk-fg / etc.) only kick in when an
   // ancestor has data-lk-theme. Their device-pickers render through React
@@ -79,9 +99,61 @@ export const ConsultationPage = () => {
     enabled: !!sessionId,
   });
 
+  // Second hop — we need the appointment's startAt/endAt to render the
+  // time-gate phase. The session itself doesn't carry them, and duplicating
+  // the fields into ConsultationSessionDto felt like ORM bleed into the API
+  // contract. @InviteAccessible('appointmentId') already allows this call for
+  // invite-scoped doctors because the id matches inviteCtx.appointmentId.
+  const apptQ = useQuery({
+    queryKey: ['appointment', sessionQ.data?.appointmentId],
+    queryFn: () => booking.getById(sessionQ.data!.appointmentId),
+    enabled: !!sessionQ.data?.appointmentId,
+  });
+
+  // Tick every 30 s — drives the phase transition and the countdown string.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const joinWindow = useMemo(() => {
+    const a = apptQ.data;
+    if (!a) return null;
+    const start = new Date(a.startAt).getTime();
+    const end = new Date(a.endAt).getTime();
+    return {
+      start,
+      end,
+      opensAt: start - JOIN_OPENS_BEFORE_START_MIN * 60_000,
+      closesAt: end + JOIN_CLOSES_AFTER_END_MIN * 60_000,
+    };
+  }, [apptQ.data]);
+
+  const phase: 'loading' | 'too_early' | 'can_join' | 'too_late' = !joinWindow
+    ? 'loading'
+    : nowMs < joinWindow.opensAt
+      ? 'too_early'
+      : nowMs > joinWindow.closesAt
+        ? 'too_late'
+        : 'can_join';
+
   const tokenM = useMutation({
     mutationFn: () => consultation.joinToken(sessionId!),
     onSuccess: () => setJoined(true),
+    onError: (e: Error) => setError(e.message),
+  });
+
+  // Invite-scoped doctors (coming from MIS) don't run the documentation flow
+  // inside our app — the MIS owns conclusions/prescriptions/referrals. They
+  // just need a way to close the session and move the appointment to
+  // COMPLETED when the call is over.
+  const endM = useMutation({
+    mutationFn: () => consultation.end(sessionId!),
+    onSuccess: () => {
+      setJoined(false);
+      setDisconnectReason('Консультацію завершено');
+    },
     onError: (e: Error) => setError(e.message),
   });
 
@@ -90,7 +162,36 @@ export const ConsultationPage = () => {
     [tokenM.data],
   );
 
-  if (sessionQ.isLoading) return <Spinner />;
+  if (sessionQ.isLoading || apptQ.isLoading || phase === 'loading') {
+    return <Spinner />;
+  }
+
+  if (phase === 'too_late') {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Зустріч завершено" />
+        <Card>
+          <Alert variant="info">Час зустрічі вичерпано.</Alert>
+        </Card>
+      </div>
+    );
+  }
+
+  if (phase === 'too_early' && joinWindow && apptQ.data) {
+    const startLabel = dayjs(apptQ.data.startAt).format('DD.MM.YYYY о HH:mm');
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Зустріч заплановано" />
+        <Card>
+          <Alert variant="info" title={`Зустріч: ${startLabel}`}>
+            До початку залишилось <strong>{formatUntil(joinWindow.opensAt, nowMs)}</strong>.
+            Консультаційна кімната відкриється за {JOIN_OPENS_BEFORE_START_MIN} хвилин
+            до початку.
+          </Alert>
+        </Card>
+      </div>
+    );
+  }
 
   if (!joined || !tokenM.data) {
     return (
@@ -116,9 +217,21 @@ export const ConsultationPage = () => {
       <PageHeader
         title="Консультація"
         actions={
-          <Link to={`/consultation/${sessionId}/finish`}>
-            <Button variant="outline">Завершити та оформити</Button>
-          </Link>
+          isInviteScope ? (
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (window.confirm('Завершити консультацію?')) endM.mutate();
+              }}
+              isLoading={endM.isPending}
+            >
+              Завершити консультацію
+            </Button>
+          ) : (
+            <Link to={`/consultation/${sessionId}/finish`}>
+              <Button variant="outline">Завершити та оформити</Button>
+            </Link>
+          )
         }
       />
       {disconnectReason ? (

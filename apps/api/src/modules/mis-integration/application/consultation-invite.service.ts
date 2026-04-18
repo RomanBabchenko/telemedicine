@@ -4,7 +4,9 @@ import { Repository } from 'typeorm';
 import { randomBytes, createHash } from 'node:crypto';
 import { ConsultationInvite } from '../domain/entities/consultation-invite.entity';
 
-const INVITE_TTL_SECONDS = 24 * 3600; // 24 hours
+// Grace period after the appointment's scheduled end during which the invite
+// link still resolves (in case the consultation ran over / patient reconnects).
+const INVITE_EXPIRY_GRACE_MS = 30 * 60 * 1000;
 
 @Injectable()
 export class ConsultationInviteService {
@@ -19,10 +21,15 @@ export class ConsultationInviteService {
     consultationSessionId: string;
     userId: string;
     role: 'PATIENT' | 'DOCTOR';
+    appointmentEndAt: Date;
   }): Promise<string> {
     const rawToken = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
-    const expiresAt = new Date(Date.now() + INVITE_TTL_SECONDS * 1000);
+    // Link life is tied to the appointment — once the meeting ends (+ grace),
+    // the link is dead. No more "linger for 24h after the call".
+    const expiresAt = new Date(
+      params.appointmentEndAt.getTime() + INVITE_EXPIRY_GRACE_MS,
+    );
 
     await this.invites.save(
       this.invites.create({
@@ -39,6 +46,11 @@ export class ConsultationInviteService {
     return rawToken;
   }
 
+  // Multi-consume: the same invite token can be consumed repeatedly within
+  // its TTL (each consume issues a fresh JWT). Patients click the email link
+  // whenever they need to enter the waiting room — closing the tab or losing
+  // a short-lived JWT should not lock them out. `consumedAt` stores the
+  // timestamp of the *most recent* consume (for audit), not a one-shot flag.
   async consume(rawToken: string): Promise<{
     userId: string;
     tenantId: string;
@@ -49,7 +61,6 @@ export class ConsultationInviteService {
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     const invite = await this.invites.findOne({ where: { tokenHash } });
     if (!invite) return null;
-    if (invite.consumedAt) return null;
     if (invite.expiresAt < new Date()) return null;
 
     invite.consumedAt = new Date();

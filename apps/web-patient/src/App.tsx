@@ -25,6 +25,23 @@ const queryClient = new QueryClient({
 const ProtectedRoutes = () => {
   const user = useAuthStore((s) => s.user);
   if (!user) return <Navigate to="/auth/login" replace />;
+
+  // Invite-scoped session: only the waiting room + video is reachable. All
+  // other paths bounce back to the join page so the user can't stumble into
+  // appointment history, doctor search, etc. The backend enforces the same
+  // rule via @InviteAccessible, this is purely UX.
+  if (user.scope === 'invite' && user.inviteCtx) {
+    const joinPath = `/appointments/${user.inviteCtx.appointmentId}/join`;
+    return (
+      <Routes>
+        <Route element={<AppLayout />}>
+          <Route path="/appointments/:id/join" element={<AppointmentJoinPage />} />
+        </Route>
+        <Route path="*" element={<Navigate to={joinPath} replace />} />
+      </Routes>
+    );
+  }
+
   return (
     <Routes>
       <Route element={<AppLayout />}>
