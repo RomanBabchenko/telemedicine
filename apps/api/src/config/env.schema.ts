@@ -47,6 +47,10 @@ export const envSchema = z.object({
   // API itself still talks to MinIO over loopback for actual byte transfer.
   // Leave empty in dev — presigned URLs will use MINIO_ENDPOINT directly.
   MINIO_PUBLIC_URL: z.string().url().optional(),
+  // S3 endpoint reachable from the LiveKit Egress container (Docker DNS name).
+  // Egress uploads files from inside the Docker network, so it needs the
+  // container name (e.g. "telemed-minio") instead of "localhost".
+  MINIO_EGRESS_ENDPOINT: z.string().optional(),
 
   LIVEKIT_URL: z.string().default('ws://localhost:7880'),
   LIVEKIT_API_KEY: z.string().default('devkey'),

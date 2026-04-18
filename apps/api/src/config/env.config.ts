@@ -71,6 +71,9 @@ export class AppConfig {
       bucket: this.config.get('MINIO_BUCKET', { infer: true }),
       region: this.config.get('MINIO_REGION', { infer: true }),
       publicUrl: this.config.get('MINIO_PUBLIC_URL', { infer: true }) ?? null,
+      egressEndpoint:
+        this.config.get('MINIO_EGRESS_ENDPOINT', { infer: true }) ??
+        this.config.get('MINIO_ENDPOINT', { infer: true }),
     };
   }
 

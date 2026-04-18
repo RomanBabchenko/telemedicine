@@ -77,11 +77,13 @@ export class LiveKitClientService {
   }
 
   async startAudioEgress(roomName: string, objectKey: string): Promise<{ egressId: string }> {
+    const egressS3Endpoint = `http://${this.config.minio.egressEndpoint}:${this.config.minio.port}`;
+    this.logger.log(`Egress S3 endpoint: ${egressS3Endpoint} (egressEndpoint=${this.config.minio.egressEndpoint})`);
     const s3 = new S3Upload({
       accessKey: this.config.minio.accessKey,
       secret: this.config.minio.secretKey,
       region: this.config.minio.region,
-      endpoint: `http://${this.config.minio.endpoint}:${this.config.minio.port}`,
+      endpoint: egressS3Endpoint,
       bucket: this.config.minio.bucket,
       forcePathStyle: true,
     });

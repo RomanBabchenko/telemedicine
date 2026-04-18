@@ -3,6 +3,8 @@ services:
     image: postgres:16-alpine
     container_name: telemed-postgres
     restart: unless-stopped
+    networks:
+      - telemed
     environment:
       POSTGRES_USER: telemed
       POSTGRES_PASSWORD: telemed
@@ -22,6 +24,8 @@ services:
     image: redis:7-alpine
     container_name: telemed-redis
     restart: unless-stopped
+    networks:
+      - telemed
     ports:
       - '6379:6379'
     volumes:
@@ -36,6 +40,8 @@ services:
     image: minio/minio:latest
     container_name: telemed-minio
     restart: unless-stopped
+    networks:
+      - telemed
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: telemed
@@ -54,6 +60,8 @@ services:
   minio-init:
     image: minio/mc:latest
     container_name: telemed-minio-init
+    networks:
+      - telemed
     depends_on:
       minio:
         condition: service_healthy
@@ -69,16 +77,17 @@ services:
     image: livekit/livekit-server:latest
     container_name: telemed-livekit
     restart: unless-stopped
-    # host network mode is the simplest way to make the WebRTC RTC port range
-    # (50000-50100/UDP) reachable from the browser without enumerating every
-    # port in `ports:`. Works on Linux out of the box. On macOS/Windows
-    # (where docker runs in a VM) you need to switch to bridge mode and add
-    # `ports: ["7880:7880", "7881:7881", "50000-50100:50000-50100/udp"]`.
-    network_mode: host
-    # Pin LiveKit to a single IP — the dev box's LAN address. Override at
-    # runtime via the LIVEKIT_NODE_IP env var if your LAN address changes,
-    # e.g. `LIVEKIT_NODE_IP=192.168.1.42 docker compose up -d livekit`.
-    command: --config /etc/livekit.yaml --node-ip ${LIVEKIT_NODE_IP:-192.168.88.251}
+    # On Windows/macOS Docker Desktop runs in a VM, so network_mode: host
+    # does NOT expose ports to the host. Use bridge mode with explicit ports.
+    # On Linux you can switch back to `network_mode: host` and remove `ports:`.
+    ports:
+      - '7880:7880'
+      - '7881:7881'
+      - '50000-50100:50000-50100/udp'
+    command: --config /etc/livekit.yaml --node-ip 172.30.0.10
+    networks:
+      telemed:
+        ipv4_address: 172.30.0.10
     volumes:
       - ./infra/livekit/livekit.yaml:/etc/livekit.yaml:ro
 
@@ -86,7 +95,8 @@ services:
     image: livekit/egress:latest
     container_name: telemed-livekit-egress
     restart: unless-stopped
-    network_mode: host
+    networks:
+      - telemed
     volumes:
       - ./infra/livekit/egress.yaml:/etc/egress.yaml:ro
     environment:
@@ -96,9 +106,18 @@ services:
     image: mailhog/mailhog:latest
     container_name: telemed-mailhog
     restart: unless-stopped
+    networks:
+      - telemed
     ports:
       - '1025:1025'
       - '8025:8025'
+
+networks:
+  telemed:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
 
 volumes:
   postgres-data:

@@ -13,22 +13,32 @@ import QRCode from 'qrcode';
 // host has them somewhere unusual.
 const FONT_CANDIDATES_REGULAR = [
   process.env.PDF_FONT_REGULAR_PATH,
+  // Linux
   '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
   '/usr/share/fonts/dejavu/DejaVuSans.ttf',
   '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
   '/usr/share/fonts/liberation/LiberationSans-Regular.ttf',
   '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf',
   '/usr/share/fonts/noto/NotoSans-Regular.ttf',
+  // Windows
+  'C:/Windows/Fonts/arial.ttf',
+  'C:/Windows/Fonts/segoeui.ttf',
+  'C:/Windows/Fonts/tahoma.ttf',
 ].filter((p): p is string => !!p);
 
 const FONT_CANDIDATES_BOLD = [
   process.env.PDF_FONT_BOLD_PATH,
+  // Linux
   '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
   '/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf',
   '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
   '/usr/share/fonts/liberation/LiberationSans-Bold.ttf',
   '/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf',
   '/usr/share/fonts/noto/NotoSans-Bold.ttf',
+  // Windows
+  'C:/Windows/Fonts/arialbd.ttf',
+  'C:/Windows/Fonts/segoeuib.ttf',
+  'C:/Windows/Fonts/tahomabd.ttf',
 ].filter((p): p is string => !!p);
 
 const findFirstExisting = (paths: string[]): string | null => {
