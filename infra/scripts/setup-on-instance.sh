@@ -57,7 +57,10 @@ if [[ -f "$APP_DIR/infra/livekit/livekit.prod.yaml" ]]; then
   echo "==> swap LiveKit config to prod variant"
   cp "$APP_DIR/infra/livekit/livekit.prod.yaml" "$APP_DIR/infra/livekit/livekit.yaml"
   chown "$APP_USER:$APP_USER" "$APP_DIR/infra/livekit/livekit.yaml"
-  sudo -u "$APP_USER" -- bash -lc "cd $APP_DIR && docker compose --env-file .env up -d --force-recreate livekit"
+  # Also ensure the egress container is running — it's required for audio
+  # recording and may be missing on instances provisioned before egress
+  # was added to the compose stack.
+  sudo -u "$APP_USER" -- bash -lc "cd $APP_DIR && docker compose --env-file .env up -d --force-recreate livekit livekit-egress"
 fi
 
 # ---------- 2. Install + build ----------

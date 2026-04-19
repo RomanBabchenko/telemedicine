@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { randomBytes, createHash } from 'node:crypto';
 import { ConsultationInvite } from '../domain/entities/consultation-invite.entity';
 
@@ -61,6 +61,7 @@ export class ConsultationInviteService {
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     const invite = await this.invites.findOne({ where: { tokenHash } });
     if (!invite) return null;
+    if (invite.revokedAt) return null;
     if (invite.expiresAt < new Date()) return null;
 
     invite.consumedAt = new Date();
@@ -73,5 +74,31 @@ export class ConsultationInviteService {
       appointmentId: invite.appointmentId,
       consultationSessionId: invite.consultationSessionId,
     };
+  }
+
+  /**
+   * Revoke every still-active invite for an appointment. Already-revoked
+   * rows are ignored (idempotent). Returns the number of newly revoked
+   * entries — useful so the caller can surface "0 links were active" vs
+   * actual operation results.
+   *
+   * Scope:
+   *   - role=undefined → revoke both patient and doctor invites
+   *   - role='PATIENT' → only patient-side links
+   *   - role='DOCTOR'  → only doctor-side links
+   */
+  async revokeForAppointment(
+    tenantId: string,
+    appointmentId: string,
+    role?: 'PATIENT' | 'DOCTOR',
+  ): Promise<number> {
+    const where: Record<string, unknown> = {
+      tenantId,
+      appointmentId,
+      revokedAt: IsNull(),
+    };
+    if (role) where.role = role;
+    const result = await this.invites.update(where, { revokedAt: new Date() });
+    return result.affected ?? 0;
   }
 }

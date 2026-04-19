@@ -8,6 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
+import { createHash } from 'node:crypto';
 import { AppConfig } from '../../config/env.config';
 import { TenantContextService } from '../tenant/tenant-context.service';
 import {
@@ -26,7 +27,23 @@ interface JwtPayload {
   mfaEnabled: boolean;
   scope?: 'full' | 'invite';
   inviteCtx?: { appointmentId: string; consultationSessionId: string };
+  boundIp?: string;
+  boundUaHash?: string;
 }
+
+// Same hash used at mint time (see InviteController). 16 hex chars is
+// enough to detect UA substitution without bloating the JWT.
+const hashUa = (ua: string): string =>
+  createHash('sha256').update(ua).digest('hex').slice(0, 16);
+
+const resolveClientIp = (req: Request): string | null => {
+  const xff = req.header('x-forwarded-for');
+  if (xff) {
+    const first = xff.split(',')[0]?.trim();
+    if (first) return first;
+  }
+  return req.ip ?? null;
+};
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -76,6 +93,27 @@ export class JwtAuthGuard implements CanActivate {
     // Invite-scoped tokens are blocked from every endpoint that is not
     // explicitly marked with @InviteAccessible.
     if (user.scope === 'invite') {
+      // Session binding (per-tenant policy). boundIp / boundUaHash are only
+      // present in the JWT when the tenant opted in at consume time. A
+      // mismatch means the token is being replayed from a different device
+      // or network — treat as invalid, force re-consume of the invite.
+      if (payload.boundIp) {
+        const currentIp = resolveClientIp(req);
+        if (!currentIp || currentIp !== payload.boundIp) {
+          throw new UnauthorizedException(
+            'Session mismatch — please reopen your invite link.',
+          );
+        }
+      }
+      if (payload.boundUaHash) {
+        const currentUa = req.header('user-agent');
+        if (!currentUa || hashUa(currentUa) !== payload.boundUaHash) {
+          throw new UnauthorizedException(
+            'Session mismatch — please reopen your invite link.',
+          );
+        }
+      }
+
       const inviteMeta = this.reflector.getAllAndOverride<
         InviteContextField | true | undefined
       >(INVITE_ACCESSIBLE_KEY, [context.getHandler(), context.getClass()]);

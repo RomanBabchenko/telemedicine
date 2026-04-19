@@ -34,7 +34,10 @@ export interface AuthUser {
   tenantId: string | null;
   mfaEnabled: boolean;
   mfaVerifiedAt?: Date;
-  scope?: 'full' | 'invite';
+  // 'full'    — normal user session (JWT)
+  // 'invite'  — invite-link session, restricted to waiting-room + video
+  // 'service' — machine-to-machine (API key), restricted to /integrations/*
+  scope?: 'full' | 'invite' | 'service';
   inviteCtx?: InviteContext;
 }
 

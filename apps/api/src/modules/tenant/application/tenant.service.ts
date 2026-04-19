@@ -11,6 +11,7 @@ export interface UpdateTenantInput {
   locale?: string;
   features?: Record<string, boolean>;
   audioPolicy?: { enabled?: boolean; retentionDays?: number; consentRequired?: boolean };
+  invitePolicy?: { bindIp?: boolean; bindUserAgent?: boolean };
 }
 
 @Injectable()
@@ -84,6 +85,9 @@ export class TenantService {
     }
     if (input.audioPolicy) {
       tenant.audioPolicy = { ...tenant.audioPolicy, ...input.audioPolicy };
+    }
+    if (input.invitePolicy) {
+      tenant.invitePolicy = { ...tenant.invitePolicy, ...input.invitePolicy };
     }
     return this.repo.save(tenant);
   }

@@ -128,6 +128,11 @@ MINIO_SECRET_KEY=telemed-secret
 MINIO_BUCKET=telemed-files
 MINIO_REGION=us-east-1
 MINIO_PUBLIC_URL=https://minio.$DOMAIN
+# LiveKit Egress runs inside the docker-compose network and cannot reach
+# MinIO via 'localhost' (that would resolve to itself). We pass this
+# endpoint to egress when starting a recording — it must be the Docker
+# DNS name of the MinIO container on the shared 'telemed' network.
+MINIO_EGRESS_ENDPOINT=telemed-minio
 
 # ---- LiveKit ----
 LIVEKIT_URL=wss://livekit.$DOMAIN
@@ -181,7 +186,9 @@ EOF
 chown -R ubuntu:ubuntu "$APP_DIR/apps"
 
 # ---------- 8. Bring up infra in docker compose ----------
-sudo -u ubuntu -- bash -lc "cd $APP_DIR && docker compose --env-file .env up -d postgres redis minio mailhog livekit"
+# livekit-egress is required for audio recording of every consultation —
+# without it, LiveKit rooms work but no MP3 ever lands in MinIO.
+sudo -u ubuntu -- bash -lc "cd $APP_DIR && docker compose --env-file .env up -d postgres redis minio mailhog livekit livekit-egress"
 
 # Wait for postgres
 echo "Waiting for postgres..."

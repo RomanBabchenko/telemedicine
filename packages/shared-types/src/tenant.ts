@@ -28,12 +28,21 @@ export interface TenantDto {
   currency: string;
   features: TenantFeatureMatrix;
   audioPolicy: TenantAudioPolicyDto;
+  invitePolicy: TenantInvitePolicyDto;
 }
 
 export interface TenantAudioPolicyDto {
   enabled: boolean;
   retentionDays: number;
   consentRequired: boolean;
+}
+
+// Security policy for invite-link sessions. Off by default — toggle on to
+// pin the issued JWT to the IP and/or User-Agent of the consuming device.
+// Patients hitting a mismatch have to re-click the invite link.
+export interface TenantInvitePolicyDto {
+  bindIp?: boolean;
+  bindUserAgent?: boolean;
 }
 
 export interface CreateTenantDto {
@@ -54,4 +63,5 @@ export interface UpdateTenantDto {
   locale?: string;
   features?: Partial<TenantFeatureMatrix>;
   audioPolicy?: Partial<TenantAudioPolicyDto>;
+  invitePolicy?: Partial<TenantInvitePolicyDto>;
 }

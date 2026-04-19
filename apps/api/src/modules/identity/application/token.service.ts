@@ -25,6 +25,11 @@ export interface AccessTokenPayload {
   // inviteCtx. Default (absent or 'full') is normal unrestricted access.
   scope?: 'full' | 'invite';
   inviteCtx?: InviteContext;
+  // Optional per-tenant session bindings for invite-scoped tokens. When
+  // set, JwtAuthGuard rejects the request if the current IP / UA-hash
+  // does not match. Absent claims disable the check for that dimension.
+  boundIp?: string;
+  boundUaHash?: string;
 }
 
 export interface IssuedTokens {
@@ -78,6 +83,10 @@ export class TokenService {
       // Skip creating a Session + refresh token. Invite holders re-auth by
       // consuming the same invite URL again — no server-stored refresh needed.
       skipRefresh?: boolean;
+      // Pin the issued JWT to this IP / UA-hash. The guard rejects later
+      // requests that don't match. Omit to leave the dimension unbound.
+      boundIp?: string;
+      boundUaHash?: string;
     },
   ): Promise<IssuedTokens> {
     const defaultAccessTtl = this.parseTtlSeconds(this.config.jwt.accessTtl);
@@ -94,7 +103,14 @@ export class TokenService {
       roles,
       tenantId,
       mfaEnabled: user.mfaEnabled,
-      ...(scope ? { scope: scope.scope, inviteCtx: scope.inviteCtx } : {}),
+      ...(scope
+        ? {
+            scope: scope.scope,
+            inviteCtx: scope.inviteCtx,
+            ...(scope.boundIp ? { boundIp: scope.boundIp } : {}),
+            ...(scope.boundUaHash ? { boundUaHash: scope.boundUaHash } : {}),
+          }
+        : {}),
     };
     const accessToken = await this.jwt.signAsync(payload, {
       secret: this.config.jwt.accessSecret,

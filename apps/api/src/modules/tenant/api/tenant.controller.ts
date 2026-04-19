@@ -21,6 +21,7 @@ const toDto = (t: Tenant) => ({
   currency: t.currency,
   features: t.featureMatrix,
   audioPolicy: t.audioPolicy,
+  invitePolicy: t.invitePolicy ?? {},
 });
 
 @ApiTags('tenants')

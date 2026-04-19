@@ -9,6 +9,7 @@ const CLINIC_NAV: Array<{ to: string; label: string }> = [
   { to: '/appointments', label: 'Прийоми' },
   { to: '/users', label: 'Користувачі' },
   { to: '/integrations', label: 'МІС' },
+  { to: '/integration-keys', label: 'API ключі' },
   { to: '/billing', label: 'Білінг' },
   { to: '/analytics', label: 'Аналітика' },
   { to: '/branding', label: 'Брендинг' },

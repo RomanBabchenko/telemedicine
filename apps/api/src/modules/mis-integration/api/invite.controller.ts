@@ -8,16 +8,35 @@ import {
 import { ApiTags } from '@nestjs/swagger';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { createHash } from 'node:crypto';
 import { Request } from 'express';
 import { Public } from '../../../common/auth/decorators';
 import { ConsultationInviteService } from '../application/consultation-invite.service';
 import { UserService } from '../../identity/application/user.service';
 import { TokenService } from '../../identity/application/token.service';
 import { Appointment } from '../../booking/domain/entities/appointment.entity';
+import { TenantService } from '../../tenant/application/tenant.service';
 
 // Match INVITE_EXPIRY_GRACE_MS in consultation-invite.service.ts — the JWT
 // minted from an invite expires at the same moment the invite itself does.
 const INVITE_JWT_GRACE_MS = 30 * 60 * 1000;
+
+// Truncated sha256 — enough entropy to detect UA change, short enough to
+// keep the JWT compact. Full hash is overkill; we're not authenticating
+// the UA, we're detecting substitution.
+const hashUa = (ua: string | undefined): string | undefined => {
+  if (!ua) return undefined;
+  return createHash('sha256').update(ua).digest('hex').slice(0, 16);
+};
+
+const resolveClientIp = (req: Request): string | undefined => {
+  const xff = req.header('x-forwarded-for');
+  if (xff) {
+    const first = xff.split(',')[0]?.trim();
+    if (first) return first;
+  }
+  return req.ip ?? undefined;
+};
 
 @ApiTags('auth')
 @Controller('auth/invite')
@@ -26,6 +45,7 @@ export class InviteController {
     private readonly invites: ConsultationInviteService,
     private readonly users: UserService,
     private readonly tokens: TokenService,
+    private readonly tenants: TenantService,
     @InjectRepository(Appointment)
     private readonly appointments: Repository<Appointment>,
   ) {}
@@ -67,6 +87,18 @@ export class InviteController {
         )
       : undefined;
 
+    // Per-tenant opt-in session bindings. Off by default; when on, the JWT
+    // is pinned to the IP / UA-hash captured at consume time and the guard
+    // rejects mismatches on subsequent requests.
+    const tenant = result.tenantId
+      ? await this.tenants.findById(result.tenantId)
+      : null;
+    const policy = tenant?.invitePolicy ?? {};
+    const boundIp = policy.bindIp ? resolveClientIp(req) : undefined;
+    const boundUaHash = policy.bindUserAgent
+      ? hashUa(req.headers['user-agent'] as string | undefined)
+      : undefined;
+
     const issuedTokens = await this.tokens.issue(
       user,
       roles,
@@ -74,7 +106,14 @@ export class InviteController {
       null,
       req.ip,
       req.headers['user-agent'] as string | undefined,
-      { scope: 'invite', inviteCtx, accessTtlOverrideSec, skipRefresh: true },
+      {
+        scope: 'invite',
+        inviteCtx,
+        accessTtlOverrideSec,
+        skipRefresh: true,
+        boundIp,
+        boundUaHash,
+      },
     );
 
     return {

@@ -88,7 +88,9 @@ export class LiveKitClientService {
       forcePathStyle: true,
     });
     const out = new EncodedFileOutput({
-      fileType: EncodedFileType.OGG,
+      // MP3 — universally playable and compact; MIS systems (DocDream etc.)
+      // consume the audio from the download URL, they prefer MP3 over OGG.
+      fileType: EncodedFileType.MP3,
       filepath: objectKey,
       output: { case: 's3', value: s3 },
     });

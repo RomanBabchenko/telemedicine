@@ -12,6 +12,10 @@ export class UpdateTenantBodyDto {
     retentionDays?: number;
     consentRequired?: boolean;
   };
+  @ApiPropertyOptional() @IsOptional() @IsObject() invitePolicy?: {
+    bindIp?: boolean;
+    bindUserAgent?: boolean;
+  };
 }
 
 export class CreateTenantBodyDto {

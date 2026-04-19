@@ -24,4 +24,12 @@ export class ConsultationInvite extends TenantOwnedEntity {
 
   @Column({ name: 'consumed_at', type: 'timestamptz', nullable: true })
   consumedAt!: Date | null;
+
+  // Explicit kill-switch — set by clinic admin or MIS via the revoke
+  // endpoints. A revoked invite can never be consumed again even while its
+  // TTL is still in the future. Separate from appointment cancellation:
+  // you can revoke and re-issue a link without moving the appointment to
+  // a terminal state.
+  @Column({ name: 'revoked_at', type: 'timestamptz', nullable: true })
+  revokedAt!: Date | null;
 }

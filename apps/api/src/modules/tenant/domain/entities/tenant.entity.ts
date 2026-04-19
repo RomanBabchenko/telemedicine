@@ -32,6 +32,14 @@ export class Tenant extends BaseEntity {
   @Column({ type: 'jsonb', name: 'audio_policy', default: () => `'{}'::jsonb` })
   audioPolicy!: { enabled?: boolean; retentionDays?: number; consentRequired?: boolean };
 
+  // Security knobs for invite-link sessions. Off by default — enabling
+  // binds a patient's JWT to the IP and/or User-Agent of the device that
+  // consumed the invite, so a stolen token can't be replayed from elsewhere.
+  // Downside: legitimate network switches (Wi-Fi → 4G, VPN on/off) force
+  // the patient to re-click the email link.
+  @Column({ type: 'jsonb', name: 'invite_policy', default: () => `'{}'::jsonb` })
+  invitePolicy!: { bindIp?: boolean; bindUserAgent?: boolean };
+
   @Column({ name: 'billing_plan_id', type: 'uuid', nullable: true })
   billingPlanId!: string | null;
 

@@ -189,3 +189,4 @@ export * from './payment';
 export * from './notification';
 export * from './audit';
 export * from './common';
+export * from './integration';

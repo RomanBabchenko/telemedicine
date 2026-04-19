@@ -9,6 +9,7 @@ import { AppointmentsPage } from './pages/appointments/AppointmentsPage';
 import { BrandingPage } from './pages/branding/BrandingPage';
 import { FeaturesPage } from './pages/features/FeaturesPage';
 import { IntegrationsPage } from './pages/integrations/IntegrationsPage';
+import { IntegrationKeysPage } from './pages/integration-keys/IntegrationKeysPage';
 import { BillingPage } from './pages/billing/BillingPage';
 import { AnalyticsPage } from './pages/analytics/AnalyticsPage';
 import { AuditPage } from './pages/audit/AuditPage';
@@ -45,6 +46,7 @@ const ProtectedRoutes = () => {
         <Route path="/branding" element={<BrandingPage />} />
         <Route path="/features" element={<FeaturesPage />} />
         <Route path="/integrations" element={<IntegrationsPage />} />
+        <Route path="/integration-keys" element={<IntegrationKeysPage />} />
         <Route path="/billing" element={<BillingPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/audit" element={<AuditPage />} />

@@ -10,6 +10,13 @@ import { LiveKitClientService } from '../../../infrastructure/livekit/livekit-cl
 import { MinioService } from '../../../infrastructure/minio/minio.service';
 import { TenantContextService } from '../../../common/tenant/tenant-context.service';
 
+// MP3 is the container/codec we ask LiveKit Egress to produce (see
+// LiveKitClientService.startAudioEgress). Keep this in sync: if egress ever
+// emits a different fileType, update the extension here too.
+const RECORDING_OBJECT_EXT = 'mp3';
+const recordingObjectKey = (tenantId: string, sessionId: string): string =>
+  `${tenantId}/recordings/${sessionId}.${RECORDING_OBJECT_EXT}`;
+
 @Injectable()
 export class RecordingService {
   private readonly logger = new Logger(RecordingService.name);
@@ -42,7 +49,7 @@ export class RecordingService {
     const session = await this.sessions.findOne({ where: { id: sessionId, tenantId } });
     if (!session) throw new NotFoundException('Session not found');
 
-    const objectKey = `${tenantId}/recordings/${session.id}.ogg`;
+    const objectKey = recordingObjectKey(tenantId, session.id);
     const { egressId } = await this.livekit.startAudioEgress(session.livekitRoomName, objectKey);
 
     const retentionDays = tenant.audioPolicy?.retentionDays ?? 30;
@@ -76,7 +83,7 @@ export class RecordingService {
     const existing = await this.recordings.findOne({ where: { sessionId, tenantId } });
     if (existing) return existing;
 
-    const objectKey = `${tenantId}/recordings/${session.id}.ogg`;
+    const objectKey = recordingObjectKey(tenantId, session.id);
     const { egressId } = await this.livekit.startAudioEgress(session.livekitRoomName, objectKey);
 
     const retentionUntil = new Date(Date.now() + 30 * 86400_000);
@@ -117,7 +124,7 @@ export class RecordingService {
 
     let downloadUrl: string | null = null;
     if (recording.status === 'STORED') {
-      const objectKey = `${tenantId}/recordings/${sessionId}.ogg`;
+      const objectKey = recordingObjectKey(tenantId, sessionId);
       try {
         downloadUrl = await this.minio.presignedGet(objectKey);
       } catch {

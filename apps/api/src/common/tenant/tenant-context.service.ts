@@ -46,6 +46,16 @@ export class TenantContextService {
     }
   }
 
+  // Used by ApiKeyGuard: the middleware can't know the tenant ahead of time
+  // for M2M callers (no JWT, no X-Tenant-Id header), so the guard rewrites
+  // the ambient context once it resolves the tenant from the API key.
+  setTenantId(tenantId: string): void {
+    const ctx = this.get();
+    if (ctx) {
+      ctx.tenantId = tenantId;
+    }
+  }
+
   isCrossTenantAllowed(): boolean {
     return this.get()?.allowCrossTenant === true;
   }

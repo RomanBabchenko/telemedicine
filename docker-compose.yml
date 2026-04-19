@@ -84,7 +84,15 @@ services:
       - '7880:7880'
       - '7881:7881'
       - '50000-50100:50000-50100/udp'
-    command: --config /etc/livekit.yaml --node-ip 172.30.0.10
+    # --node-ip is what LiveKit advertises as its ICE host candidate, so
+    # it MUST be an address the client (browser / phone) can actually reach.
+    #   dev (docker-compose --env-file .env up): default to the container's
+    #     bridge IP 172.30.0.10 — Docker Desktop routes that transparently
+    #     from the Windows/macOS host.
+    #   prod (EC2): cloud-init writes LIVEKIT_NODE_IP=<EIP> into .env so
+    #     LiveKit advertises the public Elastic IP and WebRTC works from
+    #     the internet.
+    command: --config /etc/livekit.yaml --node-ip ${LIVEKIT_NODE_IP:-172.30.0.10}
     networks:
       telemed:
         ipv4_address: 172.30.0.10
