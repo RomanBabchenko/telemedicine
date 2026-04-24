@@ -7,6 +7,9 @@
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh prepaid:pay-ext <externalAppointmentId>
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh postpaid
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh legacy
+#   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh anon
+#   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh anon:prepaid
+#   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh anon:now
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh recording <appointmentId>
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh recording:ext <externalAppointmentId>
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh cancel <appointmentId> [reason]
@@ -142,7 +145,87 @@ case "$cmd" in
       }' | jq .
     ;;
 
-  # ─── 5. Fetch recording after consultation ──────────────────────────────
+  # ─── 5. Anonymous patient (postpaid, CONFIRMED) ─────────────────────────
+  # MIS refuses to share any patient PII. No User / Patient row is created on
+  # our side; patient_id stays NULL and the patient invite resolves to a
+  # scope='invite-anon' JWT. The MIS delivers the returned patientInviteUrl
+  # to the patient itself (we never see their email/phone).
+  #
+  # All patient* fields are ignored when isAnonymousPatient=true — included
+  # here only to prove the server logs a warning and discards them.
+  anon)
+    require_api_key
+    curl -sS -X POST "$API/integrations/$TENANT/appointments" \
+      -H "Authorization: ApiKey $API_KEY" \
+      -H 'Content-Type: application/json' \
+      -d '{
+        "type": "appointment.online",
+        "externalAppointmentId": "dd-anon-001",
+        "doctorExternalId": "docdream-doc-77",
+        "doctorFirstName": "Анна",
+        "doctorLastName": "Коваленко",
+        "doctorSpecialization": "Кардіологія",
+        "startAt": "2026-04-25T09:00:00Z",
+        "endAt": "2026-04-25T09:30:00Z",
+        "isAnonymousPatient": true
+      }' | jq .
+    ;;
+
+  # Anonymous + prepaid. Same prepaid gate as the named flow — patient
+  # sees "Оплату не завершено" until the MIS PATCHes payment-status to paid.
+  anon:prepaid)
+    require_api_key
+    curl -sS -X POST "$API/integrations/$TENANT/appointments" \
+      -H "Authorization: ApiKey $API_KEY" \
+      -H 'Content-Type: application/json' \
+      -d '{
+        "type": "appointment.online",
+        "externalAppointmentId": "dd-anon-prepaid-001",
+        "doctorExternalId": "docdream-doc-77",
+        "doctorFirstName": "Анна",
+        "doctorLastName": "Коваленко",
+        "doctorSpecialization": "Кардіологія",
+        "startAt": "2026-04-25T11:00:00Z",
+        "endAt": "2026-04-25T11:30:00Z",
+        "paymentType": "prepaid",
+        "paymentStatus": "unpaid",
+        "isAnonymousPatient": true
+      }' | jq .
+    ;;
+
+  # Anonymous + live time window — startAt = now, endAt = now + 30 min, so
+  # the join gate (opensAt = startAt - 15 min, closesAt = endAt + 30 min) is
+  # already open. Use this to smoke-test the full flow end-to-end: open the
+  # returned patientInviteUrl and the "Розпочати консультацію" button works
+  # immediately instead of showing a "До початку залишилось…" countdown.
+  # externalAppointmentId includes a timestamp so repeated runs don't hit the
+  # idempotency path and each invocation produces a fresh appointment.
+  anon:now)
+    require_api_key
+    start_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    end_at=$(date -u -d '+30 minutes' +"%Y-%m-%dT%H:%M:%SZ")
+    ext_id="dd-anon-now-$(date +%s)"
+    curl -sS -X POST "$API/integrations/$TENANT/appointments" \
+      -H "Authorization: ApiKey $API_KEY" \
+      -H 'Content-Type: application/json' \
+      -d "$(jq -n \
+        --arg ext "$ext_id" \
+        --arg start "$start_at" \
+        --arg end "$end_at" \
+        '{
+          type: "appointment.online",
+          externalAppointmentId: $ext,
+          doctorExternalId: "docdream-doc-77",
+          doctorFirstName: "Анна",
+          doctorLastName: "Коваленко",
+          doctorSpecialization: "Кардіологія",
+          startAt: $start,
+          endAt: $end,
+          isAnonymousPatient: true
+        }')" | jq .
+    ;;
+
+  # ─── 6. Fetch recording after consultation ──────────────────────────────
   # Returns { recordingId, status, durationSec, downloadUrl }. When status is
   # STORED, downloadUrl is a presigned MinIO URL valid for ~1 hour — fetch
   # the .mp3 directly from there. While status is RECORDING, downloadUrl is
@@ -221,6 +304,9 @@ Commands:
   prepaid:pay-ext <extId>        Mark prepaid as paid by MIS externalAppointmentId
   postpaid                       Create a postpaid appointment (CONFIRMED)
   legacy                         Create without payment fields (defaults to postpaid)
+  anon                           Create anonymous-patient appointment (no PII, CONFIRMED)
+  anon:prepaid                   Anonymous + prepaid+unpaid (AWAITING_PAYMENT)
+  anon:now                       Anonymous + live time window (joinable right now)
   recording <id>                 Fetch recording by internal appointmentId
   recording:ext <extId>          Fetch recording by MIS externalAppointmentId
   cancel <id> [reason]           Cancel appointment + revoke all invites

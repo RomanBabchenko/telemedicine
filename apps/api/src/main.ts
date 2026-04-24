@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
@@ -9,7 +10,22 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { AppConfig } from './config/env.config';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bufferLogs: false });
+  // rawBody: true preserves the original request bytes on req.rawBody so
+  // webhook receivers (LiveKit, payment providers) can verify HMAC signatures
+  // against exactly what was transmitted. Re-serialising req.body breaks the
+  // hash because key order / whitespace differ from the sender's JSON.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: false,
+    rawBody: true,
+  });
+  // LiveKit webhooks are sent with Content-Type: application/webhook+json
+  // (not plain application/json), so Express's default json parser skips
+  // them — that leaves req.rawBody undefined and our webhook controller
+  // 400s before verifying the signature. Register the extra content type
+  // here so LiveKit payloads get the same raw-body treatment.
+  app.useBodyParser('json', {
+    type: ['application/json', 'application/webhook+json'],
+  });
   const config = app.get(AppConfig);
 
   app.use(helmet());

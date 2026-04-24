@@ -15,8 +15,9 @@ import { Appointment } from '../../booking/domain/entities/appointment.entity';
 
 async function patientUserId(
   patients: Repository<Patient>,
-  patientId: string,
+  patientId: string | null,
 ): Promise<string | null> {
+  if (!patientId) return null;
   const p = await patients.findOne({ where: { id: patientId } });
   return p?.userId ?? null;
 }

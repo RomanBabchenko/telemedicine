@@ -96,6 +96,11 @@ services:
     networks:
       telemed:
         ipv4_address: 172.30.0.10
+    # host.docker.internal is built-in on Docker Desktop (Win/Mac) but must
+    # be mapped explicitly on Linux. LiveKit uses it to POST webhook events
+    # back to the API running on the host (/webhooks/livekit).
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     volumes:
       - ./infra/livekit/livekit.yaml:/etc/livekit.yaml:ro
 

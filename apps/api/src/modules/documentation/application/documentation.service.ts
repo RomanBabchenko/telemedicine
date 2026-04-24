@@ -58,6 +58,11 @@ export class DocumentationService {
       where: { id: input.appointmentId, tenantId },
     });
     if (!appointment) throw new NotFoundException('Appointment not found');
+    if (!appointment.patientId) {
+      throw new BadRequestException(
+        'Cannot attach a conclusion to an anonymous appointment.',
+      );
+    }
 
     const doctor = await this.doctors.findOne({ where: { userId: input.doctorUserId } });
     if (!doctor) throw new NotFoundException('Doctor profile not found');

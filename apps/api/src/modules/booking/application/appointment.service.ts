@@ -93,23 +93,30 @@ export class AppointmentService {
     const rows = await this.appointments.find({ where, order: { startAt: 'DESC' } });
     if (rows.length === 0) return [];
 
-    const patientIds = Array.from(new Set(rows.map((r) => r.patientId)));
+    // Anonymous appointments have patient_id=null — skip those when building
+    // the patient lookup (In([...null]) would throw in TypeORM).
+    const patientIds = Array.from(
+      new Set(rows.map((r) => r.patientId).filter((id): id is string => !!id)),
+    );
     const doctorIds = Array.from(new Set(rows.map((r) => r.doctorId)));
 
     const [patientRows, doctorMap] = await Promise.all([
-      this.patients.find({ where: { id: In(patientIds) } }),
+      patientIds.length > 0
+        ? this.patients.find({ where: { id: In(patientIds) } })
+        : Promise.resolve([]),
       this.providerService.getDoctorsByIds(doctorIds),
     ]);
     const patientMap = new Map(patientRows.map((p) => [p.id, p]));
 
     return rows.map((r) => {
-      const patient = patientMap.get(r.patientId);
+      const patient = r.patientId ? patientMap.get(r.patientId) : undefined;
       const doctor = doctorMap.get(r.doctorId);
       return {
         id: r.id,
         tenantId: r.tenantId,
         doctorId: r.doctorId,
         patientId: r.patientId,
+        isAnonymousPatient: r.isAnonymousPatient,
         serviceTypeId: r.serviceTypeId,
         slotId: r.slotId,
         status: r.status,

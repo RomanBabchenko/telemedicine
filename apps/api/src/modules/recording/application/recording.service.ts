@@ -108,8 +108,44 @@ export class RecordingService {
     const recording = await this.recordings.findOne({ where: { sessionId, tenantId } });
     if (!recording) return null;
     if (recording.egressId) await this.livekit.stopEgress(recording.egressId);
+    // NB: the row is also finalised (with real duration) by the egress_ended
+    // LiveKit webhook. This local write is a belt-and-suspenders fallback for
+    // environments where the webhook doesn't reach us (no host.docker.internal
+    // routing, dev with webhook disabled, etc.). The webhook's save happens
+    // idempotently — whichever write lands second just overwrites with the
+    // same STORED status and a more accurate durationSec.
     recording.status = 'STORED';
     return this.recordings.save(recording);
+  }
+
+  /**
+   * Called from the LiveKit `egress_ended` webhook. This is the authoritative
+   * signal that the MP3 has been fully written to MinIO — LiveKit only fires
+   * this after the egress pipeline flushes the file. Carries a real duration
+   * that RecordingService.stop() has no source for.
+   *
+   * Idempotent: if stop() already flipped status to STORED, we just update
+   * durationSec. If this fires first (user closed the tab without calling
+   * /end), we finalise the row here so getRecordingInfo stops saying
+   * "RECORDING" forever.
+   *
+   * Looked up by egressId — no tenant context needed, which matters because
+   * webhook requests have no user session.
+   */
+  async handleEgressEnded(egressId: string, durationSec: number | null): Promise<void> {
+    const recording = await this.recordings.findOne({ where: { egressId } });
+    if (!recording) {
+      this.logger.warn(`egress_ended for unknown egressId=${egressId} — ignored`);
+      return;
+    }
+    recording.status = 'STORED';
+    if (durationSec !== null && Number.isFinite(durationSec) && durationSec > 0) {
+      recording.durationSec = Math.round(durationSec);
+    }
+    await this.recordings.save(recording);
+    this.logger.log(
+      `Recording ${recording.id} finalised via egress_ended webhook (duration=${recording.durationSec}s)`,
+    );
   }
 
   async getRecordingInfo(sessionId: string): Promise<{

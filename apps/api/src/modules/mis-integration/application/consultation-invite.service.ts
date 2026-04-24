@@ -19,7 +19,9 @@ export class ConsultationInviteService {
     tenantId: string;
     appointmentId: string;
     consultationSessionId: string;
-    userId: string;
+    // null only for anonymous-patient invites. Doctor invites always have a
+    // real user id; see WebhookEventHandler for the call sites.
+    userId: string | null;
     role: 'PATIENT' | 'DOCTOR';
     appointmentEndAt: Date;
   }): Promise<string> {
@@ -52,11 +54,16 @@ export class ConsultationInviteService {
   // a short-lived JWT should not lock them out. `consumedAt` stores the
   // timestamp of the *most recent* consume (for audit), not a one-shot flag.
   async consume(rawToken: string): Promise<{
-    userId: string;
+    // The invite-row id — used as a stable pseudonymous identifier for
+    // anonymous invites (becomes `anonIdentity` in the JWT → LiveKit identity).
+    inviteId: string;
+    // null when the invite was issued without a user (anonymous-patient mode).
+    userId: string | null;
     tenantId: string;
     role: 'PATIENT' | 'DOCTOR';
     appointmentId: string;
     consultationSessionId: string;
+    isAnonymous: boolean;
   } | null> {
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     const invite = await this.invites.findOne({ where: { tokenHash } });
@@ -68,11 +75,13 @@ export class ConsultationInviteService {
     await this.invites.save(invite);
 
     return {
+      inviteId: invite.id,
       userId: invite.userId,
       tenantId: invite.tenantId,
       role: invite.role,
       appointmentId: invite.appointmentId,
       consultationSessionId: invite.consultationSessionId,
+      isAnonymous: invite.userId === null,
     };
   }
 

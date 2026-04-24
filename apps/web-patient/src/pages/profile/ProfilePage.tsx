@@ -14,11 +14,11 @@ export const ProfilePage = () => {
       <Card>
         <p>
           <strong>
-            {data.firstName} {data.lastName}
+            {[data.firstName, data.lastName].filter(Boolean).join(' ') || '—'}
           </strong>
         </p>
-        <p>{data.email}</p>
-        <p>{data.phone}</p>
+        <p>{data.email ?? '—'}</p>
+        <p>{data.phone ?? '—'}</p>
         <p className="text-sm text-slate-500">Мова: {data.preferredLocale}</p>
       </Card>
     </div>

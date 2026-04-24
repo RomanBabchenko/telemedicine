@@ -65,7 +65,9 @@ export interface InviteContextDto {
 }
 
 export interface AuthUserDto {
-  id: string;
+  // null only for scope === 'invite-anon' — anonymous-patient invites have
+  // no User / Patient row on the server side.
+  id: string | null;
   email: string | null;
   phone: string | null;
   firstName: string | null;
@@ -73,9 +75,10 @@ export interface AuthUserDto {
   roles: Role[];
   tenantId: string | null;
   mfaEnabled: boolean;
-  // When set to 'invite', the user came in via a one-time invite link and
-  // can only access the waiting room + video session for inviteCtx.
-  scope?: 'full' | 'invite';
+  // 'invite'      — named invite link, restricted to waiting room + video.
+  // 'invite-anon' — anonymous-patient invite; no PII, no User row.
+  // Both scopes share the same route-level restrictions on the client.
+  scope?: 'full' | 'invite' | 'invite-anon';
   inviteCtx?: InviteContextDto;
 }
 

@@ -13,8 +13,10 @@ export class ConsultationInvite extends TenantOwnedEntity {
   @Column({ name: 'consultation_session_id', type: 'uuid' })
   consultationSessionId!: string;
 
-  @Column({ name: 'user_id', type: 'uuid' })
-  userId!: string;
+  // Nullable for anonymous-patient invites: when the MIS does not share PII
+  // there is no User row to link. Doctor invites always have a real userId.
+  @Column({ name: 'user_id', type: 'uuid', nullable: true })
+  userId!: string | null;
 
   @Column({ type: 'varchar', length: 16 })
   role!: 'PATIENT' | 'DOCTOR';

@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { EventBus } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
@@ -37,6 +37,14 @@ export class PaymentService {
   }> {
     const tenantId = this.tenantContext.getTenantId();
     const appointment = await this.appointments.getById(appointmentId);
+    if (!appointment.patientId) {
+      // Anonymous MIS appointments are billed by the MIS itself via prepaid
+      // gating — no in-app payment flow.
+      throw new BadRequestException(
+        'Cannot create a payment intent for an anonymous appointment.',
+      );
+    }
+    const patientId = appointment.patientId;
     const service = await this.services.findOne({
       where: { id: appointment.serviceTypeId, tenantId },
     });
@@ -48,14 +56,14 @@ export class PaymentService {
       amount,
       currency: 'UAH',
       appointmentId,
-      patientId: appointment.patientId,
+      patientId,
       tenantId,
     });
 
     const payment = this.payments.create({
       tenantId,
       appointmentId,
-      patientId: appointment.patientId,
+      patientId,
       provider: this.provider.id,
       providerIntentId: intent.intentId,
       amount: amount.toFixed(2),

@@ -19,14 +19,17 @@ import {
 } from './decorators';
 
 interface JwtPayload {
-  sub: string;
+  // null for scope === 'invite-anon' — anonymous patient invites have no User.
+  sub: string | null;
   email: string | null;
   phone: string | null;
   roles: string[];
   tenantId: string | null;
   mfaEnabled: boolean;
-  scope?: 'full' | 'invite';
+  scope?: 'full' | 'invite' | 'invite-anon';
   inviteCtx?: { appointmentId: string; consultationSessionId: string };
+  // Pseudonymous handle for scope === 'invite-anon'; absent on every other scope.
+  anonIdentity?: string;
   boundIp?: string;
   boundUaHash?: string;
 }
@@ -76,8 +79,16 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Invalid or expired token');
     }
 
+    // Anonymous-invite tokens carry their opaque identifier in anonIdentity
+    // rather than sub (sub is null). Fall back on sub for every other scope.
+    const isAnon = payload.scope === 'invite-anon';
+    const resolvedId = isAnon ? payload.anonIdentity : payload.sub;
+    if (!resolvedId) {
+      throw new UnauthorizedException('Invalid or expired token');
+    }
+
     const user: AuthUser = {
-      id: payload.sub,
+      id: resolvedId,
       email: payload.email,
       phone: payload.phone,
       roles: (payload.roles ?? []) as AuthUser['roles'],
@@ -88,11 +99,15 @@ export class JwtAuthGuard implements CanActivate {
     };
 
     (req as Request & { user?: AuthUser }).user = user;
-    this.tenantContext.setActor(user.id);
+    // Skip actor attribution for anonymous invites — user.id is an invite
+    // pseudonym, not a users(id) value, and would poison audit_events joins.
+    if (!isAnon) {
+      this.tenantContext.setActor(user.id);
+    }
 
-    // Invite-scoped tokens are blocked from every endpoint that is not
-    // explicitly marked with @InviteAccessible.
-    if (user.scope === 'invite') {
+    // Invite-scoped tokens (named or anonymous) are blocked from every
+    // endpoint that is not explicitly marked with @InviteAccessible.
+    if (user.scope === 'invite' || user.scope === 'invite-anon') {
       // Session binding (per-tenant policy). boundIp / boundUaHash are only
       // present in the JWT when the tenant opted in at consume time. A
       // mismatch means the token is being replayed from a different device

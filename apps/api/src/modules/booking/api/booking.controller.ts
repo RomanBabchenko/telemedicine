@@ -81,6 +81,14 @@ export class BookingController {
   @Get('appointments')
   @UseGuards(JwtAuthGuard)
   async list(@CurrentUser() user: AuthUser) {
+    // Invite-scoped holders (named or anonymous) have no dashboard concept;
+    // this endpoint also lacks @InviteAccessible, so the guard blocks them
+    // anyway. Early-return preserves that contract if the decorator is ever
+    // added — and also avoids patients.getByUserId(user.id) throwing on the
+    // anonymous pseudonym (which is not a real user id).
+    if (user.scope === 'invite' || user.scope === 'invite-anon') {
+      return [];
+    }
     if (user.roles.includes(Role.PATIENT)) {
       const patient = await this.patients.getByUserId(user.id);
       return this.appointments.listForRole({ patientId: patient.id });

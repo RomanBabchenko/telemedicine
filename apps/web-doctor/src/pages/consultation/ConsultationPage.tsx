@@ -217,7 +217,11 @@ export const ConsultationPage = () => {
       <PageHeader
         title="Консультація"
         actions={
-          isInviteScope ? (
+          // Anonymous appointments have no Patient row, so the finish/
+          // documentation flow (prescriptions/referrals) has nowhere to
+          // attach — offer only the plain "end session" action even for a
+          // doctor who opened the consultation from their dashboard.
+          isInviteScope || apptQ.data?.isAnonymousPatient ? (
             <Button
               variant="outline"
               onClick={() => {

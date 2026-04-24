@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import {
@@ -24,6 +24,20 @@ import { PasswordService } from '../../identity/application/password.service';
 import { AppConfig } from '../../../config/env.config';
 
 const PLACEHOLDER_USER_ID = '00000000-0000-4000-8000-000000000000';
+
+// Re-POSTing an externalAppointmentId that maps to an appointment in one of
+// these states means the MIS is trying to reuse a dead external id. Refuse
+// rather than silently issue fresh invites for an appointment the patient
+// can no longer join — DocDream must generate a new externalAppointmentId.
+const TERMINAL_APPOINTMENT_STATUSES: ReadonlySet<AppointmentStatus> = new Set([
+  AppointmentStatus.COMPLETED,
+  AppointmentStatus.DOCUMENTATION_COMPLETED,
+  AppointmentStatus.CANCELLED_BY_PATIENT,
+  AppointmentStatus.CANCELLED_BY_PROVIDER,
+  AppointmentStatus.NO_SHOW_PATIENT,
+  AppointmentStatus.NO_SHOW_PROVIDER,
+  AppointmentStatus.REFUNDED,
+]);
 
 @Injectable()
 export class WebhookEventHandler {
@@ -67,22 +81,47 @@ export class WebhookEventHandler {
       }
     }
 
+    const isAnonymous = payload.isAnonymousPatient === true;
+    if (isAnonymous) {
+      if (
+        payload.patientFirstName ||
+        payload.patientLastName ||
+        payload.patientEmail ||
+        payload.patientPhone ||
+        payload.patientExternalId
+      ) {
+        // Anonymous flag wins — the MIS MUST NOT send PII in this mode. Log
+        // loudly so ops notice if DocDream leaks fields during migration.
+        this.logger.warn(
+          `Anonymous appointment payload contains patient* fields; ignored (connector=${connectorId})`,
+        );
+      }
+    } else {
+      if (!payload.patientFirstName || !payload.patientLastName) {
+        throw new Error(
+          'patientFirstName and patientLastName are required when isAnonymousPatient is not set',
+        );
+      }
+    }
+
     const startAt = new Date(payload.startAt);
     const endAt = new Date(payload.endAt);
 
-    // 1. Find-or-create doctor
+    // 1. Find-or-create doctor (same path for named and anonymous)
     const { doctorId, doctorUserId } = await this.findOrCreateDoctor(
       tenantId,
       connectorId,
       payload,
     );
 
-    // 2. Find-or-create patient
-    const { patientId, patientUserId } = await this.findOrCreatePatient(
-      tenantId,
-      connectorId,
-      payload,
-    );
+    // 2. Find-or-create patient — skipped entirely in anonymous mode.
+    let patientId: string | null = null;
+    let patientUserId: string | null = null;
+    if (!isAnonymous) {
+      const resolved = await this.findOrCreatePatient(tenantId, connectorId, payload);
+      patientId = resolved.patientId;
+      patientUserId = resolved.patientUserId;
+    }
 
     // 3. Find-or-create service type
     const serviceTypeId = await this.findOrCreateServiceType(
@@ -133,6 +172,7 @@ export class WebhookEventHandler {
         tenantId,
         slotId: slot.id,
         patientId,
+        isAnonymousPatient: isAnonymous,
         doctorId,
         serviceTypeId,
         status: initialStatus,
@@ -161,6 +201,8 @@ export class WebhookEventHandler {
     }
 
     // 7. Generate invite links (TTL = appointment.endAt + grace)
+    // Patient invite gets userId=null in anonymous mode; the consume path
+    // recognises that and issues a scope='invite-anon' JWT.
     const [patientToken, doctorToken] = await Promise.all([
       this.invites.issue({
         tenantId,
@@ -206,16 +248,42 @@ export class WebhookEventHandler {
       throw new Error(`Appointment ${appointmentId} not found`);
     }
 
+    // Don't quietly hand out fresh invite URLs for a cancelled/completed
+    // appointment — that's the path that made debugging confusing (the
+    // response looked successful but the patient hit a 403 on join). Tell
+    // DocDream explicitly so they generate a new externalAppointmentId.
+    if (TERMINAL_APPOINTMENT_STATUSES.has(appointment.status)) {
+      throw new ConflictException(
+        `Appointment is in terminal state ${appointment.status}; ` +
+          'use a new externalAppointmentId to create a fresh appointment.',
+      );
+    }
+
     const session = await this.consultations.ensureForAppointment(appointmentId);
 
-    const patient = await this.patients.findOne({
-      where: { id: appointment.patientId },
-    });
     const doctor = await this.doctors.findOne({
       where: { id: appointment.doctorId },
     });
-    if (!patient?.userId || !doctor?.userId) {
-      throw new Error('Patient or doctor user not found');
+    if (!doctor?.userId) {
+      throw new Error('Doctor user not found');
+    }
+
+    // Anonymous appointments have no Patient row — patient invite userId stays
+    // null, and the consume endpoint issues a scope='invite-anon' JWT.
+    let patientUserId: string | null = null;
+    if (!appointment.isAnonymousPatient) {
+      if (!appointment.patientId) {
+        throw new Error(
+          `Appointment ${appointmentId} is not anonymous but has no patient_id`,
+        );
+      }
+      const patient = await this.patients.findOne({
+        where: { id: appointment.patientId },
+      });
+      if (!patient?.userId) {
+        throw new Error('Patient user not found');
+      }
+      patientUserId = patient.userId;
     }
 
     const [patientToken, doctorToken] = await Promise.all([
@@ -223,7 +291,7 @@ export class WebhookEventHandler {
         tenantId,
         appointmentId,
         consultationSessionId: session.id,
-        userId: patient.userId,
+        userId: patientUserId,
         role: 'PATIENT',
         appointmentEndAt: appointment.endAt,
       }),
@@ -420,6 +488,7 @@ export class WebhookEventHandler {
     tenantId: string,
     payload: OnlineAppointmentPayload,
   ): Promise<string> {
+    // Named path only — anonymous payloads never reach createUserForPatient.
     const email =
       payload.patientEmail ??
       `patient.${patient.id.slice(0, 8)}@mis-import.local`;
@@ -444,14 +513,19 @@ export class WebhookEventHandler {
     connectorId: string,
     payload: OnlineAppointmentPayload,
   ): Promise<{ patientId: string; patientUserId: string }> {
+    // Anonymous payloads short-circuit before reaching this helper, so
+    // patientFirstName / patientLastName are guaranteed present here (the
+    // caller validated them in handleOnlineAppointment).
+    const firstName = payload.patientFirstName as string;
+    const lastName = payload.patientLastName as string;
     const email =
       payload.patientEmail ??
       `patient.${payload.patientExternalId ?? Date.now()}@mis-import.local`;
     const user = await this.findOrCreateUser({
       email,
       phone: payload.patientPhone,
-      firstName: payload.patientFirstName,
-      lastName: payload.patientLastName,
+      firstName,
+      lastName,
     });
 
     // Reuse existing patient if user already has one
@@ -459,8 +533,8 @@ export class WebhookEventHandler {
     if (!patient) {
       patient = this.patients.create({
         userId: user.id,
-        firstName: payload.patientFirstName,
-        lastName: payload.patientLastName,
+        firstName,
+        lastName,
         email: user.email,
         phone: user.phone,
         preferredLocale: 'uk',

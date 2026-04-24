@@ -11,8 +11,11 @@ export class Appointment extends TenantOwnedEntity {
   @Column({ name: 'slot_id', type: 'uuid' })
   slotId!: string;
 
-  @Column({ name: 'patient_id', type: 'uuid' })
-  patientId!: string;
+  @Column({ name: 'patient_id', type: 'uuid', nullable: true })
+  patientId!: string | null;
+
+  @Column({ name: 'is_anonymous_patient', type: 'boolean', default: false })
+  isAnonymousPatient!: boolean;
 
   @Column({ name: 'doctor_id', type: 'uuid' })
   doctorId!: string;

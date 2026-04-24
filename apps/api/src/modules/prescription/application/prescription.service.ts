@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { DocumentStatus, ReferralTargetType } from '@telemed/shared-types';
@@ -34,6 +34,11 @@ export class PrescriptionService {
     const tenantId = this.tenantContext.getTenantId();
     const appointment = await this.appointments.findOne({ where: { id: appointmentId, tenantId } });
     if (!appointment) throw new NotFoundException('Appointment not found');
+    if (!appointment.patientId) {
+      throw new BadRequestException(
+        'Cannot issue a prescription for an anonymous appointment.',
+      );
+    }
     const doctor = await this.doctors.findOne({ where: { userId: doctorUserId } });
     if (!doctor) throw new NotFoundException('Doctor profile not found');
 
@@ -76,6 +81,11 @@ export class PrescriptionService {
     const tenantId = this.tenantContext.getTenantId();
     const appointment = await this.appointments.findOne({ where: { id: appointmentId, tenantId } });
     if (!appointment) throw new NotFoundException('Appointment not found');
+    if (!appointment.patientId) {
+      throw new BadRequestException(
+        'Cannot issue a referral for an anonymous appointment.',
+      );
+    }
     const doctor = await this.doctors.findOne({ where: { userId: doctorUserId } });
     if (!doctor) throw new NotFoundException('Doctor profile not found');
 

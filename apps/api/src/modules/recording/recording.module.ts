@@ -7,13 +7,14 @@ import { Tenant } from '../tenant/domain/entities/tenant.entity';
 import { RecordingService } from './application/recording.service';
 import { RetentionCleaner } from './application/retention.cleaner';
 import { RecordingController } from './api/recording.controller';
+import { LiveKitWebhookController } from './api/livekit-webhook.controller';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([SessionRecording, ConsultationSession, Consent, Tenant]),
   ],
   providers: [RecordingService, RetentionCleaner],
-  controllers: [RecordingController],
+  controllers: [RecordingController, LiveKitWebhookController],
   exports: [RecordingService],
 })
 export class RecordingModule {}

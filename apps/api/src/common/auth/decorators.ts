@@ -27,6 +27,10 @@ export interface InviteContext {
 }
 
 export interface AuthUser {
+  // For scope === 'invite-anon' this is a pseudonymous ConsultationInvite.id,
+  // not a real User row. Callers persisting this value into FK columns that
+  // join to users(id) (audit events, session events, appointments) MUST first
+  // check the scope to avoid polluting those tables with invite uuids.
   id: string;
   email: string | null;
   phone: string | null;
@@ -34,10 +38,11 @@ export interface AuthUser {
   tenantId: string | null;
   mfaEnabled: boolean;
   mfaVerifiedAt?: Date;
-  // 'full'    — normal user session (JWT)
-  // 'invite'  — invite-link session, restricted to waiting-room + video
-  // 'service' — machine-to-machine (API key), restricted to /integrations/*
-  scope?: 'full' | 'invite' | 'service';
+  // 'full'        — normal user session (JWT)
+  // 'invite'      — named invite-link session, restricted to waiting-room + video
+  // 'invite-anon' — anonymous-patient invite; user.id is a pseudonym, no User row
+  // 'service'     — machine-to-machine (API key), restricted to /integrations/*
+  scope?: 'full' | 'invite' | 'invite-anon' | 'service';
   inviteCtx?: InviteContext;
 }
 

@@ -132,7 +132,16 @@ export class ConsultationService {
       );
     }
 
-    const identity = `${isDoctor ? 'doctor' : 'patient'}-${user.id}`;
+    // Anonymous-patient invites carry user.id = ConsultationInvite.id (a
+    // pseudonym). Prefix the LiveKit identity so the doctor UI / audit can
+    // tell anonymous participants from named users at a glance, and so a
+    // revoke+reissue (new invite.id) produces a distinct identity.
+    const isAnonPatient = !isDoctor && user.scope === 'invite-anon';
+    const identity = isDoctor
+      ? `doctor-${user.id}`
+      : isAnonPatient
+        ? `patient-anon-${user.id}`
+        : `patient-${user.id}`;
     const { token, expiresAt } = await this.livekit.issueToken({
       roomName: session.livekitRoomName,
       identity,
@@ -165,7 +174,14 @@ export class ConsultationService {
       session.status = ConsultationStatus.WAITING;
     }
     await this.sessions.save(session);
-    await this.recordEvent(session.id, 'JOIN', user.id, { identity });
+    // session_events.actor_user_id joins to users(id); for anonymous invites
+    // user.id is the invite pseudonym and must NOT land there. Store null
+    // and keep the pseudonym in the payload for forensics.
+    const actorUserId = isAnonPatient ? null : user.id;
+    const eventPayload = isAnonPatient
+      ? { identity, anonymous: true, inviteId: user.id }
+      : { identity };
+    await this.recordEvent(session.id, 'JOIN', actorUserId, eventPayload);
 
     return {
       token,

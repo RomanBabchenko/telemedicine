@@ -10,6 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { createHash } from 'node:crypto';
 import { Request } from 'express';
+import { Role } from '@telemed/shared-types';
 import { Public } from '../../../common/auth/decorators';
 import { ConsultationInviteService } from '../application/consultation-invite.service';
 import { UserService } from '../../identity/application/user.service';
@@ -61,20 +62,14 @@ export class InviteController {
       throw new UnauthorizedException('Invalid or expired invite link');
     }
 
-    const user = await this.users.findById(result.userId);
-    if (!user) {
-      throw new UnauthorizedException('User not found');
-    }
-
-    const roles = await this.users.getRoles(result.userId, result.tenantId);
-
     const inviteCtx = {
       appointmentId: result.appointmentId,
       consultationSessionId: result.consultationSessionId,
     };
 
     // Cap the JWT lifetime at the appointment end so a leaked token can't be
-    // reused after the consultation is over.
+    // reused after the consultation is over. Same rule for both named and
+    // anonymous invites.
     const appt = await this.appointments.findOne({
       where: { id: result.appointmentId, tenantId: result.tenantId },
     });
@@ -98,6 +93,47 @@ export class InviteController {
     const boundUaHash = policy.bindUserAgent
       ? hashUa(req.headers['user-agent'] as string | undefined)
       : undefined;
+
+    // Anonymous-patient branch: no User / Patient row exists. Issue a
+    // stateless JWT with scope='invite-anon', sub=null, and the invite row
+    // id as the correlation pseudonym.
+    if (result.isAnonymous) {
+      const issuedTokens = await this.tokens.issueAnonymousInvite({
+        tenantId: result.tenantId,
+        inviteCtx,
+        anonIdentity: result.inviteId,
+        accessTtlOverrideSec,
+        boundIp,
+        boundUaHash,
+      });
+      return {
+        user: {
+          id: null,
+          email: null,
+          phone: null,
+          firstName: null,
+          lastName: null,
+          roles: [Role.PATIENT],
+          tenantId: result.tenantId,
+          mfaEnabled: false,
+          scope: 'invite-anon' as const,
+          inviteCtx,
+        },
+        tokens: issuedTokens,
+        appointmentId: result.appointmentId,
+        consultationSessionId: result.consultationSessionId,
+      };
+    }
+
+    // Named invite (existing flow): resolve the User + roles and mint a
+    // scope='invite' JWT tied to that user.
+    // result.userId is guaranteed non-null here because isAnonymous===false.
+    const userId = result.userId!;
+    const user = await this.users.findById(userId);
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+    const roles = await this.users.getRoles(userId, result.tenantId);
 
     const issuedTokens = await this.tokens.issue(
       user,

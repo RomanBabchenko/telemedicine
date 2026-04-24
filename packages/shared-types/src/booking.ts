@@ -50,7 +50,12 @@ export interface AppointmentDto {
   id: string;
   tenantId: string;
   doctorId: string;
-  patientId: string;
+  // null for anonymous-patient appointments (isAnonymousPatient === true).
+  patientId: string | null;
+  // True when the appointment was created via an anonymous MIS webhook —
+  // there is no Patient row and no PII. UI uses this to hide name/contact
+  // widgets and the prescription/referral finish flow.
+  isAnonymousPatient?: boolean;
   serviceTypeId: string;
   slotId: string;
   status: AppointmentStatus;

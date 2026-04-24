@@ -8,7 +8,8 @@ export const AppLayout = () => {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
-  const isInviteScope = user?.scope === 'invite';
+  const isInviteScope =
+    user?.scope === 'invite' || user?.scope === 'invite-anon';
 
   return (
     <div className="min-h-full flex flex-col bg-slate-50">

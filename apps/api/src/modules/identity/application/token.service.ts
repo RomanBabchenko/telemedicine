@@ -14,17 +14,26 @@ export interface InviteContext {
 }
 
 export interface AccessTokenPayload {
-  sub: string;
+  // null only for anonymous-patient invites (scope === 'invite-anon') where
+  // there is no User row. Guards substitute `anonIdentity` as a correlation
+  // handle so downstream code can keep reading user.id opaquely.
+  sub: string | null;
   email: string | null;
   phone: string | null;
   roles: Role[];
   tenantId: string | null;
   mfaEnabled: boolean;
-  // scope === 'invite' means the token was issued from a one-time invite link
+  // scope === 'invite' means the token was issued from a named invite link
   // and grants access only to the waiting room + video session identified by
-  // inviteCtx. Default (absent or 'full') is normal unrestricted access.
-  scope?: 'full' | 'invite';
+  // inviteCtx. scope === 'invite-anon' is the same, but for anonymous-patient
+  // invites where the MIS did not share PII and no User row exists. Default
+  // (absent or 'full') is normal unrestricted access.
+  scope?: 'full' | 'invite' | 'invite-anon';
   inviteCtx?: InviteContext;
+  // Stable pseudonym for anonymous-invite tokens — set to the ConsultationInvite
+  // row id. Lets LiveKit identity + audit trail stay consistent across
+  // multiple consumes of the same link, and change on revoke+reissue.
+  anonIdentity?: string;
   // Optional per-tenant session bindings for invite-scoped tokens. When
   // set, JwtAuthGuard rejects the request if the current IP / UA-hash
   // does not match. Absent claims disable the check for that dimension.
@@ -141,6 +150,44 @@ export class TokenService {
     await this.sessionRepo.save(session);
 
     return { accessToken, refreshToken, expiresIn: accessTtlSec };
+  }
+
+  // Mint a JWT for an anonymous-patient invite. There is no User, no Session
+  // row, no refresh token — the invite link itself is the re-auth mechanism.
+  // `anonIdentity` is the ConsultationInvite.id and acts as the opaque user
+  // handle for LiveKit identity + audit correlation.
+  async issueAnonymousInvite(params: {
+    tenantId: string;
+    inviteCtx: InviteContext;
+    anonIdentity: string;
+    accessTtlOverrideSec?: number;
+    boundIp?: string;
+    boundUaHash?: string;
+  }): Promise<IssuedTokens> {
+    const defaultAccessTtl = this.parseTtlSeconds(this.config.jwt.accessTtl);
+    const accessTtlSec =
+      params.accessTtlOverrideSec !== undefined
+        ? Math.max(60, Math.min(defaultAccessTtl, params.accessTtlOverrideSec))
+        : defaultAccessTtl;
+
+    const payload: AccessTokenPayload = {
+      sub: null,
+      email: null,
+      phone: null,
+      roles: [Role.PATIENT],
+      tenantId: params.tenantId,
+      mfaEnabled: false,
+      scope: 'invite-anon',
+      inviteCtx: params.inviteCtx,
+      anonIdentity: params.anonIdentity,
+      ...(params.boundIp ? { boundIp: params.boundIp } : {}),
+      ...(params.boundUaHash ? { boundUaHash: params.boundUaHash } : {}),
+    };
+    const accessToken = await this.jwt.signAsync(payload, {
+      secret: this.config.jwt.accessSecret,
+      expiresIn: accessTtlSec,
+    });
+    return { accessToken, refreshToken: null, expiresIn: accessTtlSec };
   }
 
   async refresh(refreshToken: string): Promise<{ session: Session; payload: { sub: string } }> {
