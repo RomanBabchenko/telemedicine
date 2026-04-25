@@ -13,8 +13,11 @@ import { Slot } from '../domain/entities/slot.entity';
 import { Appointment } from '../domain/entities/appointment.entity';
 import { ServiceType } from '../domain/entities/service-type.entity';
 import { Patient } from '../../patient/domain/entities/patient.entity';
+import { Doctor } from '../../provider/domain/entities/doctor.entity';
 import { ProviderService } from '../../provider/application/provider.service';
 import { TenantContextService } from '../../../common/tenant/tenant-context.service';
+import { AppointmentResponseDto } from '../api/dto/appointment.response.dto';
+import { toAppointmentResponseWithSummaries } from '../api/mappers/appointment.mapper';
 import { SlotHoldService } from './slot-hold.service';
 import {
   AppointmentCancelledEvent,
@@ -85,7 +88,10 @@ export class AppointmentService {
     private readonly providerService: ProviderService,
   ) {}
 
-  async listForRole(filters: { patientId?: string; doctorId?: string }) {
+  async listForRole(filters: {
+    patientId?: string;
+    doctorId?: string;
+  }): Promise<AppointmentResponseDto[]> {
     const tenantId = this.tenantContext.getTenantId();
     const where: Record<string, unknown> = { tenantId };
     if (filters.patientId) where.patientId = filters.patientId;
@@ -100,51 +106,21 @@ export class AppointmentService {
     );
     const doctorIds = Array.from(new Set(rows.map((r) => r.doctorId)));
 
-    const [patientRows, doctorMap] = await Promise.all([
+    const [patientRows, doctorMap]: [Patient[], Map<string, Doctor>] = await Promise.all([
       patientIds.length > 0
         ? this.patients.find({ where: { id: In(patientIds) } })
-        : Promise.resolve([]),
+        : Promise.resolve([] as Patient[]),
       this.providerService.getDoctorsByIds(doctorIds),
     ]);
     const patientMap = new Map(patientRows.map((p) => [p.id, p]));
 
-    return rows.map((r) => {
-      const patient = r.patientId ? patientMap.get(r.patientId) : undefined;
-      const doctor = doctorMap.get(r.doctorId);
-      return {
-        id: r.id,
-        tenantId: r.tenantId,
-        doctorId: r.doctorId,
-        patientId: r.patientId,
-        isAnonymousPatient: r.isAnonymousPatient,
-        serviceTypeId: r.serviceTypeId,
-        slotId: r.slotId,
-        status: r.status,
-        reasonText: r.reasonText,
-        startAt: r.startAt,
-        endAt: r.endAt,
-        paymentId: r.paymentId,
-        consultationSessionId: r.consultationSessionId,
-        misPaymentType: r.misPaymentType,
-        misPaymentStatus: r.misPaymentStatus,
-        createdAt: r.createdAt,
-        patient: patient
-          ? {
-              firstName: patient.firstName,
-              lastName: patient.lastName,
-              phone: patient.phone,
-              email: patient.email,
-            }
-          : undefined,
-        doctor: doctor
-          ? {
-              firstName: doctor.firstName,
-              lastName: doctor.lastName,
-              specializations: doctor.specializations,
-            }
-          : undefined,
-      };
-    });
+    return rows.map((r) =>
+      toAppointmentResponseWithSummaries(
+        r,
+        r.patientId ? patientMap.get(r.patientId) : undefined,
+        doctorMap.get(r.doctorId),
+      ),
+    );
   }
 
   async getById(id: string): Promise<Appointment> {

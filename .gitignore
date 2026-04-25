@@ -48,6 +48,9 @@ Thumbs.db
 .eslintcache
 .cache
 
+# OpenAPI dump (regenerate via `pnpm --filter @telemed/api openapi:dump`)
+apps/api/openapi.json
+
 # docker volumes
 docker-data
 

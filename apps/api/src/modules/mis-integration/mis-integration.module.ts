@@ -20,6 +20,8 @@ import { SyncJobService } from './application/sync-job.service';
 import { ConsultationInviteService } from './application/consultation-invite.service';
 import { WebhookEventHandler } from './application/webhook-event.handler';
 import { IntegrationApiKeyService } from './application/integration-api-key.service';
+import { MisAppointmentService } from './application/mis-appointment.service';
+import { InviteConsumeService } from './application/invite-consume.service';
 import { ApiKeyGuard } from '../../common/auth/api-key.guard';
 import { DocDreamStubConnector } from './infrastructure/adapters/docdream-stub.connector';
 import { MisController } from './api/mis.controller';
@@ -53,6 +55,8 @@ import { IntegrationKeysAdminController } from './api/integration-keys-admin.con
     ConsultationInviteService,
     WebhookEventHandler,
     IntegrationApiKeyService,
+    MisAppointmentService,
+    InviteConsumeService,
     ApiKeyGuard,
   ],
   controllers: [MisController, InviteController, IntegrationKeysAdminController],

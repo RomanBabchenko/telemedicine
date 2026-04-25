@@ -1,35 +1,13 @@
-import {
-  Body,
-  Controller,
-  Post,
-  Req,
-  UnauthorizedException,
-} from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { createHash } from 'node:crypto';
+import { Body, Controller, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
+import { ApiBody, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
-import { Role } from '@telemed/shared-types';
 import { Public } from '../../../common/auth/decorators';
-import { ConsultationInviteService } from '../application/consultation-invite.service';
-import { UserService } from '../../identity/application/user.service';
-import { TokenService } from '../../identity/application/token.service';
-import { Appointment } from '../../booking/domain/entities/appointment.entity';
-import { TenantService } from '../../tenant/application/tenant.service';
+import { ApiAuthErrors } from '../../../common/swagger';
+import { InviteConsumeService } from '../application/invite-consume.service';
+import { ConsumeInviteBodyDto, InviteConsumeResponseDto } from './dto';
 
-// Match INVITE_EXPIRY_GRACE_MS in consultation-invite.service.ts — the JWT
-// minted from an invite expires at the same moment the invite itself does.
-const INVITE_JWT_GRACE_MS = 30 * 60 * 1000;
-
-// Truncated sha256 — enough entropy to detect UA change, short enough to
-// keep the JWT compact. Full hash is overkill; we're not authenticating
-// the UA, we're detecting substitution.
-const hashUa = (ua: string | undefined): string | undefined => {
-  if (!ua) return undefined;
-  return createHash('sha256').update(ua).digest('hex').slice(0, 16);
-};
-
+// Prefers the X-Forwarded-For chain's first hop so the reverse proxy's own
+// address doesn't become the "client IP" of every invite consumption.
 const resolveClientIp = (req: Request): string | undefined => {
   const xff = req.header('x-forwarded-for');
   if (xff) {
@@ -42,132 +20,27 @@ const resolveClientIp = (req: Request): string | undefined => {
 @ApiTags('auth')
 @Controller('auth/invite')
 export class InviteController {
-  constructor(
-    private readonly invites: ConsultationInviteService,
-    private readonly users: UserService,
-    private readonly tokens: TokenService,
-    private readonly tenants: TenantService,
-    @InjectRepository(Appointment)
-    private readonly appointments: Repository<Appointment>,
-  ) {}
+  constructor(private readonly invites: InviteConsumeService) {}
 
   @Post('consume')
   @Public()
-  async consume(
-    @Body() body: { token: string },
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Exchange a single-use invite token for an invite-scoped session',
+    description:
+      "Mints a JWT with scope='invite' (named invites) or 'invite-anon' (anonymous patients). The token lifetime is capped at the appointment end plus a grace window; tenant invite policy may bind the JWT to the caller IP / User-Agent.",
+    operationId: 'consumeInvite',
+  })
+  @ApiBody({ type: ConsumeInviteBodyDto })
+  @ApiOkResponse({ type: InviteConsumeResponseDto })
+  @ApiAuthErrors()
+  consume(
+    @Body() body: ConsumeInviteBodyDto,
     @Req() req: Request,
-  ) {
-    const result = await this.invites.consume(body.token);
-    if (!result) {
-      throw new UnauthorizedException('Invalid or expired invite link');
-    }
-
-    const inviteCtx = {
-      appointmentId: result.appointmentId,
-      consultationSessionId: result.consultationSessionId,
-    };
-
-    // Cap the JWT lifetime at the appointment end so a leaked token can't be
-    // reused after the consultation is over. Same rule for both named and
-    // anonymous invites.
-    const appt = await this.appointments.findOne({
-      where: { id: result.appointmentId, tenantId: result.tenantId },
+  ): Promise<InviteConsumeResponseDto> {
+    return this.invites.consume(body.token, {
+      ip: resolveClientIp(req),
+      userAgent: req.headers['user-agent'] as string | undefined,
     });
-    const accessTtlOverrideSec = appt
-      ? Math.max(
-          60,
-          Math.ceil(
-            (appt.endAt.getTime() + INVITE_JWT_GRACE_MS - Date.now()) / 1000,
-          ),
-        )
-      : undefined;
-
-    // Per-tenant opt-in session bindings. Off by default; when on, the JWT
-    // is pinned to the IP / UA-hash captured at consume time and the guard
-    // rejects mismatches on subsequent requests.
-    const tenant = result.tenantId
-      ? await this.tenants.findById(result.tenantId)
-      : null;
-    const policy = tenant?.invitePolicy ?? {};
-    const boundIp = policy.bindIp ? resolveClientIp(req) : undefined;
-    const boundUaHash = policy.bindUserAgent
-      ? hashUa(req.headers['user-agent'] as string | undefined)
-      : undefined;
-
-    // Anonymous-patient branch: no User / Patient row exists. Issue a
-    // stateless JWT with scope='invite-anon', sub=null, and the invite row
-    // id as the correlation pseudonym.
-    if (result.isAnonymous) {
-      const issuedTokens = await this.tokens.issueAnonymousInvite({
-        tenantId: result.tenantId,
-        inviteCtx,
-        anonIdentity: result.inviteId,
-        accessTtlOverrideSec,
-        boundIp,
-        boundUaHash,
-      });
-      return {
-        user: {
-          id: null,
-          email: null,
-          phone: null,
-          firstName: null,
-          lastName: null,
-          roles: [Role.PATIENT],
-          tenantId: result.tenantId,
-          mfaEnabled: false,
-          scope: 'invite-anon' as const,
-          inviteCtx,
-        },
-        tokens: issuedTokens,
-        appointmentId: result.appointmentId,
-        consultationSessionId: result.consultationSessionId,
-      };
-    }
-
-    // Named invite (existing flow): resolve the User + roles and mint a
-    // scope='invite' JWT tied to that user.
-    // result.userId is guaranteed non-null here because isAnonymous===false.
-    const userId = result.userId!;
-    const user = await this.users.findById(userId);
-    if (!user) {
-      throw new UnauthorizedException('User not found');
-    }
-    const roles = await this.users.getRoles(userId, result.tenantId);
-
-    const issuedTokens = await this.tokens.issue(
-      user,
-      roles,
-      result.tenantId,
-      null,
-      req.ip,
-      req.headers['user-agent'] as string | undefined,
-      {
-        scope: 'invite',
-        inviteCtx,
-        accessTtlOverrideSec,
-        skipRefresh: true,
-        boundIp,
-        boundUaHash,
-      },
-    );
-
-    return {
-      user: {
-        id: user.id,
-        email: user.email,
-        phone: user.phone,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        roles,
-        tenantId: result.tenantId,
-        mfaEnabled: user.mfaEnabled,
-        scope: 'invite' as const,
-        inviteCtx,
-      },
-      tokens: issuedTokens,
-      appointmentId: result.appointmentId,
-      consultationSessionId: result.consultationSessionId,
-    };
   }
 }

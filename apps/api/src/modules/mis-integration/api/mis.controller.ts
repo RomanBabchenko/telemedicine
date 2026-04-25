@@ -3,34 +3,69 @@ import {
   Body,
   Controller,
   Get,
-  NotFoundException,
+  HttpCode,
+  HttpStatus,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import {
+  ApiBody,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiSecurity,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Request } from 'express';
-import { AppointmentStatus, Role } from '@telemed/shared-types';
+import { Role } from '@telemed/shared-types';
 import { Roles } from '../../../common/auth/decorators';
 import { ApiKeyGuard } from '../../../common/auth/api-key.guard';
 import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { Auditable } from '../../../common/audit/decorators';
-import { TenantContextService } from '../../../common/tenant/tenant-context.service';
+import { ApiAuth, ApiStandardErrors } from '../../../common/swagger';
 import { SyncJobService } from '../application/sync-job.service';
 import { ConnectorRegistry } from '../application/connector.registry';
 import { WebhookEventHandler } from '../application/webhook-event.handler';
+import {
+  MisAppointmentLocator,
+  MisAppointmentService,
+} from '../application/mis-appointment.service';
 import { OnlineAppointmentPayload } from '../domain/ports/mis-connector';
-import { Appointment } from '../../booking/domain/entities/appointment.entity';
-import { AppointmentService } from '../../booking/application/appointment.service';
 import { TenantService } from '../../tenant/application/tenant.service';
-import { RecordingService } from '../../recording/application/recording.service';
-import { ExternalIdentity } from '../domain/entities/external-identity.entity';
-import { ConsultationInviteService } from '../application/consultation-invite.service';
+import { RecordingInfoResponseDto } from '../../recording/api/dto';
+import {
+  CancelAppointmentBodyDto,
+  CancelAppointmentResponseDto,
+  PaymentStatusResponseDto,
+  RevokeInvitesBodyDto,
+  RevokeInvitesResponseDto,
+  SubmitAppointmentBodyDto,
+  SyncJobResponseDto,
+  UpdatePaymentStatusBodyDto,
+} from './dto';
+
+const connectorIdFromRequest = (req: Request): string => {
+  const apiKey = (req as Request & { apiKey?: { connectorId: string } }).apiKey;
+  if (!apiKey?.connectorId) {
+    // ApiKeyGuard always populates req.apiKey — reaching here means a wiring bug.
+    throw new BadRequestException('API key connector could not be resolved');
+  }
+  return apiKey.connectorId;
+};
+
+const externalLocator = (
+  externalAppointmentId: string,
+  req: Request,
+): MisAppointmentLocator => ({
+  kind: 'external',
+  externalAppointmentId,
+  connectorId: connectorIdFromRequest(req),
+});
 
 @ApiTags('mis-integration')
 @Controller('integrations')
@@ -39,147 +74,96 @@ export class MisController {
     private readonly sync: SyncJobService,
     private readonly registry: ConnectorRegistry,
     private readonly webhookHandler: WebhookEventHandler,
-    private readonly tenantContext: TenantContextService,
     private readonly tenants: TenantService,
-    @InjectRepository(Appointment)
-    private readonly appointmentsRepo: Repository<Appointment>,
-    @InjectRepository(ExternalIdentity)
-    private readonly externalIds: Repository<ExternalIdentity>,
-    private readonly appointments: AppointmentService,
-    private readonly recordings: RecordingService,
-    private readonly invites: ConsultationInviteService,
+    private readonly appointments: MisAppointmentService,
   ) {}
 
-  /**
-   * Resolve an appointment by the MIS's externalAppointmentId. The
-   * connector is inferred from the API key (one key = one connector), so
-   * the caller never passes it explicitly. Throws 404 if not mapped, 400
-   * if the guard wiring forgot to attach `req.apiKey`.
-   */
-  private async resolveAppointmentByExternal(
-    tenantId: string,
-    externalAppointmentId: string,
-    req: Request,
-  ): Promise<Appointment> {
-    const apiKey = (req as Request & { apiKey?: { connectorId: string } })
-      .apiKey;
-    if (!apiKey?.connectorId) {
-      // ApiKeyGuard always sets this — reaching here means a wiring bug.
-      throw new BadRequestException('API key connector could not be resolved');
-    }
-    const mapping = await this.externalIds.findOne({
-      where: {
-        tenantId,
-        externalSystem: apiKey.connectorId,
-        entityType: 'APPOINTMENT',
-        externalId: externalAppointmentId,
-      },
-    });
-    if (!mapping) {
-      throw new NotFoundException(
-        `No appointment found for externalAppointmentId="${externalAppointmentId}" in connector "${apiKey.connectorId}".`,
-      );
-    }
-    const appt = await this.appointmentsRepo.findOne({
-      where: { id: mapping.internalId, tenantId },
-    });
-    if (!appt) throw new NotFoundException('Appointment not found');
-    return appt;
-  }
-
-  // Core logic shared by the two payment-status endpoints (by internal id
-  // and by external id). Verifies preconditions, persists misPaymentStatus,
-  // triggers the CONFIRMED transition when transitioning to 'paid' from
-  // AWAITING_PAYMENT. Returns the shape DocDream expects.
-  private async applyPaymentStatus(
-    tenantId: string,
-    appointment: Appointment,
-    paymentStatus: 'paid' | 'unpaid',
-  ) {
-    if (appointment.misPaymentType !== 'prepaid') {
-      throw new BadRequestException(
-        'Appointment is not MIS-prepaid — nothing to update.',
-      );
-    }
-
-    const wasHeldUnpaid =
-      appointment.status === AppointmentStatus.AWAITING_PAYMENT;
-
-    appointment.misPaymentStatus = paymentStatus;
-    await this.appointmentsRepo.save(appointment);
-
-    if (paymentStatus === 'paid' && wasHeldUnpaid) {
-      await this.appointments.confirm(appointment.id);
-    }
-
-    return {
-      ok: true,
-      appointmentId: appointment.id,
-      misPaymentStatus: paymentStatus,
-      status:
-        paymentStatus === 'paid' && wasHeldUnpaid
-          ? AppointmentStatus.CONFIRMED
-          : appointment.status,
-    };
-  }
-
-  @ApiBearerAuth()
   @Post(':tenantId/sync/full')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
   @Auditable({ action: 'mis.sync.full', resource: 'MisSyncJob' })
-  async fullSync(@Param('tenantId') tenantId: string) {
+  @ApiAuth()
+  @ApiOperation({
+    summary: 'Trigger a full sync for the tenant',
+    operationId: 'misFullSync',
+  })
+  @ApiParam({ name: 'tenantId', format: 'uuid' })
+  @ApiOkResponse({ type: SyncJobResponseDto })
+  @ApiStandardErrors()
+  async fullSync(
+    @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
+  ): Promise<SyncJobResponseDto> {
     const job = await this.sync.runFullSync(tenantId);
     return { ok: true, jobId: job.id, stats: job.stats, status: job.status };
   }
 
-  @ApiBearerAuth()
   @Post(':tenantId/sync/incremental')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
   @Auditable({ action: 'mis.sync.incremental', resource: 'MisSyncJob' })
-  async incrementalSync(@Param('tenantId') tenantId: string) {
+  @ApiAuth()
+  @ApiOperation({
+    summary: 'Trigger an incremental sync for the tenant',
+    operationId: 'misIncrementalSync',
+  })
+  @ApiParam({ name: 'tenantId', format: 'uuid' })
+  @ApiOkResponse({ type: SyncJobResponseDto })
+  @ApiStandardErrors()
+  async incrementalSync(
+    @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
+  ): Promise<SyncJobResponseDto> {
     const job = await this.sync.runIncrementalSync(tenantId);
     return { ok: true, jobId: job.id, stats: job.stats, status: job.status };
   }
 
-  @ApiBearerAuth()
   @Get(':tenantId/status')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
-  status(@Param('tenantId') tenantId: string) {
+  @ApiAuth()
+  @ApiOperation({
+    summary: 'Fetch the latest sync job status for the tenant',
+    operationId: 'misSyncStatus',
+  })
+  @ApiParam({ name: 'tenantId', format: 'uuid' })
+  @ApiStandardErrors()
+  status(@Param('tenantId', new ParseUUIDPipe()) tenantId: string) {
     return this.sync.status(tenantId);
   }
 
-  @ApiBearerAuth()
   @Get(':tenantId/errors')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
-  errors(@Param('tenantId') tenantId: string) {
+  @ApiAuth()
+  @ApiOperation({
+    summary: 'List recent sync errors for the tenant',
+    operationId: 'misSyncErrors',
+  })
+  @ApiParam({ name: 'tenantId', format: 'uuid' })
+  @ApiStandardErrors()
+  errors(@Param('tenantId', new ParseUUIDPipe()) tenantId: string) {
     return this.sync.listErrors(tenantId);
   }
 
-  // MIS → telemed RPC for creating / reissuing an online appointment.
-  //
-  // Authenticated via integration API key. The connector (e.g. 'docdream')
-  // is derived from the API key itself — one key = one connector — so the
-  // URL stays brand-agnostic and stable if the partner rebrands.
   @Post(':tenantId/appointments')
   @UseGuards(ApiKeyGuard)
   @Auditable({ action: 'mis.appointment.submitted', resource: 'MisSyncJob' })
+  @ApiSecurity('api-key')
+  @ApiOperation({
+    summary: 'MIS → telemed: create / reissue an online appointment',
+    description:
+      "Authenticated via integration API key. The connector (e.g. 'docdream') is derived from the API key itself so the URL stays brand-agnostic. Body shape is documented as the DocDream payload below; other connectors may accept a different shape — the request is parsed by ConnectorRegistry.parseWebhookEvent at runtime.",
+    operationId: 'misSubmitAppointment',
+  })
+  @ApiParam({ name: 'tenantId', format: 'uuid' })
+  @ApiBody({ type: SubmitAppointmentBodyDto })
+  @ApiStandardErrors()
   async submitAppointment(
-    @Param('tenantId') tenantId: string,
+    @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
     @Req() req: Request,
     @Body() body: unknown,
   ) {
     await this.tenants.getOrThrow(tenantId);
-
-    const apiKey = (req as Request & { apiKey?: { connectorId: string } })
-      .apiKey;
-    if (!apiKey?.connectorId) {
-      throw new BadRequestException('API key connector could not be resolved');
-    }
-    const connectorId = apiKey.connectorId;
+    const connectorId = connectorIdFromRequest(req);
 
     const connector = this.registry.get(connectorId);
     const event = connector.parseWebhookEvent(JSON.stringify(body));
@@ -196,221 +180,207 @@ export class MisController {
     return { received: true, event };
   }
 
-  // Clinic (MIS) server-to-server call to mark an MIS-originated prepaid
-  // appointment as paid. On success the appointment is transitioned from
-  // AWAITING_PAYMENT → CONFIRMED, which unblocks the patient's join-token.
   @Patch(':tenantId/appointments/:appointmentId/payment-status')
   @UseGuards(ApiKeyGuard)
   @Auditable({ action: 'mis.payment.updated', resource: 'Appointment' })
+  @ApiSecurity('api-key')
+  @ApiOperation({
+    summary: 'Mark an MIS-prepaid appointment as paid/unpaid (by internal id)',
+    description:
+      "When transitioning 'paid' from AWAITING_PAYMENT, the appointment is also moved to CONFIRMED — which unblocks the patient's video join token.",
+    operationId: 'misUpdatePaymentStatusById',
+  })
+  @ApiParam({ name: 'tenantId', format: 'uuid' })
+  @ApiParam({ name: 'appointmentId', format: 'uuid' })
+  @ApiBody({ type: UpdatePaymentStatusBodyDto })
+  @ApiOkResponse({ type: PaymentStatusResponseDto })
+  @ApiStandardErrors()
   async updatePaymentStatus(
-    @Param('tenantId') tenantId: string,
-    @Param('appointmentId') appointmentId: string,
-    @Body() body: { paymentStatus: 'paid' | 'unpaid' },
-  ) {
-    if (body.paymentStatus !== 'paid' && body.paymentStatus !== 'unpaid') {
-      throw new BadRequestException('paymentStatus must be "paid" or "unpaid"');
-    }
-
+    @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
+    @Param('appointmentId', new ParseUUIDPipe()) appointmentId: string,
+    @Body() body: UpdatePaymentStatusBodyDto,
+  ): Promise<PaymentStatusResponseDto> {
     await this.tenants.getOrThrow(tenantId);
-
-    const appt = await this.appointmentsRepo.findOne({
-      where: { id: appointmentId, tenantId },
-    });
-    if (!appt) throw new NotFoundException('Appointment not found');
-
-    return this.applyPaymentStatus(tenantId, appt, body.paymentStatus);
+    return this.appointments.markPaymentStatus(
+      tenantId,
+      { kind: 'internal', appointmentId },
+      body.paymentStatus,
+    );
   }
 
-  // Same operation as above but keyed by the MIS's own externalAppointmentId.
-  // DocDream doesn't always persist our internal appointmentId, so we let
-  // them reference the appointment by the ID they already know. Connector is
-  // taken from the API key itself (one key = one connector).
   @Patch(':tenantId/appointments/by-external/:externalAppointmentId/payment-status')
   @UseGuards(ApiKeyGuard)
   @Auditable({ action: 'mis.payment.updated', resource: 'Appointment' })
+  @ApiSecurity('api-key')
+  @ApiOperation({
+    summary: "Mark an MIS-prepaid appointment as paid/unpaid (by the MIS's own externalAppointmentId)",
+    description: "DocDream doesn't always persist our internal appointmentId — this variant accepts the id the MIS already knows.",
+    operationId: 'misUpdatePaymentStatusByExternal',
+  })
+  @ApiParam({ name: 'tenantId', format: 'uuid' })
+  @ApiParam({ name: 'externalAppointmentId' })
+  @ApiBody({ type: UpdatePaymentStatusBodyDto })
+  @ApiOkResponse({ type: PaymentStatusResponseDto })
+  @ApiStandardErrors()
   async updatePaymentStatusByExternal(
-    @Param('tenantId') tenantId: string,
+    @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
     @Param('externalAppointmentId') externalAppointmentId: string,
-    @Body() body: { paymentStatus: 'paid' | 'unpaid' },
+    @Body() body: UpdatePaymentStatusBodyDto,
     @Req() req: Request,
-  ) {
-    if (body.paymentStatus !== 'paid' && body.paymentStatus !== 'unpaid') {
-      throw new BadRequestException('paymentStatus must be "paid" or "unpaid"');
-    }
+  ): Promise<PaymentStatusResponseDto> {
     await this.tenants.getOrThrow(tenantId);
-    const appt = await this.resolveAppointmentByExternal(
+    return this.appointments.markPaymentStatus(
       tenantId,
-      externalAppointmentId,
-      req,
+      externalLocator(externalAppointmentId, req),
+      body.paymentStatus,
     );
-    return this.applyPaymentStatus(tenantId, appt, body.paymentStatus);
   }
 
-  // DocDream pulls the finished MP3 recording after the consultation ends.
-  // Mirrors GET /sessions/:id/recording but keyed by appointmentId (DocDream's
-  // domain concept) and guarded by the integration API key.
   @Get(':tenantId/appointments/:appointmentId/recording')
   @UseGuards(ApiKeyGuard)
-  @Auditable({
-    action: 'mis.recording.requested',
-    resource: 'SessionRecording',
+  @Auditable({ action: 'mis.recording.requested', resource: 'SessionRecording' })
+  @ApiSecurity('api-key')
+  @ApiOperation({
+    summary: 'Fetch the MP3 recording metadata + signed download URL (by internal id)',
+    operationId: 'misGetAppointmentRecording',
   })
+  @ApiParam({ name: 'tenantId', format: 'uuid' })
+  @ApiParam({ name: 'appointmentId', format: 'uuid' })
+  @ApiOkResponse({ type: RecordingInfoResponseDto })
+  @ApiStandardErrors()
   async getAppointmentRecording(
-    @Param('tenantId') tenantId: string,
-    @Param('appointmentId') appointmentId: string,
-  ) {
+    @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
+    @Param('appointmentId', new ParseUUIDPipe()) appointmentId: string,
+  ): Promise<RecordingInfoResponseDto> {
     await this.tenants.getOrThrow(tenantId);
-
-    const appt = await this.appointmentsRepo.findOne({
-      where: { id: appointmentId, tenantId },
-    });
-    if (!appt) throw new NotFoundException('Appointment not found');
-    return this.fetchRecordingFor(appt);
+    return this.appointments.getRecording(tenantId, { kind: 'internal', appointmentId });
   }
 
   @Get(':tenantId/appointments/by-external/:externalAppointmentId/recording')
   @UseGuards(ApiKeyGuard)
-  @Auditable({
-    action: 'mis.recording.requested',
-    resource: 'SessionRecording',
+  @Auditable({ action: 'mis.recording.requested', resource: 'SessionRecording' })
+  @ApiSecurity('api-key')
+  @ApiOperation({
+    summary: 'Fetch the MP3 recording metadata + signed download URL (by external id)',
+    operationId: 'misGetAppointmentRecordingByExternal',
   })
+  @ApiParam({ name: 'tenantId', format: 'uuid' })
+  @ApiParam({ name: 'externalAppointmentId' })
+  @ApiOkResponse({ type: RecordingInfoResponseDto })
+  @ApiStandardErrors()
   async getAppointmentRecordingByExternal(
-    @Param('tenantId') tenantId: string,
+    @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
     @Param('externalAppointmentId') externalAppointmentId: string,
     @Req() req: Request,
-  ) {
+  ): Promise<RecordingInfoResponseDto> {
     await this.tenants.getOrThrow(tenantId);
-    const appt = await this.resolveAppointmentByExternal(
-      tenantId,
-      externalAppointmentId,
-      req,
-    );
-    return this.fetchRecordingFor(appt);
-  }
-
-  private async fetchRecordingFor(appt: Appointment) {
-    if (!appt.consultationSessionId) {
-      throw new NotFoundException('Consultation session not yet created');
-    }
-    const info = await this.recordings.getRecordingInfo(
-      appt.consultationSessionId,
-    );
-    if (!info) throw new NotFoundException('Recording not found');
-    return info;
-  }
-
-  // ─────────────────────── Cancel appointment ───────────────────────
-
-  // Provider-side cancellation initiated by MIS. Transitions to
-  // CANCELLED_BY_PROVIDER (terminal) AND revokes any outstanding invite
-  // links so a leaked URL can't be reused to peek at the appointment.
-  private async cancelAppointmentCore(
-    tenantId: string,
-    appt: Appointment,
-    reason: string | undefined,
-  ) {
-    const updated = await this.appointments.cancel(appt.id, false, reason);
-    const invitesRevoked = await this.invites.revokeForAppointment(
-      tenantId,
-      appt.id,
-    );
-    return {
-      ok: true,
-      appointmentId: appt.id,
-      status: updated.status,
-      cancelledReason: updated.cancelledReason,
-      invitesRevoked,
-    };
+    return this.appointments.getRecording(tenantId, externalLocator(externalAppointmentId, req));
   }
 
   @Post(':tenantId/appointments/:appointmentId/cancel')
+  @HttpCode(HttpStatus.OK)
   @UseGuards(ApiKeyGuard)
   @Auditable({ action: 'mis.appointment.cancelled', resource: 'Appointment' })
+  @ApiSecurity('api-key')
+  @ApiOperation({
+    summary: 'Cancel an appointment and revoke invites (by internal id)',
+    operationId: 'misCancelAppointment',
+  })
+  @ApiParam({ name: 'tenantId', format: 'uuid' })
+  @ApiParam({ name: 'appointmentId', format: 'uuid' })
+  @ApiBody({ type: CancelAppointmentBodyDto })
+  @ApiOkResponse({ type: CancelAppointmentResponseDto })
+  @ApiStandardErrors()
   async cancelAppointment(
-    @Param('tenantId') tenantId: string,
-    @Param('appointmentId') appointmentId: string,
-    @Body() body: { reason?: string },
-  ) {
+    @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
+    @Param('appointmentId', new ParseUUIDPipe()) appointmentId: string,
+    @Body() body: CancelAppointmentBodyDto,
+  ): Promise<CancelAppointmentResponseDto> {
     await this.tenants.getOrThrow(tenantId);
-    const appt = await this.appointmentsRepo.findOne({
-      where: { id: appointmentId, tenantId },
-    });
-    if (!appt) throw new NotFoundException('Appointment not found');
-    return this.cancelAppointmentCore(tenantId, appt, body.reason);
+    return this.appointments.cancel(tenantId, { kind: 'internal', appointmentId }, body.reason);
   }
 
   @Post(':tenantId/appointments/by-external/:externalAppointmentId/cancel')
+  @HttpCode(HttpStatus.OK)
   @UseGuards(ApiKeyGuard)
   @Auditable({ action: 'mis.appointment.cancelled', resource: 'Appointment' })
+  @ApiSecurity('api-key')
+  @ApiOperation({
+    summary: 'Cancel an appointment and revoke invites (by external id)',
+    operationId: 'misCancelAppointmentByExternal',
+  })
+  @ApiParam({ name: 'tenantId', format: 'uuid' })
+  @ApiParam({ name: 'externalAppointmentId' })
+  @ApiBody({ type: CancelAppointmentBodyDto })
+  @ApiOkResponse({ type: CancelAppointmentResponseDto })
+  @ApiStandardErrors()
   async cancelAppointmentByExternal(
-    @Param('tenantId') tenantId: string,
+    @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
     @Param('externalAppointmentId') externalAppointmentId: string,
-    @Body() body: { reason?: string },
+    @Body() body: CancelAppointmentBodyDto,
     @Req() req: Request,
-  ) {
+  ): Promise<CancelAppointmentResponseDto> {
     await this.tenants.getOrThrow(tenantId);
-    const appt = await this.resolveAppointmentByExternal(
+    return this.appointments.cancel(
       tenantId,
-      externalAppointmentId,
-      req,
+      externalLocator(externalAppointmentId, req),
+      body.reason,
     );
-    return this.cancelAppointmentCore(tenantId, appt, body.reason);
   }
 
-  // ─────────────────── Revoke invite links (keep appointment) ───────────────────
-
-  // Used when the appointment must proceed but a specific invite link (or
-  // both) must be dead — e.g. the patient's phone was stolen, the SMS was
-  // forwarded, etc. Set `role` to scope to only patient or only doctor.
-  // To get a fresh link, DocDream re-POSTs the webhook — our idempotent
-  // handler reissues new invites for the same appointment.
   @Post(':tenantId/appointments/:appointmentId/invites/revoke')
+  @HttpCode(HttpStatus.OK)
   @UseGuards(ApiKeyGuard)
-  @Auditable({
-    action: 'mis.invites.revoked',
-    resource: 'ConsultationInvite',
+  @Auditable({ action: 'mis.invites.revoked', resource: 'ConsultationInvite' })
+  @ApiSecurity('api-key')
+  @ApiOperation({
+    summary: 'Revoke outstanding invite links for an appointment (by internal id)',
+    description: 'Use role to scope revocation to one participant (PATIENT or DOCTOR); otherwise both are revoked.',
+    operationId: 'misRevokeInvites',
   })
+  @ApiParam({ name: 'tenantId', format: 'uuid' })
+  @ApiParam({ name: 'appointmentId', format: 'uuid' })
+  @ApiBody({ type: RevokeInvitesBodyDto })
+  @ApiOkResponse({ type: RevokeInvitesResponseDto })
+  @ApiStandardErrors()
   async revokeInvites(
-    @Param('tenantId') tenantId: string,
-    @Param('appointmentId') appointmentId: string,
-    @Body() body: { role?: 'PATIENT' | 'DOCTOR' },
-  ) {
+    @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
+    @Param('appointmentId', new ParseUUIDPipe()) appointmentId: string,
+    @Body() body: RevokeInvitesBodyDto,
+  ): Promise<RevokeInvitesResponseDto> {
     await this.tenants.getOrThrow(tenantId);
-    const appt = await this.appointmentsRepo.findOne({
-      where: { id: appointmentId, tenantId },
-    });
-    if (!appt) throw new NotFoundException('Appointment not found');
-    const revoked = await this.invites.revokeForAppointment(
+    return this.appointments.revokeInvites(
       tenantId,
-      appt.id,
+      { kind: 'internal', appointmentId },
       body.role,
     );
-    return { ok: true, appointmentId: appt.id, revoked };
   }
 
   @Post(':tenantId/appointments/by-external/:externalAppointmentId/invites/revoke')
+  @HttpCode(HttpStatus.OK)
   @UseGuards(ApiKeyGuard)
-  @Auditable({
-    action: 'mis.invites.revoked',
-    resource: 'ConsultationInvite',
+  @Auditable({ action: 'mis.invites.revoked', resource: 'ConsultationInvite' })
+  @ApiSecurity('api-key')
+  @ApiOperation({
+    summary: 'Revoke outstanding invite links for an appointment (by external id)',
+    operationId: 'misRevokeInvitesByExternal',
   })
+  @ApiParam({ name: 'tenantId', format: 'uuid' })
+  @ApiParam({ name: 'externalAppointmentId' })
+  @ApiBody({ type: RevokeInvitesBodyDto })
+  @ApiOkResponse({ type: RevokeInvitesResponseDto })
+  @ApiStandardErrors()
   async revokeInvitesByExternal(
-    @Param('tenantId') tenantId: string,
+    @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
     @Param('externalAppointmentId') externalAppointmentId: string,
-    @Body() body: { role?: 'PATIENT' | 'DOCTOR' },
+    @Body() body: RevokeInvitesBodyDto,
     @Req() req: Request,
-  ) {
+  ): Promise<RevokeInvitesResponseDto> {
     await this.tenants.getOrThrow(tenantId);
-    const appt = await this.resolveAppointmentByExternal(
+    return this.appointments.revokeInvites(
       tenantId,
-      externalAppointmentId,
-      req,
-    );
-    const revoked = await this.invites.revokeForAppointment(
-      tenantId,
-      appt.id,
+      externalLocator(externalAppointmentId, req),
       body.role,
     );
-    return { ok: true, appointmentId: appt.id, revoked };
   }
 }

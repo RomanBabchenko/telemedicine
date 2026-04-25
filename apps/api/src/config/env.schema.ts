@@ -3,7 +3,10 @@ import { z } from 'zod';
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   API_PORT: z.coerce.number().int().positive().default(3000),
-  API_GLOBAL_PREFIX: z.string().default('api/v1'),
+  // Route prefix applied before URI versioning (see main.ts). Final URLs are
+  // `/<prefix>/v1/<route>` — the `v1` segment is produced by the versioning
+  // layer, not this string. Do NOT include a version here.
+  API_GLOBAL_PREFIX: z.string().default('api'),
   CORS_ORIGINS: z
     .string()
     .default('http://localhost:5173,http://localhost:5174,http://localhost:5175'),

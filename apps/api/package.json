@@ -15,7 +15,8 @@
     "db:migration:create": "typeorm-ts-node-commonjs migration:create",
     "db:migration:run": "typeorm-ts-node-commonjs -d src/config/typeorm.config.ts migration:run",
     "db:migration:revert": "typeorm-ts-node-commonjs -d src/config/typeorm.config.ts migration:revert",
-    "db:seed": "ts-node -r tsconfig-paths/register src/database/seeds/seed.ts"
+    "db:seed": "ts-node -r tsconfig-paths/register src/database/seeds/seed.ts",
+    "openapi:dump": "ts-node -r tsconfig-paths/register scripts/dump-openapi.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.3.7",

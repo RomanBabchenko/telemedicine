@@ -5,28 +5,47 @@ import {
   Delete,
   ForbiddenException,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import {
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Role } from '@telemed/shared-types';
-import { CurrentUser, AuthUser, Roles } from '../../../common/auth/decorators';
+import { AuthUser, CurrentUser, Roles } from '../../../common/auth/decorators';
 import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { Auditable } from '../../../common/audit/decorators';
+import { ApiAuth, ApiStandardErrors } from '../../../common/swagger';
 import { TenantContextService } from '../../../common/tenant/tenant-context.service';
 import { ProviderService } from '../../provider/application/provider.service';
 import { PatientService } from '../../patient/application/patient.service';
-import { UserService, UserDetail } from '../application/user.service';
+import { UserDetail, UserService } from '../application/user.service';
 import {
   AddMembershipBodyDto,
   CreateUserBodyDto,
+  CreateUserResponseDto,
   ListUsersQueryDto,
+  ResetPasswordResponseDto,
   SetUserStatusBodyDto,
+  UserDetailResponseDto,
+  UserLookupQueryDto,
+  UserLookupResponseDto,
+  UsersPageResponseDto,
 } from './dto';
+import {
+  toUserDetailResponse,
+  toUserLookupResponse,
+} from './mappers/user.mapper';
 
 const ROLES_CLINIC_ADMIN_CAN_MANAGE: Role[] = [
   Role.DOCTOR,
@@ -38,20 +57,11 @@ const ROLES_CLINIC_ADMIN_CAN_MANAGE: Role[] = [
 const isPlatformActor = (roles: Role[]): boolean =>
   roles.includes(Role.PLATFORM_SUPER_ADMIN);
 
-const summarize = (detail: UserDetail) => ({
-  ...detail,
-  createdAt: detail.createdAt.toISOString(),
-  memberships: detail.memberships.map((m) => ({
-    ...m,
-    createdAt: m.createdAt.toISOString(),
-  })),
-});
-
 @ApiTags('admin-users')
-@ApiBearerAuth()
 @Controller('admin/users')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
+@ApiAuth()
 export class AdminUserController {
   constructor(
     private readonly users: UserService,
@@ -61,7 +71,18 @@ export class AdminUserController {
   ) {}
 
   @Get()
-  async list(@Query() query: ListUsersQueryDto, @CurrentUser() actor: AuthUser) {
+  @ApiOperation({
+    summary: 'List users in the current tenant',
+    description:
+      "Tenant-scoped by default. PLATFORM_SUPER_ADMIN can pass scope='all' to see every user across every tenant.",
+    operationId: 'listUsers',
+  })
+  @ApiOkResponse({ type: UsersPageResponseDto })
+  @ApiStandardErrors()
+  async list(
+    @Query() query: ListUsersQueryDto,
+    @CurrentUser() actor: AuthUser,
+  ): Promise<UsersPageResponseDto> {
     const tenantScope = this.scopeTenantId(actor, query.scope);
     const result = await this.users.list({
       tenantId: tenantScope ?? undefined,
@@ -71,61 +92,79 @@ export class AdminUserController {
       page: query.page,
       pageSize: query.pageSize,
     });
+    const limit = result.pageSize;
     return {
-      ...result,
-      items: result.items.map(summarize),
+      items: result.items.map(toUserDetailResponse),
+      meta: {
+        total: result.total,
+        page: result.page,
+        limit,
+        pageCount: limit > 0 ? Math.ceil(result.total / limit) : 0,
+      },
     };
   }
 
   // NOTE: declared before @Get(':id') so the static `lookup` segment is matched
   // before the param route. Same trick as the doctors controller.
   @Get('lookup')
-  async lookup(@Query('email') email: string) {
-    if (!email) throw new BadRequestException('email query param is required');
-    const user = await this.users.findByEmail(email);
-    if (!user) return { exists: false };
-    return {
-      exists: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        phone: user.phone,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        status: user.status,
-        mfaEnabled: user.mfaEnabled,
-        createdAt: user.createdAt.toISOString(),
-      },
-    };
+  @ApiOperation({
+    summary: 'Look up a user by email',
+    description: 'Returns { exists: false } when no user is found — used by the invite UX to decide between create vs. attach-membership.',
+    operationId: 'lookupUser',
+  })
+  @ApiOkResponse({ type: UserLookupResponseDto })
+  @ApiStandardErrors()
+  async lookup(@Query() query: UserLookupQueryDto): Promise<UserLookupResponseDto> {
+    if (!query.email) throw new BadRequestException('email query param is required');
+    const user = await this.users.findByEmail(query.email);
+    return toUserLookupResponse(user);
   }
 
   @Get(':id')
-  async getById(@Param('id') id: string, @CurrentUser() actor: AuthUser) {
+  @ApiOperation({
+    summary: 'Fetch a single user with their memberships',
+    operationId: 'getUserById',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: UserDetailResponseDto })
+  @ApiStandardErrors()
+  async getById(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() actor: AuthUser,
+  ): Promise<UserDetailResponseDto> {
     const scope = isPlatformActor(actor.roles)
       ? undefined
       : this.tenantContext.getTenantId();
     const detail = await this.users.getDetail(id, scope);
-    return summarize(detail);
+    return toUserDetailResponse(detail);
   }
 
   @Post()
+  @HttpCode(HttpStatus.CREATED)
   @Auditable({ action: 'admin.user.created', resource: 'User', captureBody: true })
-  async create(@Body() body: CreateUserBodyDto, @CurrentUser() actor: AuthUser) {
+  @ApiOperation({
+    summary: 'Create a new user or attach a membership to an existing one',
+    description:
+      'If the email is new, a User is created with the given role. If the email already exists, a new membership is attached (returns reused=true). DOCTOR role also materialises the full Doctor+Profile+Schedule bundle via ProviderService.',
+    operationId: 'createUser',
+  })
+  @ApiOkResponse({ type: CreateUserResponseDto })
+  @ApiStandardErrors()
+  async create(
+    @Body() body: CreateUserBodyDto,
+    @CurrentUser() actor: AuthUser,
+  ): Promise<CreateUserResponseDto> {
     const tenantId = body.tenantId ?? this.tenantContext.getTenantId();
     this.assertCanCreateRole(actor.roles, body.role);
     this.assertCanTouchTenant(actor, tenantId);
 
     if (body.role === Role.DOCTOR) {
-      // Delegate to ProviderService — it knows how to create the full
-      // User+Doctor+TenantProfile+AvailabilityRule+Slots bundle atomically.
+      // Delegate to ProviderService — it owns the atomic
+      // User+Doctor+TenantProfile+AvailabilityRule+Slots bundle.
       if (!body.password) {
         throw new BadRequestException('password is required when creating a DOCTOR');
       }
-      // ProviderService.create runs in the current tenant context, so the
-      // CLINIC_ADMIN scope is enforced implicitly. PLATFORM_SUPER_ADMIN must
-      // be acting under that tenant's context too — that's how the existing
-      // POST /doctors works.
-      const dto = await this.providers.create({
+      const doctor = await this.providers.create({
         email: body.email,
         password: body.password,
         firstName: body.firstName,
@@ -138,11 +177,14 @@ export class AdminUserController {
         basePrice: body.basePrice,
         defaultDurationMin: body.defaultDurationMin,
       });
-      // Return the freshly-created user via the same shape as createOrAttach
       const user = await this.users.findByEmail(body.email);
       if (!user) throw new BadRequestException('Doctor created but user lookup failed');
       const detail = await this.users.getDetail(user.id);
-      return { user: summarize(detail), reused: false, doctor: dto };
+      return {
+        user: toUserDetailResponse(detail),
+        reused: false,
+        doctor: doctor as unknown as Record<string, unknown>,
+      };
     }
 
     const result = await this.users.createOrAttach({
@@ -164,19 +206,29 @@ export class AdminUserController {
     }
 
     return {
-      user: summarize(result.user),
+      user: toUserDetailResponse(result.user),
       reused: result.reused,
       generatedPassword: result.generatedPassword,
     };
   }
 
   @Post(':id/memberships')
+  @HttpCode(HttpStatus.CREATED)
   @Auditable({ action: 'admin.membership.added', resource: 'UserTenantMembership' })
+  @ApiOperation({
+    summary: 'Grant a new tenant membership to an existing user',
+    description:
+      'For DOCTOR role, also materialises the tenant-specific catalog entries so the doctor becomes visible to patients. For PATIENT role, ensures the Patient record exists.',
+    operationId: 'addMembership',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'User id' })
+  @ApiOkResponse({ type: UserDetailResponseDto })
+  @ApiStandardErrors()
   async addMembership(
-    @Param('id') userId: string,
+    @Param('id', new ParseUUIDPipe()) userId: string,
     @Body() body: AddMembershipBodyDto,
     @CurrentUser() actor: AuthUser,
-  ) {
+  ): Promise<UserDetailResponseDto> {
     this.assertCanCreateRole(actor.roles, body.role);
     this.assertCanTouchTenant(actor, body.tenantId);
     await this.users.addMembership(
@@ -185,14 +237,9 @@ export class AdminUserController {
       body.role,
       body.isDefault ?? false,
     );
-    // For DOCTOR role we also need to materialise the tenant-specific
-    // catalog entries (DoctorTenantProfile, ServiceType, AvailabilityRule,
-    // demo slots) — otherwise patients in this tenant won't see them.
     if (body.role === Role.DOCTOR) {
       await this.providers.attachToTenant(userId, body.tenantId);
     }
-    // For PATIENT role, ensure the Patient record exists — otherwise booking
-    // endpoints will 404 with "Patient profile not found".
     if (body.role === Role.PATIENT) {
       const user = await this.users.findById(userId);
       if (user) {
@@ -200,22 +247,31 @@ export class AdminUserController {
       }
     }
     const detail = await this.users.getDetail(userId);
-    return summarize(detail);
+    return toUserDetailResponse(detail);
   }
 
   @Delete(':id/memberships/:membershipId')
   @Auditable({ action: 'admin.membership.revoked', resource: 'UserTenantMembership' })
+  @ApiOperation({
+    summary: 'Revoke a tenant membership',
+    description: 'If the revoked membership was DOCTOR, the matching tenant-scoped catalog entries are also torn down.',
+    operationId: 'revokeMembership',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'User id' })
+  @ApiParam({ name: 'membershipId', format: 'uuid' })
+  @ApiOkResponse({ type: UserDetailResponseDto })
+  @ApiStandardErrors()
   async revokeMembership(
-    @Param('id') userId: string,
-    @Param('membershipId') membershipId: string,
+    @Param('id', new ParseUUIDPipe()) userId: string,
+    @Param('membershipId', new ParseUUIDPipe()) membershipId: string,
     @CurrentUser() actor: AuthUser,
-  ) {
+  ): Promise<UserDetailResponseDto> {
     const scope = isPlatformActor(actor.roles)
       ? undefined
       : this.tenantContext.getTenantId();
 
-    // Capture the membership BEFORE deletion so we know if we need to
-    // tear down doctor-side catalog entries afterwards.
+    // Capture the membership BEFORE deletion so we know if we need to tear
+    // down doctor-side catalog entries afterwards.
     const detailBefore = await this.users.getDetail(userId);
     const target = detailBefore.memberships.find((m) => m.id === membershipId);
 
@@ -226,50 +282,75 @@ export class AdminUserController {
     }
 
     const detail = await this.users.getDetail(userId);
-    return summarize(detail);
+    return toUserDetailResponse(detail);
   }
 
   @Patch(':id/memberships/:membershipId/default')
   @Auditable({ action: 'admin.membership.default', resource: 'UserTenantMembership' })
+  @ApiOperation({
+    summary: "Promote a membership to the user's default tenant",
+    operationId: 'setDefaultMembership',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'User id' })
+  @ApiParam({ name: 'membershipId', format: 'uuid' })
+  @ApiOkResponse({ type: UserDetailResponseDto })
+  @ApiStandardErrors()
   async setDefaultMembership(
-    @Param('id') userId: string,
-    @Param('membershipId') membershipId: string,
+    @Param('id', new ParseUUIDPipe()) userId: string,
+    @Param('membershipId', new ParseUUIDPipe()) membershipId: string,
     @CurrentUser() actor: AuthUser,
-  ) {
+  ): Promise<UserDetailResponseDto> {
     const scope = isPlatformActor(actor.roles)
       ? undefined
       : this.tenantContext.getTenantId();
     await this.users.setDefaultMembership(userId, membershipId, scope);
     const detail = await this.users.getDetail(userId);
-    return summarize(detail);
+    return toUserDetailResponse(detail);
   }
 
   @Patch(':id/status')
   @Auditable({ action: 'admin.user.status', resource: 'User', captureBody: true })
+  @ApiOperation({
+    summary: "Change a user's status",
+    description: 'CLINIC_ADMIN may only change status for users with at least one membership in their tenant.',
+    operationId: 'setUserStatus',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: UserDetailResponseDto })
+  @ApiStandardErrors()
   async setStatus(
-    @Param('id') id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() body: SetUserStatusBodyDto,
     @CurrentUser() actor: AuthUser,
-  ) {
-    // CLINIC_ADMIN can only block users that have a membership in their tenant
+  ): Promise<UserDetailResponseDto> {
     if (!isPlatformActor(actor.roles)) {
       await this.users.getDetail(id, this.tenantContext.getTenantId());
     }
     await this.users.setStatus(id, body.status);
     const detail = await this.users.getDetail(id);
-    return summarize(detail);
+    return toUserDetailResponse(detail);
   }
 
   @Post(':id/reset-password')
+  @HttpCode(HttpStatus.OK)
   @Auditable({ action: 'admin.user.password.reset', resource: 'User' })
-  async resetPassword(@Param('id') id: string, @CurrentUser() actor: AuthUser) {
+  @ApiOperation({
+    summary: 'Reset a user password to a fresh temporary value',
+    description: 'Returns the temporary password so the admin can hand it to the user.',
+    operationId: 'resetUserPassword',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: ResetPasswordResponseDto })
+  @ApiStandardErrors()
+  async resetPassword(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() actor: AuthUser,
+  ): Promise<ResetPasswordResponseDto> {
     if (!isPlatformActor(actor.roles)) {
       await this.users.getDetail(id, this.tenantContext.getTenantId());
     }
     return this.users.resetPassword(id);
   }
-
-  // ─── Guards ────────────────────────────────────────────────────────────────
 
   private scopeTenantId(actor: AuthUser, scope: 'mine' | 'all' | undefined): string | null {
     if (isPlatformActor(actor.roles) && scope === 'all') return null;

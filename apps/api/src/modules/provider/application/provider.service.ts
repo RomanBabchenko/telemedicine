@@ -12,6 +12,7 @@ import { UserTenantMembership } from '../../identity/domain/entities/user-tenant
 import { PasswordService } from '../../identity/application/password.service';
 import { UserService } from '../../identity/application/user.service';
 import { TenantContextService } from '../../../common/tenant/tenant-context.service';
+import { toDoctorResponse } from '../api/mappers/doctor.mapper';
 
 export interface DoctorSearchInput {
   specialization?: string;
@@ -632,23 +633,6 @@ export class ProviderService {
   }
 
   private toDto(profile: DoctorTenantProfile, doctor: Doctor) {
-    const d = doctor;
-    return {
-      id: d.id,
-      firstName: d.firstName,
-      lastName: d.lastName,
-      specializations: d.specializations,
-      subspecializations: d.subspecializations,
-      licenseNumber: d.licenseNumber,
-      yearsOfExperience: d.yearsOfExperience,
-      languages: d.languages,
-      bio: d.bio,
-      photoUrl: d.photoUrl,
-      verificationStatus: d.verificationStatus,
-      rating: d.rating ? Number(d.rating) : null,
-      basePrice: Number(profile.price),
-      defaultDurationMin: d.defaultDurationMin,
-      isPublished: profile.isPublished,
-    };
+    return toDoctorResponse(doctor, profile);
   }
 }

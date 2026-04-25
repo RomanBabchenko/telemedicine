@@ -1,77 +1,152 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { CurrentUser, AuthUser } from '../../../common/auth/decorators';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiBody,
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
+import { AuthUser, CurrentUser } from '../../../common/auth/decorators';
 import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { Auditable } from '../../../common/audit/decorators';
+import { ApiAuth, ApiStandardErrors } from '../../../common/swagger';
+import { AppointmentResponseDto } from '../../booking/api/dto/appointment.response.dto';
+import { toAppointmentResponse } from '../../booking/api/mappers/appointment.mapper';
 import { PatientService } from '../application/patient.service';
-import { GrantConsentBodyDto, UpdatePatientBodyDto } from './dto';
-
-const toPatientDto = (p: {
-  id: string;
-  firstName: string;
-  lastName: string;
-  dateOfBirth: string | null;
-  gender: string | null;
-  email: string | null;
-  phone: string | null;
-  preferredLocale: string;
-}) => ({
-  id: p.id,
-  firstName: p.firstName,
-  lastName: p.lastName,
-  dateOfBirth: p.dateOfBirth,
-  gender: p.gender,
-  email: p.email,
-  phone: p.phone,
-  preferredLocale: p.preferredLocale,
-});
+import {
+  ConsentResponseDto,
+  DownloadUrlResponseDto,
+  GrantConsentBodyDto,
+  PatientDocumentResponseDto,
+  PatientResponseDto,
+  UpdatePatientBodyDto,
+} from './dto';
+import {
+  toConsentResponse,
+  toPatientResponse,
+} from './mappers/patient.mapper';
 
 @ApiTags('patients')
-@ApiBearerAuth()
 @Controller('patients/me')
 @UseGuards(JwtAuthGuard)
+@ApiAuth()
 export class PatientController {
   constructor(private readonly service: PatientService) {}
 
   @Get()
-  async me(@CurrentUser() user: AuthUser) {
+  @ApiOperation({
+    summary: "Fetch the caller's patient profile",
+    operationId: 'getMyPatientProfile',
+  })
+  @ApiOkResponse({ type: PatientResponseDto })
+  @ApiStandardErrors()
+  async me(@CurrentUser() user: AuthUser): Promise<PatientResponseDto> {
     const p = await this.service.getByUserId(user.id);
-    return toPatientDto(p);
+    return toPatientResponse(p);
   }
 
   @Patch()
   @Auditable({ action: 'patient.updated', resource: 'Patient' })
-  async update(@CurrentUser() user: AuthUser, @Body() body: UpdatePatientBodyDto) {
+  @ApiOperation({
+    summary: 'Update the caller’s patient profile',
+    operationId: 'updateMyPatientProfile',
+  })
+  @ApiBody({ type: UpdatePatientBodyDto })
+  @ApiOkResponse({ type: PatientResponseDto })
+  @ApiStandardErrors()
+  async update(
+    @CurrentUser() user: AuthUser,
+    @Body() body: UpdatePatientBodyDto,
+  ): Promise<PatientResponseDto> {
     const p = await this.service.updateMe(user.id, body);
-    return toPatientDto(p);
+    return toPatientResponse(p);
   }
 
   @Get('appointments')
-  async myAppointments(@CurrentUser() user: AuthUser) {
-    return this.service.myAppointments(user.id);
+  @ApiOperation({
+    summary: "List the caller's own appointments",
+    description: 'Ordered newest-first. Use GET /appointments for role-aware listings.',
+    operationId: 'listMyPatientAppointments',
+  })
+  @ApiOkResponse({ type: [AppointmentResponseDto] })
+  @ApiStandardErrors()
+  async myAppointments(
+    @CurrentUser() user: AuthUser,
+  ): Promise<AppointmentResponseDto[]> {
+    const rows = await this.service.myAppointments(user.id);
+    return rows.map(toAppointmentResponse);
   }
 
   @Get('documents')
-  async myDocuments(@CurrentUser() user: AuthUser) {
+  @ApiOperation({
+    summary: "List the caller's medical documents",
+    description: 'Ordered newest-first. pdfUrl is null here — use GET /documents/:id/pdf to obtain a signed download URL.',
+    operationId: 'listMyPatientDocuments',
+  })
+  @ApiOkResponse({ type: [PatientDocumentResponseDto] })
+  @ApiStandardErrors()
+  myDocuments(
+    @CurrentUser() user: AuthUser,
+  ): Promise<PatientDocumentResponseDto[]> {
     return this.service.myDocuments(user.id);
   }
 
   @Get('documents/:id/pdf')
-  async myDocumentPdf(
+  @ApiOperation({
+    summary: "Obtain a signed download URL for the caller's own document PDF",
+    description: 'Ownership is enforced via 404 (not 403) to avoid leaking document existence.',
+    operationId: 'getMyPatientDocumentPdfUrl',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: DownloadUrlResponseDto })
+  @ApiStandardErrors()
+  myDocumentPdf(
     @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
-  ) {
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<DownloadUrlResponseDto> {
     return this.service.getMyDocumentPdfUrl(user.id, id);
   }
 
   @Get('consents')
-  async myConsents(@CurrentUser() user: AuthUser) {
-    return this.service.myConsents(user.id);
+  @ApiOperation({
+    summary: "List the caller's consents",
+    operationId: 'listMyConsents',
+  })
+  @ApiOkResponse({ type: [ConsentResponseDto] })
+  @ApiStandardErrors()
+  async myConsents(@CurrentUser() user: AuthUser): Promise<ConsentResponseDto[]> {
+    const rows = await this.service.myConsents(user.id);
+    return rows.map(toConsentResponse);
   }
 
   @Post('consents')
+  @HttpCode(HttpStatus.CREATED)
   @Auditable({ action: 'consent.granted', resource: 'Consent' })
-  async grant(@CurrentUser() user: AuthUser, @Body() body: GrantConsentBodyDto) {
-    return this.service.grantConsent(user.id, body.type, body.versionCode ?? 'v1');
+  @ApiOperation({
+    summary: 'Grant a new consent',
+    description: 'Idempotent — granting an already-granted consent returns the existing row.',
+    operationId: 'grantMyConsent',
+  })
+  @ApiBody({ type: GrantConsentBodyDto })
+  @ApiCreatedResponse({ type: ConsentResponseDto })
+  @ApiStandardErrors()
+  async grant(
+    @CurrentUser() user: AuthUser,
+    @Body() body: GrantConsentBodyDto,
+  ): Promise<ConsentResponseDto> {
+    const c = await this.service.grantConsent(user.id, body.type, body.versionCode ?? 'v1');
+    return toConsentResponse(c);
   }
 }

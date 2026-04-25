@@ -92,7 +92,8 @@ JWT_REFRESH=$(openssl rand -base64 48 | tr -d '\n')
 cat > "$APP_DIR/.env" <<EOF
 NODE_ENV=production
 API_PORT=3000
-API_GLOBAL_PREFIX=api/v1
+# `v1` is appended by NestJS URI versioning — keep this free of version segments.
+API_GLOBAL_PREFIX=api
 CORS_ORIGINS=https://patient.$DOMAIN,https://doctor.$DOMAIN,https://admin.$DOMAIN
 
 # ---- Database (in docker compose) ----

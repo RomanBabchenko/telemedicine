@@ -10,6 +10,8 @@ import { MedicalDocument } from '../../documentation/domain/entities/medical-doc
 import { ProviderService } from '../../provider/application/provider.service';
 import { FileStorageService } from '../../file-storage/application/file-storage.service';
 import { TenantContextService } from '../../../common/tenant/tenant-context.service';
+import { PatientDocumentResponseDto } from '../api/dto/patient-document.response.dto';
+import { toPatientDocumentResponse } from '../api/mappers/patient.mapper';
 
 @Injectable()
 export class PatientService {
@@ -97,7 +99,7 @@ export class PatientService {
     });
   }
 
-  async myDocuments(userId: string) {
+  async myDocuments(userId: string): Promise<PatientDocumentResponseDto[]> {
     const tenantId = this.tenantContext.getTenantId();
     const patient = await this.getByUserId(userId);
     const docs = await this.documents.find({
@@ -109,34 +111,7 @@ export class PatientService {
     const doctorIds = Array.from(new Set(docs.map((d) => d.authorDoctorId)));
     const doctorMap = await this.providers.getDoctorsByIds(doctorIds);
 
-    return docs.map((d) => {
-      const author = doctorMap.get(d.authorDoctorId);
-      return {
-        id: d.id,
-        appointmentId: d.appointmentId,
-        authorDoctorId: d.authorDoctorId,
-        patientId: d.patientId,
-        type: d.type,
-        status: d.status,
-        structuredContent: d.structuredContent,
-        // The entity stores `pdfFileAssetId` (a MinIO key); turning it into a
-        // signed URL is a separate file-storage concern that hasn't been wired
-        // through to this endpoint yet. Returning null keeps the DTO contract
-        // intact for the patient list view.
-        pdfUrl: null,
-        signedAt: d.signedAt,
-        version: d.version,
-        parentDocumentId: d.parentDocumentId,
-        createdAt: d.createdAt,
-        doctor: author
-          ? {
-              firstName: author.firstName,
-              lastName: author.lastName,
-              specializations: author.specializations,
-            }
-          : undefined,
-      };
-    });
+    return docs.map((d) => toPatientDocumentResponse(d, doctorMap.get(d.authorDoctorId)));
   }
 
   /**

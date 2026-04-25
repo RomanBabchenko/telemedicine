@@ -93,12 +93,15 @@ export class ConsultationService {
     }
 
     // Terminal-state gate — a completed/cancelled appointment is over, no more
-    // joins. We check this before the time-gate so the user gets an accurate
-    // error ("cancelled") rather than a misleading one ("meeting is over").
+    // joins. Checked before the time-gate so the user gets an accurate error
+    // ("cancelled") rather than a misleading one ("meeting is over").
+    // The machine-readable `code` lets frontends branch without parsing the
+    // localised message; the Ukrainian text is preserved for current UX.
     if (TERMINAL_APPOINTMENT_STATUSES.has(appointment.status)) {
-      throw new ForbiddenException(
-        'Зустріч скасовано або завершено — підключення недоступне.',
-      );
+      throw new ForbiddenException({
+        message: 'Зустріч скасовано або завершено — підключення недоступне.',
+        code: 'consultation.terminal',
+      });
     }
 
     // Time-gate — the invite link may live for a week, but the video room
@@ -109,14 +112,21 @@ export class ConsultationService {
     const closesAt = appointment.endAt.getTime() + JOIN_CLOSES_AFTER_END_MS;
     if (now < opensAt) {
       const minutesUntil = Math.ceil((opensAt - now) / 60_000);
-      throw new ForbiddenException(
-        `До початку зустрічі ще ${minutesUntil} хв. Повертайтесь ближче до ${formatHM(appointment.startAt)}.`,
-      );
+      throw new ForbiddenException({
+        message: `До початку зустрічі ще ${minutesUntil} хв. Повертайтесь ближче до ${formatHM(appointment.startAt)}.`,
+        code: 'consultation.not_yet_open',
+        details: {
+          minutesUntil,
+          opensAt: new Date(opensAt).toISOString(),
+          startAt: appointment.startAt.toISOString(),
+        },
+      });
     }
     if (now > closesAt) {
-      throw new ForbiddenException(
-        'Зустріч завершено — підключення недоступне.',
-      );
+      throw new ForbiddenException({
+        message: 'Зустріч завершено — підключення недоступне.',
+        code: 'consultation.meeting_over',
+      });
     }
 
     // MIS prepaid gate — block patient join until the clinic confirms payment
@@ -127,9 +137,10 @@ export class ConsultationService {
       appointment.misPaymentType === 'prepaid' &&
       appointment.misPaymentStatus !== 'paid'
     ) {
-      throw new ForbiddenException(
-        'Оплату не завершено. Будь ласка, зверніться до клініки для завершення оплати.',
-      );
+      throw new ForbiddenException({
+        message: 'Оплату не завершено. Будь ласка, зверніться до клініки для завершення оплати.',
+        code: 'consultation.mis_payment_pending',
+      });
     }
 
     // Anonymous-patient invites carry user.id = ConsultationInvite.id (a

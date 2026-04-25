@@ -18,6 +18,7 @@ import { TenantContextModule } from './common/tenant/tenant-context.module';
 import { TenantResolverMiddleware } from './common/tenant/tenant-resolver.middleware';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuditInterceptor } from './common/audit/audit.interceptor';
+import { IdempotencyInterceptor } from './common/interceptors/idempotency.interceptor';
 import { IdentityModule } from './modules/identity/identity.module';
 import { TenantModule } from './modules/tenant/tenant.module';
 import { ProviderModule } from './modules/provider/provider.module';
@@ -74,6 +75,13 @@ import { HealthModule } from './modules/health/health.module';
   ],
   providers: [
     AppConfig,
+    // Idempotency runs BEFORE Audit so a replay (cache hit) short-circuits the
+    // handler and still records one audit entry per real execution (from the
+    // first request). Nest applies global interceptors in registration order.
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: IdempotencyInterceptor,
+    },
     {
       provide: APP_INTERCEPTOR,
       useClass: AuditInterceptor,
