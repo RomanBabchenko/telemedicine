@@ -1,5 +1,7 @@
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import { DataSource, Repository } from 'typeorm';
 import {
   AppointmentStatus,
@@ -10,6 +12,7 @@ import {
 } from '@telemed/shared-types';
 import { ExternalEntityType, ExternalIdentity } from '../domain/entities/external-identity.entity';
 import { OnlineAppointmentPayload } from '../domain/ports/mis-connector';
+import { SubmitAppointmentBodyDto } from '../api/dto/submit-appointment.body.dto';
 import { Doctor } from '../../provider/domain/entities/doctor.entity';
 import { DoctorTenantProfile } from '../../provider/domain/entities/doctor-tenant-profile.entity';
 import { Patient } from '../../patient/domain/entities/patient.entity';
@@ -68,40 +71,44 @@ export class WebhookEventHandler {
     connectorId: string,
     payload: OnlineAppointmentPayload,
   ) {
-    // Idempotency: if this external appointment was already processed, reissue invite links
-    if (payload.externalAppointmentId) {
-      const existingApptId = await this.resolveExternalId(
-        tenantId,
-        connectorId,
-        'APPOINTMENT',
-        payload.externalAppointmentId,
-      );
-      if (existingApptId) {
-        return this.reissueInvites(tenantId, existingApptId);
-      }
+    // Declarative validation. The controller accepts `@Body() body: unknown` so
+    // ValidationPipe doesn't run upstream — validate here, after the connector
+    // has normalized the payload to OnlineAppointmentPayload.
+    const dto = plainToInstance(SubmitAppointmentBodyDto, payload);
+    const errors = await validate(dto);
+    if (errors.length > 0) {
+      throw new BadRequestException({
+        message: 'Invalid MIS appointment payload',
+        details: errors.map((e) => ({ property: e.property, constraints: e.constraints })),
+      });
+    }
+
+    // Idempotency: if this external appointment was already processed, reissue
+    // invite links instead of creating a duplicate.
+    const existingApptId = await this.resolveExternalId(
+      tenantId,
+      connectorId,
+      'APPOINTMENT',
+      payload.externalAppointmentId,
+    );
+    if (existingApptId) {
+      return this.reissueInvites(tenantId, existingApptId);
     }
 
     const isAnonymous = payload.isAnonymousPatient === true;
-    if (isAnonymous) {
-      if (
-        payload.patientFirstName ||
+    if (
+      isAnonymous &&
+      (payload.patientFirstName ||
         payload.patientLastName ||
         payload.patientEmail ||
         payload.patientPhone ||
-        payload.patientExternalId
-      ) {
-        // Anonymous flag wins — the MIS MUST NOT send PII in this mode. Log
-        // loudly so ops notice if DocDream leaks fields during migration.
-        this.logger.warn(
-          `Anonymous appointment payload contains patient* fields; ignored (connector=${connectorId})`,
-        );
-      }
-    } else {
-      if (!payload.patientFirstName || !payload.patientLastName) {
-        throw new Error(
-          'patientFirstName and patientLastName are required when isAnonymousPatient is not set',
-        );
-      }
+        payload.patientExternalId)
+    ) {
+      // Anonymous flag wins — the MIS MUST NOT send PII in this mode. Log
+      // loudly so ops notice if DocDream leaks fields during migration.
+      this.logger.warn(
+        `Anonymous appointment payload contains patient* fields; ignored (connector=${connectorId})`,
+      );
     }
 
     const startAt = new Date(payload.startAt);
@@ -146,7 +153,7 @@ export class WebhookEventHandler {
           endAt,
           status: SlotStatus.BOOKED,
           sourceIsMis: true,
-          externalSlotId: payload.externalAppointmentId ?? null,
+          externalSlotId: payload.externalAppointmentId,
         });
         slot = await slotRepo.save(slot);
       }
@@ -158,13 +165,11 @@ export class WebhookEventHandler {
       });
       if (existingAppt) return existingAppt;
 
-      const paymentType = payload.paymentType ?? 'postpaid';
-      const paymentStatus = payload.paymentStatus ?? 'unpaid';
       // Prepaid + unpaid → hold the appointment until the clinic confirms
       // payment via PATCH /integrations/:tenantId/appointments/:id/payment-status.
       // Postpaid or prepaid+paid → confirmed, patient can join immediately.
       const initialStatus =
-        paymentType === 'prepaid' && paymentStatus !== 'paid'
+        payload.paymentType === 'prepaid' && payload.paymentStatus !== 'paid'
           ? AppointmentStatus.AWAITING_PAYMENT
           : AppointmentStatus.CONFIRMED;
 
@@ -178,8 +183,8 @@ export class WebhookEventHandler {
         status: initialStatus,
         startAt,
         endAt,
-        misPaymentType: paymentType,
-        misPaymentStatus: paymentStatus,
+        misPaymentType: payload.paymentType,
+        misPaymentStatus: payload.paymentStatus,
       });
       return apptRepo.save(appt);
     });
@@ -188,17 +193,15 @@ export class WebhookEventHandler {
     const session = await this.consultations.ensureForAppointment(appointment.id);
 
     // 6. Map external appointment ID
-    if (payload.externalAppointmentId) {
-      await this.externalIds.save(
-        this.externalIds.create({
-          tenantId,
-          entityType: 'APPOINTMENT',
-          internalId: appointment.id,
-          externalSystem: connectorId,
-          externalId: payload.externalAppointmentId,
-        }),
-      );
-    }
+    await this.externalIds.save(
+      this.externalIds.create({
+        tenantId,
+        entityType: 'APPOINTMENT',
+        internalId: appointment.id,
+        externalSystem: connectorId,
+        externalId: payload.externalAppointmentId,
+      }),
+    );
 
     // 7. Generate invite links (TTL = appointment.endAt + grace)
     // Patient invite gets userId=null in anonymous mode; the consume path
@@ -458,28 +461,28 @@ export class WebhookEventHandler {
     connectorId: string,
     payload: OnlineAppointmentPayload,
   ): Promise<{ patientId: string; patientUserId: string }> {
-    if (payload.patientExternalId) {
-      const existingId = await this.resolveExternalId(
-        tenantId,
-        connectorId,
-        'PATIENT',
-        payload.patientExternalId,
-      );
-      if (existingId) {
-        const patient = await this.patients.findOne({ where: { id: existingId } });
-        if (patient && patient.userId) {
-          await this.ensureMembership(patient.userId, tenantId, Role.PATIENT);
-          return { patientId: patient.id, patientUserId: patient.userId };
-        }
-        // Patient without userId — need to create a user
-        if (patient) {
-          const userId = await this.createUserForPatient(patient, tenantId, payload);
-          return { patientId: patient.id, patientUserId: userId };
-        }
+    // Named-mode payloads always carry patientExternalId (validated at the
+    // entry of handleOnlineAppointment). It is the single dedup key.
+    const patientExternalId = payload.patientExternalId as string;
+
+    const existingId = await this.resolveExternalId(
+      tenantId,
+      connectorId,
+      'PATIENT',
+      patientExternalId,
+    );
+    if (existingId) {
+      const patient = await this.patients.findOne({ where: { id: existingId } });
+      if (patient && patient.userId) {
+        await this.ensureMembership(patient.userId, tenantId, Role.PATIENT);
+        return { patientId: patient.id, patientUserId: patient.userId };
+      }
+      if (patient) {
+        const userId = await this.createUserForPatient(patient, tenantId, payload);
+        return { patientId: patient.id, patientUserId: userId };
       }
     }
 
-    // Create from scratch
     return this.createPatientFromPayload(tenantId, connectorId, payload);
   }
 
@@ -513,14 +516,17 @@ export class WebhookEventHandler {
     connectorId: string,
     payload: OnlineAppointmentPayload,
   ): Promise<{ patientId: string; patientUserId: string }> {
-    // Anonymous payloads short-circuit before reaching this helper, so
-    // patientFirstName / patientLastName are guaranteed present here (the
-    // caller validated them in handleOnlineAppointment).
+    // Anonymous payloads short-circuit before reaching this helper. Named-mode
+    // payloads are guaranteed by validation to carry patientExternalId,
+    // patientFirstName, patientLastName, and at least one of email/phone.
     const firstName = payload.patientFirstName as string;
     const lastName = payload.patientLastName as string;
+    const patientExternalId = payload.patientExternalId as string;
+    // Deterministic synthetic email (per externalId) when MIS sends only phone.
+    // Replaces the old `Date.now()`-based fallback that produced a fresh
+    // synthetic email — and a duplicate User/Patient — on every webhook.
     const email =
-      payload.patientEmail ??
-      `patient.${payload.patientExternalId ?? Date.now()}@mis-import.local`;
+      payload.patientEmail ?? `patient.${patientExternalId}@mis-import.local`;
     const user = await this.findOrCreateUser({
       email,
       phone: payload.patientPhone,
@@ -528,7 +534,6 @@ export class WebhookEventHandler {
       lastName,
     });
 
-    // Reuse existing patient if user already has one
     let patient = await this.patients.findOne({ where: { userId: user.id } });
     if (!patient) {
       patient = this.patients.create({
@@ -542,21 +547,19 @@ export class WebhookEventHandler {
       await this.patients.save(patient);
     }
 
-    if (payload.patientExternalId) {
-      const mapped = await this.resolveExternalId(
-        tenantId, connectorId, 'PATIENT', payload.patientExternalId,
+    const mapped = await this.resolveExternalId(
+      tenantId, connectorId, 'PATIENT', patientExternalId,
+    );
+    if (!mapped) {
+      await this.externalIds.save(
+        this.externalIds.create({
+          tenantId,
+          entityType: 'PATIENT',
+          internalId: patient.id,
+          externalSystem: connectorId,
+          externalId: patientExternalId,
+        }),
       );
-      if (!mapped) {
-        await this.externalIds.save(
-          this.externalIds.create({
-            tenantId,
-            entityType: 'PATIENT',
-            internalId: patient.id,
-            externalSystem: connectorId,
-            externalId: payload.patientExternalId,
-          }),
-        );
-      }
     }
 
     await this.ensureMembership(user.id, tenantId, Role.PATIENT);
@@ -585,7 +588,7 @@ export class WebhookEventHandler {
       tenantId,
       doctorId,
       code: 'MIS_ONLINE',
-      name: payload.serviceTypeName ?? 'Онлайн-консультація',
+      name: 'Онлайн-консультація',
       durationMin: durationMin > 0 ? durationMin : 30,
       price: '0',
       mode: ServiceMode.VIDEO,

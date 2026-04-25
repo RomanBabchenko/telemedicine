@@ -34,12 +34,21 @@ export interface ExternalSlot {
 }
 
 export interface OnlineAppointmentPayload {
-  externalAppointmentId?: string;
+  // MIS-side appointment id. Required for idempotency on retried webhooks
+  // and for the /by-external/* management endpoints (cancel, payment-status,
+  // recording, revoke).
+  externalAppointmentId: string;
   doctorExternalId: string;
-  // When isAnonymousPatient=true, every patient* field below is ignored and
-  // no User/Patient row is created on our side — the invite URL resolves to
-  // a stateless, session-scoped JWT. See consultation-invite.service for the
-  // anonymous token path. Kept optional for the legacy named flow.
+  // Patient identity / contact fields. TypeScript marks them optional because
+  // the type does not distinguish anonymous vs named payloads — the runtime
+  // contract (enforced by SubmitAppointmentBodyDto + WebhookEventHandler) is:
+  //   - isAnonymousPatient=true:  every patient* field MUST be absent. No
+  //     User/Patient row is created; the invite URL resolves to a stateless
+  //     session-scoped JWT. See consultation-invite.service.
+  //   - isAnonymousPatient!==true: patientExternalId + patientFirstName +
+  //     patientLastName are REQUIRED (externalId is the dedup key against
+  //     mis_external_mappings), and at least one of patientEmail/patientPhone
+  //     MUST be present so the system has a notification channel.
   patientExternalId?: string;
   patientFirstName?: string;
   patientLastName?: string;
@@ -50,14 +59,14 @@ export interface OnlineAppointmentPayload {
   doctorSpecialization: string;
   startAt: string;
   endAt: string;
-  serviceTypeName?: string;
-  // MIS-controlled payment flow.
-  //   postpaid (default): patient can join immediately.
+  // MIS-controlled payment flow. Both fields are required — the MIS must
+  // explicitly state its payment model rather than relying on hidden defaults.
+  //   postpaid: patient can join immediately.
   //   prepaid + paid: same as postpaid — appointment is CONFIRMED.
   //   prepaid + unpaid: appointment is AWAITING_PAYMENT — patient is blocked
   //     from joining until the clinic calls the payment-status endpoint.
-  paymentType?: 'prepaid' | 'postpaid';
-  paymentStatus?: 'paid' | 'unpaid';
+  paymentType: 'prepaid' | 'postpaid';
+  paymentStatus: 'paid' | 'unpaid';
   // Anonymous-patient mode: the MIS does not share any PII about the patient.
   // Appointment gets patient_id=null + is_anonymous_patient=true; the patient
   // invite JWT is issued with scope='invite-anon' and sub=null.

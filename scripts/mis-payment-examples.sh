@@ -6,7 +6,6 @@
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh prepaid:pay <appointmentId>
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh prepaid:pay-ext <externalAppointmentId>
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh postpaid
-#   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh legacy
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh anon
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh anon:prepaid
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh anon:now
@@ -120,32 +119,7 @@ case "$cmd" in
       }' | jq .
     ;;
 
-  # ─── 4. Legacy payload — no payment fields ──────────────────────────────
-  # Backward-compatible with the original webhook contract. Defaults kick in:
-  # paymentType=postpaid, paymentStatus=unpaid → status=CONFIRMED.
-  legacy)
-    require_api_key
-    curl -sS -X POST "$API/integrations/$TENANT/appointments" \
-      -H "Authorization: ApiKey $API_KEY" \
-      -H 'Content-Type: application/json' \
-      -d '{
-        "type": "appointment.online",
-        "externalAppointmentId": "dd-legacy-001",
-        "doctorExternalId": "docdream-doc-77",
-        "doctorFirstName": "Анна",
-        "doctorLastName": "Коваленко",
-        "doctorSpecialization": "Кардіологія",
-        "patientExternalId": "dd-patient-legacy-001",
-        "patientFirstName": "Дмитро",
-        "patientLastName": "Шевченко",
-        "patientEmail": "dshevchenko@example.com",
-        "patientPhone": "+380509876543",
-        "startAt": "2026-04-20T14:00:00Z",
-        "endAt": "2026-04-20T14:30:00Z"
-      }' | jq .
-    ;;
-
-  # ─── 5. Anonymous patient (postpaid, CONFIRMED) ─────────────────────────
+  # ─── 4. Anonymous patient (postpaid, CONFIRMED) ─────────────────────────
   # MIS refuses to share any patient PII. No User / Patient row is created on
   # our side; patient_id stays NULL and the patient invite resolves to a
   # scope='invite-anon' JWT. The MIS delivers the returned patientInviteUrl
@@ -167,6 +141,8 @@ case "$cmd" in
         "doctorSpecialization": "Кардіологія",
         "startAt": "2026-04-25T09:00:00Z",
         "endAt": "2026-04-25T09:30:00Z",
+        "paymentType": "postpaid",
+        "paymentStatus": "unpaid",
         "isAnonymousPatient": true
       }' | jq .
     ;;
@@ -221,6 +197,8 @@ case "$cmd" in
           doctorSpecialization: "Кардіологія",
           startAt: $start,
           endAt: $end,
+          paymentType: "postpaid",
+          paymentStatus: "unpaid",
           isAnonymousPatient: true
         }')" | jq .
     ;;
@@ -303,7 +281,6 @@ Commands:
   prepaid:pay <id>               Mark prepaid as paid by internal appointmentId
   prepaid:pay-ext <extId>        Mark prepaid as paid by MIS externalAppointmentId
   postpaid                       Create a postpaid appointment (CONFIRMED)
-  legacy                         Create without payment fields (defaults to postpaid)
   anon                           Create anonymous-patient appointment (no PII, CONFIRMED)
   anon:prepaid                   Anonymous + prepaid+unpaid (AWAITING_PAYMENT)
   anon:now                       Anonymous + live time window (joinable right now)
