@@ -42,6 +42,8 @@ import {
   CancelAppointmentBodyDto,
   CancelAppointmentResponseDto,
   PaymentStatusResponseDto,
+  RescheduleAppointmentBodyDto,
+  RescheduleAppointmentResponseDto,
   RevokeInvitesBodyDto,
   RevokeInvitesResponseDto,
   SubmitAppointmentBodyDto,
@@ -325,6 +327,70 @@ export class MisController {
       tenantId,
       externalLocator(externalAppointmentId, req),
       body.reason,
+    );
+  }
+
+  @Post(':tenantId/appointments/:appointmentId/reschedule')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(ApiKeyGuard)
+  @Auditable({ action: 'mis.appointment.rescheduled', resource: 'Appointment' })
+  @ApiSecurity('api-key')
+  @ApiOperation({
+    summary: 'Reschedule an appointment to a new time (by internal id)',
+    description:
+      "Status is preserved (CONFIRMED stays CONFIRMED at the new time, etc.). Allowed only while the appointment is still pre-call (RESERVED, AWAITING_PAYMENT, CONFIRMED). Old invite URLs are revoked and fresh ones returned — re-send these to the participants.",
+    operationId: 'misRescheduleAppointment',
+  })
+  @ApiParam({ name: 'tenantId', format: 'uuid' })
+  @ApiParam({ name: 'appointmentId', format: 'uuid' })
+  @ApiBody({ type: RescheduleAppointmentBodyDto })
+  @ApiOkResponse({ type: RescheduleAppointmentResponseDto })
+  @ApiStandardErrors()
+  async rescheduleAppointment(
+    @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
+    @Param('appointmentId', new ParseUUIDPipe()) appointmentId: string,
+    @Body() body: RescheduleAppointmentBodyDto,
+    @Req() req: Request,
+  ): Promise<RescheduleAppointmentResponseDto> {
+    await this.tenants.getOrThrow(tenantId);
+    return this.appointments.reschedule(
+      tenantId,
+      { kind: 'internal', appointmentId },
+      new Date(body.startAt),
+      new Date(body.endAt),
+      body.reason,
+      connectorIdFromRequest(req),
+    );
+  }
+
+  @Post(':tenantId/appointments/by-external/:externalAppointmentId/reschedule')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(ApiKeyGuard)
+  @Auditable({ action: 'mis.appointment.rescheduled', resource: 'Appointment' })
+  @ApiSecurity('api-key')
+  @ApiOperation({
+    summary: 'Reschedule an appointment to a new time (by external id)',
+    operationId: 'misRescheduleAppointmentByExternal',
+  })
+  @ApiParam({ name: 'tenantId', format: 'uuid' })
+  @ApiParam({ name: 'externalAppointmentId' })
+  @ApiBody({ type: RescheduleAppointmentBodyDto })
+  @ApiOkResponse({ type: RescheduleAppointmentResponseDto })
+  @ApiStandardErrors()
+  async rescheduleAppointmentByExternal(
+    @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
+    @Param('externalAppointmentId') externalAppointmentId: string,
+    @Body() body: RescheduleAppointmentBodyDto,
+    @Req() req: Request,
+  ): Promise<RescheduleAppointmentResponseDto> {
+    await this.tenants.getOrThrow(tenantId);
+    return this.appointments.reschedule(
+      tenantId,
+      externalLocator(externalAppointmentId, req),
+      new Date(body.startAt),
+      new Date(body.endAt),
+      body.reason,
+      connectorIdFromRequest(req),
     );
   }
 

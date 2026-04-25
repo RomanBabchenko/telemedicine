@@ -13,6 +13,9 @@
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh recording:ext <externalAppointmentId>
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh cancel <appointmentId> [reason]
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh cancel:ext <externalAppointmentId> [reason]
+#   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh reschedule <appointmentId> <startAt> <endAt> [reason]
+#   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh reschedule:ext <externalAppointmentId> <startAt> <endAt> [reason]
+#   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh reschedule:now <appointmentId>
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh revoke <appointmentId> [PATIENT|DOCTOR]
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh revoke:ext <externalAppointmentId> [PATIENT|DOCTOR]
 #
@@ -247,6 +250,57 @@ case "$cmd" in
       -d "$(jq -n --arg r "$reason" '{reason: ($r | select(length > 0))}')" | jq .
     ;;
 
+  # ─── Reschedule appointment (slot + start/end change, status preserved) ─
+  # Existing invite tokens stay valid — their TTL is just pushed to the new
+  # endAt + grace. Patient and doctor keep using the same URLs; the next
+  # time they hit the join page they see the new time.
+  #
+  # Allowed only while the appointment is still pre-call (RESERVED,
+  # AWAITING_PAYMENT, CONFIRMED). IN_PROGRESS / terminal → 400.
+  reschedule)
+    require_api_key
+    appt_id="${2:?usage: $0 reschedule <appointmentId> <startAt> <endAt> [reason]}"
+    start_at="${3:?usage: $0 reschedule <appointmentId> <startAt> <endAt> [reason]}"
+    end_at="${4:?usage: $0 reschedule <appointmentId> <startAt> <endAt> [reason]}"
+    reason="${5:-}"
+    curl -sS -X POST \
+      "$API/integrations/$TENANT/appointments/$appt_id/reschedule" \
+      -H "Authorization: ApiKey $API_KEY" \
+      -H 'Content-Type: application/json' \
+      -d "$(jq -n --arg s "$start_at" --arg e "$end_at" --arg r "$reason" \
+        '{startAt: $s, endAt: $e} + (if $r != "" then {reason: $r} else {} end)')" | jq .
+    ;;
+
+  reschedule:ext)
+    require_api_key
+    ext_id="${2:?usage: $0 reschedule:ext <externalAppointmentId> <startAt> <endAt> [reason]}"
+    start_at="${3:?usage: $0 reschedule:ext <externalAppointmentId> <startAt> <endAt> [reason]}"
+    end_at="${4:?usage: $0 reschedule:ext <externalAppointmentId> <startAt> <endAt> [reason]}"
+    reason="${5:-}"
+    curl -sS -X POST \
+      "$API/integrations/$TENANT/appointments/by-external/$ext_id/reschedule" \
+      -H "Authorization: ApiKey $API_KEY" \
+      -H 'Content-Type: application/json' \
+      -d "$(jq -n --arg s "$start_at" --arg e "$end_at" --arg r "$reason" \
+        '{startAt: $s, endAt: $e} + (if $r != "" then {reason: $r} else {} end)')" | jq .
+    ;;
+
+  # Convenience: push the appointment to a fresh now → now+30min window so the
+  # join gate is open immediately (mirrors the anon:now smoke-test pattern).
+  # Useful to verify the same invite URL still works after reschedule.
+  reschedule:now)
+    require_api_key
+    appt_id="${2:?usage: $0 reschedule:now <appointmentId>}"
+    start_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    end_at=$(date -u -d '+30 minutes' +"%Y-%m-%dT%H:%M:%SZ")
+    curl -sS -X POST \
+      "$API/integrations/$TENANT/appointments/$appt_id/reschedule" \
+      -H "Authorization: ApiKey $API_KEY" \
+      -H 'Content-Type: application/json' \
+      -d "$(jq -n --arg s "$start_at" --arg e "$end_at" \
+        '{startAt: $s, endAt: $e, reason: "manual now-test"}')" | jq .
+    ;;
+
   # ─── Revoke invite links without cancelling the appointment ────────────
   # Use when only the link is compromised. The appointment stays alive;
   # re-POST the original webhook payload to get fresh invite URLs.
@@ -288,6 +342,14 @@ Commands:
   recording:ext <extId>          Fetch recording by MIS externalAppointmentId
   cancel <id> [reason]           Cancel appointment + revoke all invites
   cancel:ext <extId> [reason]    Same, keyed by externalAppointmentId
+  reschedule <id> <startAt> <endAt> [reason]
+                                 Move appointment to a new slot/time. Status,
+                                 patient_id, and existing invite URLs are
+                                 preserved — invite TTL is pushed to new endAt.
+  reschedule:ext <extId> <startAt> <endAt> [reason]
+                                 Same, keyed by externalAppointmentId
+  reschedule:now <id>            Push appointment into a now → now+30min window
+                                 (smoke-test the join gate after reschedule)
   revoke <id> [PATIENT|DOCTOR]   Revoke invite link(s) without cancelling appointment
   revoke:ext <extId> [ROLE]      Same, keyed by externalAppointmentId
 
@@ -303,6 +365,9 @@ Examples:
   $0 prepaid:pay c6442524-c847-4d28-8d59-a1af5316c3a9
   $0 postpaid
   $0 recording c6442524-c847-4d28-8d59-a1af5316c3a9
+  $0 reschedule c6442524-c847-4d28-8d59-a1af5316c3a9 \\
+      2026-05-10T14:00:00Z 2026-05-10T14:30:00Z "patient asked"
+  $0 reschedule:now c6442524-c847-4d28-8d59-a1af5316c3a9
   API=http://10.0.0.5:3000/api/v1 $0 postpaid
 EOF
     ;;

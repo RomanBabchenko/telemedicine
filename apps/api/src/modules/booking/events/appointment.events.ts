@@ -35,3 +35,17 @@ export class AppointmentCompletedEvent {
     public readonly tenantId: string,
   ) {}
 }
+
+export class AppointmentRescheduledEvent {
+  constructor(
+    public readonly appointmentId: string,
+    public readonly tenantId: string,
+    public readonly patientId: string | null,
+    public readonly doctorId: string,
+    public readonly oldStartAt: Date,
+    public readonly oldEndAt: Date,
+    public readonly newStartAt: Date,
+    public readonly newEndAt: Date,
+    public readonly reason: string | null,
+  ) {}
+}

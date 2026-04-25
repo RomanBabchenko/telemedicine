@@ -23,6 +23,7 @@ import {
   AppointmentCancelledEvent,
   AppointmentCompletedEvent,
   AppointmentConfirmedEvent,
+  AppointmentRescheduledEvent,
   AppointmentReservedEvent,
 } from '../events/appointment.events';
 
@@ -207,6 +208,118 @@ export class AppointmentService {
 
   async markAwaitingPayment(id: string): Promise<Appointment> {
     return this.transition(id, AppointmentStatus.AWAITING_PAYMENT);
+  }
+
+  /**
+   * Move an appointment to a different slot. Status is preserved — this is
+   * purely a time/slot swap, not a workflow transition. Allowed only while
+   * the appointment is still pre-call (RESERVED, AWAITING_PAYMENT, CONFIRMED);
+   * once IN_PROGRESS or terminal, rescheduling makes no sense.
+   *
+   * Atomicity: pessimistic locks on the appointment AND both slots so two
+   * concurrent reschedules can't end up both pointing at the same slot
+   * (slotId is UNIQUE on appointment, so a race would surface as a DB error
+   * — the lock turns it into a clean 409 instead).
+   */
+  async reschedule(
+    id: string,
+    newSlotId: string,
+    reason?: string,
+  ): Promise<Appointment> {
+    const ALLOWED_FROM = new Set<AppointmentStatus>([
+      AppointmentStatus.RESERVED,
+      AppointmentStatus.AWAITING_PAYMENT,
+      AppointmentStatus.CONFIRMED,
+    ]);
+
+    return this.dataSource.transaction(async (em) => {
+      const apptRepo = em.getRepository(Appointment);
+      const slotRepo = em.getRepository(Slot);
+
+      const appt = await apptRepo
+        .createQueryBuilder('a')
+        .setLock('pessimistic_write')
+        .where('a.id = :id', { id })
+        .getOne();
+      if (!appt) throw new NotFoundException('Appointment not found');
+      if (!ALLOWED_FROM.has(appt.status)) {
+        throw new BadRequestException(
+          `Cannot reschedule appointment in status ${appt.status}`,
+        );
+      }
+
+      if (appt.slotId === newSlotId) {
+        // No-op reschedule — reject so the caller doesn't confuse "nothing
+        // happened" with success.
+        throw new BadRequestException('New slot is identical to the current slot');
+      }
+
+      const newSlot = await slotRepo
+        .createQueryBuilder('s')
+        .setLock('pessimistic_write')
+        .where('s.id = :id AND s.tenant_id = :tenantId', {
+          id: newSlotId,
+          tenantId: appt.tenantId,
+        })
+        .getOne();
+      if (!newSlot) throw new NotFoundException('New slot not found');
+
+      // slotId is UNIQUE on appointments — verify no *other* appointment is
+      // already attached to this slot. (Includes both BOOKED-for-them and
+      // soft-deleted-but-still-FK rows.)
+      const conflicting = await apptRepo.findOne({
+        where: { slotId: newSlot.id },
+      });
+      if (conflicting && conflicting.id !== appt.id) {
+        throw new ConflictException('Target slot is already booked');
+      }
+
+      const oldSlotId = appt.slotId;
+      const oldStartAt = appt.startAt;
+      const oldEndAt = appt.endAt;
+
+      // Free the old slot. We unconditionally flip to OPEN here — for MIS-
+      // managed slots this still leaves them harmless because their lifecycle
+      // is owned by the next webhook anyway.
+      const oldSlot = await slotRepo
+        .createQueryBuilder('s')
+        .setLock('pessimistic_write')
+        .where('s.id = :id', { id: oldSlotId })
+        .getOne();
+      if (oldSlot) {
+        oldSlot.status = SlotStatus.OPEN;
+        oldSlot.heldUntil = null;
+        await em.save(oldSlot);
+      }
+
+      // Lock down the new slot. BOOKED matches CONFIRMED; for not-yet-confirmed
+      // statuses we still mark BOOKED — the MIS path always reschedules into a
+      // freshly-minted MIS slot, and there's no native client UI to land in
+      // these states with reschedule yet.
+      newSlot.status = SlotStatus.BOOKED;
+      newSlot.heldUntil = null;
+      await em.save(newSlot);
+
+      appt.slotId = newSlot.id;
+      appt.startAt = newSlot.startAt;
+      appt.endAt = newSlot.endAt;
+      const saved = await apptRepo.save(appt);
+
+      this.eventBus.publish(
+        new AppointmentRescheduledEvent(
+          saved.id,
+          saved.tenantId,
+          saved.patientId,
+          saved.doctorId,
+          oldStartAt,
+          oldEndAt,
+          saved.startAt,
+          saved.endAt,
+          reason ?? null,
+        ),
+      );
+      return saved;
+    });
   }
 
   async cancel(id: string, byPatient: boolean, reason?: string): Promise<Appointment> {

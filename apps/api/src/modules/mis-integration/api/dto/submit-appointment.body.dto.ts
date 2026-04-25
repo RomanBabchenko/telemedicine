@@ -130,21 +130,23 @@ export class SubmitAppointmentBodyDto implements OnlineAppointmentPayload {
   @IsISO8601()
   endAt!: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     enum: ['prepaid', 'postpaid'],
     description:
-      "Required. postpaid: patient can join immediately. prepaid + paid: same as postpaid. prepaid + unpaid: AWAITING_PAYMENT until the clinic calls the payment-status endpoint.",
+      "Default: 'postpaid'. postpaid: patient can join immediately. prepaid + paid: same as postpaid. prepaid + unpaid: AWAITING_PAYMENT until the clinic calls the payment-status endpoint.",
   })
+  @IsOptional()
   @IsIn(['prepaid', 'postpaid'])
-  paymentType!: 'prepaid' | 'postpaid';
+  paymentType?: 'prepaid' | 'postpaid';
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     enum: ['paid', 'unpaid'],
     description:
-      "Required. Combined with paymentType to derive the initial appointment status. Update later via PATCH /appointments/:id/payment-status as the clinic confirms payment.",
+      "Default: 'unpaid'. Combined with paymentType to derive the initial appointment status. Update later via PATCH /appointments/:id/payment-status as the clinic confirms payment.",
   })
+  @IsOptional()
   @IsIn(['paid', 'unpaid'])
-  paymentStatus!: 'paid' | 'unpaid';
+  paymentStatus?: 'paid' | 'unpaid';
 
   @ApiPropertyOptional({
     description:

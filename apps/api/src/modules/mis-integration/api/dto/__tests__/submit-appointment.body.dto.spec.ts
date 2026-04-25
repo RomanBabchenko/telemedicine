@@ -168,16 +168,16 @@ describe('SubmitAppointmentBodyDto', () => {
       expect(errors.some((e) => e.property === 'externalAppointmentId')).toBe(true);
     });
 
-    it('rejects missing paymentType', async () => {
+    it('accepts a payload with no paymentType (defaults applied later in the handler)', async () => {
       const { paymentType: _, ...rest } = baseDoctorAndTime;
       const errors = await validateDto({ ...rest, isAnonymousPatient: true });
-      expect(errors.some((e) => e.property === 'paymentType')).toBe(true);
+      expect(errors.some((e) => e.property === 'paymentType')).toBe(false);
     });
 
-    it('rejects missing paymentStatus', async () => {
+    it('accepts a payload with no paymentStatus (defaults applied later in the handler)', async () => {
       const { paymentStatus: _, ...rest } = baseDoctorAndTime;
       const errors = await validateDto({ ...rest, isAnonymousPatient: true });
-      expect(errors.some((e) => e.property === 'paymentStatus')).toBe(true);
+      expect(errors.some((e) => e.property === 'paymentStatus')).toBe(false);
     });
   });
 });

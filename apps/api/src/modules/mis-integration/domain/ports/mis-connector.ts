@@ -59,14 +59,15 @@ export interface OnlineAppointmentPayload {
   doctorSpecialization: string;
   startAt: string;
   endAt: string;
-  // MIS-controlled payment flow. Both fields are required — the MIS must
-  // explicitly state its payment model rather than relying on hidden defaults.
+  // MIS-controlled payment flow. Optional — both default to postpaid + unpaid
+  // (i.e. patient can join immediately, billed later) when omitted, matching
+  // the original behaviour before this contract added explicit payment fields.
   //   postpaid: patient can join immediately.
   //   prepaid + paid: same as postpaid — appointment is CONFIRMED.
   //   prepaid + unpaid: appointment is AWAITING_PAYMENT — patient is blocked
   //     from joining until the clinic calls the payment-status endpoint.
-  paymentType: 'prepaid' | 'postpaid';
-  paymentStatus: 'paid' | 'unpaid';
+  paymentType?: 'prepaid' | 'postpaid';
+  paymentStatus?: 'paid' | 'unpaid';
   // Anonymous-patient mode: the MIS does not share any PII about the patient.
   // Appointment gets patient_id=null + is_anonymous_patient=true; the patient
   // invite JWT is issued with scope='invite-anon' and sub=null.

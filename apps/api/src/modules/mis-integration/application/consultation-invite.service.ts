@@ -110,4 +110,25 @@ export class ConsultationInviteService {
     const result = await this.invites.update(where, { revokedAt: new Date() });
     return result.affected ?? 0;
   }
+
+  /**
+   * Re-target the TTL of every active invite for an appointment after a
+   * reschedule. The whole point of reschedule (vs cancel+recreate) is that
+   * patient/doctor keep using their existing link — but those links were
+   * issued with `expiresAt = oldEndAt + grace` and would die before the new
+   * meeting if the appointment was pushed later. Recompute against the new
+   * endAt so the link stays usable for the new time window.
+   */
+  async extendForAppointment(
+    tenantId: string,
+    appointmentId: string,
+    newEndAt: Date,
+  ): Promise<number> {
+    const expiresAt = new Date(newEndAt.getTime() + INVITE_EXPIRY_GRACE_MS);
+    const result = await this.invites.update(
+      { tenantId, appointmentId, revokedAt: IsNull() },
+      { expiresAt },
+    );
+    return result.affected ?? 0;
+  }
 }

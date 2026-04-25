@@ -165,11 +165,19 @@ export class WebhookEventHandler {
       });
       if (existingAppt) return existingAppt;
 
+      // paymentType/paymentStatus default to postpaid+unpaid when the MIS
+      // doesn't send them — that's the "patient pays at the clinic, just let
+      // them join the call" baseline (matches behaviour before payment fields
+      // were added to the contract). MIS sends explicit values only when it
+      // wants the prepaid gate.
+      const paymentType = payload.paymentType ?? 'postpaid';
+      const paymentStatus = payload.paymentStatus ?? 'unpaid';
+
       // Prepaid + unpaid → hold the appointment until the clinic confirms
       // payment via PATCH /integrations/:tenantId/appointments/:id/payment-status.
       // Postpaid or prepaid+paid → confirmed, patient can join immediately.
       const initialStatus =
-        payload.paymentType === 'prepaid' && payload.paymentStatus !== 'paid'
+        paymentType === 'prepaid' && paymentStatus !== 'paid'
           ? AppointmentStatus.AWAITING_PAYMENT
           : AppointmentStatus.CONFIRMED;
 
@@ -183,8 +191,8 @@ export class WebhookEventHandler {
         status: initialStatus,
         startAt,
         endAt,
-        misPaymentType: payload.paymentType,
-        misPaymentStatus: payload.paymentStatus,
+        misPaymentType: paymentType,
+        misPaymentStatus: paymentStatus,
       });
       return apptRepo.save(appt);
     });
