@@ -4,9 +4,11 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   ControlBar,
   GridLayout,
+  LayoutContextProvider,
   LiveKitRoom,
   ParticipantTile,
   RoomAudioRenderer,
+  usePinnedTracks,
   useTracks,
 } from '@livekit/components-react';
 import { DisconnectReason, Track, VideoPreset } from 'livekit-client';
@@ -35,7 +37,18 @@ const formatUntil = (targetMs: number, nowMs: number): string => {
   return remHours ? `${days} дн ${remHours} год` : `${days} дн`;
 };
 
-const VideoGrid = ({ isFullscreen }: { isFullscreen: boolean }) => {
+// Switches between the regular grid and a custom focus layout when a tile is
+// pinned. The small icon on each ParticipantTile (FocusToggle, hover to
+// reveal) dispatches into the layout context, and we read it via
+// usePinnedTracks. Same mechanism handles screen share — pinning a screen
+// share track puts it in the main area.
+//
+// We avoid LiveKit's FocusLayoutContainer/CarouselLayout because their
+// auto-sized side carousel sometimes stuck at --lk-max-visible-tiles=1 (when
+// the resize observer's first read happened on a 0×0 mount), which made the
+// single thumbnail fill the whole column and overflow horizontally with its
+// 16/10 aspect ratio. Our overlay layout has deterministic sizing.
+const ConferenceLayout = ({ isFullscreen }: { isFullscreen: boolean }) => {
   const tracks = useTracks(
     [
       { source: Track.Source.Camera, withPlaceholder: true },
@@ -43,11 +56,72 @@ const VideoGrid = ({ isFullscreen }: { isFullscreen: boolean }) => {
     ],
     { onlySubscribed: false },
   );
+  const pinned = usePinnedTracks();
+  const focused = pinned[0] ?? null;
+  const height = isFullscreen ? 'calc(100vh - 80px)' : 'calc(100vh - 320px)';
+  const focusContainerRef = useRef<HTMLDivElement>(null);
+  const [panelVisible, setPanelVisible] = useState(true);
+
+  // In fullscreen we auto-hide the thumbnail strip after a short idle so it
+  // doesn't sit on top of the focused video; any pointer/key activity inside
+  // the conference area brings it back. Outside fullscreen we leave it
+  // permanently visible — there's plenty of room and no need to hide it.
+  useEffect(() => {
+    if (!focused || !isFullscreen) {
+      setPanelVisible(true);
+      return;
+    }
+    const el = focusContainerRef.current;
+    if (!el) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const ping = () => {
+      setPanelVisible(true);
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => setPanelVisible(false), 2500);
+    };
+    ping();
+    el.addEventListener('mousemove', ping);
+    el.addEventListener('keydown', ping);
+    return () => {
+      el.removeEventListener('mousemove', ping);
+      el.removeEventListener('keydown', ping);
+      if (timer) clearTimeout(timer);
+    };
+  }, [focused, isFullscreen]);
+
+  if (focused) {
+    const carousel = tracks.filter(
+      (t) =>
+        !(
+          t.participant.identity === focused.participant.identity &&
+          t.source === focused.source
+        ),
+    );
+    return (
+      <div ref={focusContainerRef} className="relative overflow-hidden bg-black" style={{ height }}>
+        <ParticipantTile trackRef={focused} className="h-full w-full" />
+        <div
+          className={`absolute bottom-2 left-2 top-2 z-10 flex flex-col gap-2 overflow-y-auto pr-1 transition-all duration-300 ${
+            panelVisible
+              ? 'translate-x-0 opacity-100'
+              : 'pointer-events-none -translate-x-[calc(100%+0.5rem)] opacity-0'
+          }`}
+        >
+          {carousel.map((t) => (
+            <div
+              key={`${t.participant.identity}-${t.source}`}
+              className="aspect-video w-[180px] flex-shrink-0 overflow-hidden rounded-md shadow-lg"
+            >
+              <ParticipantTile trackRef={t} className="h-full w-full" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <GridLayout
-      tracks={tracks}
-      style={{ height: isFullscreen ? 'calc(100vh - 80px)' : 'calc(100vh - 320px)' }}
-    >
+    <GridLayout tracks={tracks} style={{ height }}>
       <ParticipantTile />
     </GridLayout>
   );
@@ -95,6 +169,31 @@ export const ConsultationPage = () => {
     document.addEventListener('fullscreenchange', onChange);
     return () => document.removeEventListener('fullscreenchange', onChange);
   }, []);
+
+  // Disable browser PiP on every <video> rendered by LiveKit. We have our own
+  // FocusLayout for "make this participant fill the window", and the native
+  // PiP button on hover only added confusion next to the FocusToggle icon.
+  // LiveKit mounts tiles dynamically as participants join, so we watch the
+  // container with a MutationObserver instead of a one-shot query.
+  useEffect(() => {
+    if (!joined) return;
+    const container = fsContainerRef.current;
+    if (!container) return;
+    const disable = (v: HTMLVideoElement) => {
+      v.disablePictureInPicture = true;
+    };
+    container.querySelectorAll('video').forEach(disable);
+    const observer = new MutationObserver((records) => {
+      for (const r of records) {
+        r.addedNodes.forEach((n) => {
+          if (n instanceof HTMLVideoElement) disable(n);
+          else if (n instanceof HTMLElement) n.querySelectorAll('video').forEach(disable);
+        });
+      }
+    });
+    observer.observe(container, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [joined]);
 
   const toggleFullscreen = () => {
     if (document.fullscreenElement) {
@@ -271,10 +370,13 @@ export const ConsultationPage = () => {
         </Alert>
       ) : null}
       <div ref={fsContainerRef} className="relative overflow-hidden rounded-lg bg-black">
+        {/* Fullscreen toggle lives in the bottom control bar (next to LK
+         * controls) instead of the top-right corner — top-right collided
+         * with the per-tile FocusToggle icon LiveKit shows on hover. */}
         <button
           type="button"
           onClick={toggleFullscreen}
-          className="absolute right-2 top-2 z-10 rounded bg-black/60 px-3 py-1.5 text-sm text-white hover:bg-black/80"
+          className="lk-button absolute bottom-3 right-3 z-10"
         >
           {isFullscreen ? 'Звичайний режим' : 'На весь екран'}
         </button>
@@ -317,9 +419,11 @@ export const ConsultationPage = () => {
             setJoined(false);
           }}
         >
-          <VideoGrid isFullscreen={isFullscreen} />
-          <RoomAudioRenderer />
-          <ControlBar />
+          <LayoutContextProvider>
+            <ConferenceLayout isFullscreen={isFullscreen} />
+            <RoomAudioRenderer />
+            <ControlBar />
+          </LayoutContextProvider>
         </LiveKitRoom>
       </div>
     </div>
