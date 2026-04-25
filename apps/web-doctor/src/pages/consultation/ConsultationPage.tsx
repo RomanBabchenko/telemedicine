@@ -270,7 +270,7 @@ export const ConsultationPage = () => {
           {disconnectReason}. Перевірте мережу та натисніть «Розпочати консультацію» знову.
         </Alert>
       ) : null}
-      <div ref={fsContainerRef} className="relative bg-black">
+      <div ref={fsContainerRef} className="relative overflow-hidden rounded-lg bg-black">
         <button
           type="button"
           onClick={toggleFullscreen}
