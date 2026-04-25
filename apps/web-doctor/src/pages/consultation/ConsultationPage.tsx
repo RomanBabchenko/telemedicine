@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
@@ -35,7 +35,7 @@ const formatUntil = (targetMs: number, nowMs: number): string => {
   return remHours ? `${days} дн ${remHours} год` : `${days} дн`;
 };
 
-const VideoGrid = () => {
+const VideoGrid = ({ isFullscreen }: { isFullscreen: boolean }) => {
   const tracks = useTracks(
     [
       { source: Track.Source.Camera, withPlaceholder: true },
@@ -44,7 +44,10 @@ const VideoGrid = () => {
     { onlySubscribed: false },
   );
   return (
-    <GridLayout tracks={tracks} style={{ height: 'calc(100vh - 320px)' }}>
+    <GridLayout
+      tracks={tracks}
+      style={{ height: isFullscreen ? 'calc(100vh - 80px)' : 'calc(100vh - 320px)' }}
+    >
       <ParticipantTile />
     </GridLayout>
   );
@@ -81,7 +84,25 @@ export const ConsultationPage = () => {
   const [joined, setJoined] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [disconnectReason, setDisconnectReason] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const fsContainerRef = useRef<HTMLDivElement>(null);
   const isInviteScope = useAuthStore((s) => s.user?.scope === 'invite');
+
+  // Sync local state when the user exits fullscreen via ESC or the browser UI
+  // — without this listener the icon/label on the toggle button would lie.
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen();
+    } else {
+      void fsContainerRef.current?.requestFullscreen();
+    }
+  };
 
   // LiveKit's CSS variables (--lk-bg / --lk-fg / etc.) only kick in when an
   // ancestor has data-lk-theme. Their device-pickers render through React
@@ -243,41 +264,50 @@ export const ConsultationPage = () => {
           {disconnectReason}. Перевірте мережу та натисніть «Розпочати консультацію» знову.
         </Alert>
       ) : null}
-      <LiveKitRoom
-        token={tokenM.data.token}
-        serverUrl={livekitUrl}
-        connect={true}
-        video={true}
-        audio={true}
-        // Low-bandwidth defaults for unstable Wi-Fi:
-        //   - cap publish bitrate so the encoder targets ~150 kbps video
-        //   - use VP8 (more forgiving than H.264 with packet loss)
-        //   - adaptiveStream resizes/lowers fps when subscribers can't keep up
-        //   - dynacast pauses publishing layers nobody is watching
-        options={{
-          adaptiveStream: true,
-          dynacast: true,
-          publishDefaults: {
-            videoCodec: 'vp8',
-            videoSimulcastLayers: [
-              new VideoPreset(320, 180, 150_000, 15),
-              new VideoPreset(640, 360, 400_000, 20),
-            ],
-          },
-        }}
-        onError={(e) => setDisconnectReason(e.message)}
-        onDisconnected={(reason) => {
-          // Don't auto-redirect — show the user what happened so they can
-          // retry. Auto-navigating to /finish on a connection failure made
-          // the page look like it skipped the call entirely.
-          setDisconnectReason(reason ? `disconnected: ${reason}` : 'disconnected');
-          setJoined(false);
-        }}
-      >
-        <VideoGrid />
-        <RoomAudioRenderer />
-        <ControlBar />
-      </LiveKitRoom>
+      <div ref={fsContainerRef} className="relative bg-black">
+        <button
+          type="button"
+          onClick={toggleFullscreen}
+          className="absolute right-2 top-2 z-10 rounded bg-black/60 px-3 py-1.5 text-sm text-white hover:bg-black/80"
+        >
+          {isFullscreen ? 'Звичайний режим' : 'На весь екран'}
+        </button>
+        <LiveKitRoom
+          token={tokenM.data.token}
+          serverUrl={livekitUrl}
+          connect={true}
+          video={true}
+          audio={true}
+          // Low-bandwidth defaults for unstable Wi-Fi:
+          //   - cap publish bitrate so the encoder targets ~150 kbps video
+          //   - use VP8 (more forgiving than H.264 with packet loss)
+          //   - adaptiveStream resizes/lowers fps when subscribers can't keep up
+          //   - dynacast pauses publishing layers nobody is watching
+          options={{
+            adaptiveStream: true,
+            dynacast: true,
+            publishDefaults: {
+              videoCodec: 'vp8',
+              videoSimulcastLayers: [
+                new VideoPreset(320, 180, 150_000, 15),
+                new VideoPreset(640, 360, 400_000, 20),
+              ],
+            },
+          }}
+          onError={(e) => setDisconnectReason(e.message)}
+          onDisconnected={(reason) => {
+            // Don't auto-redirect — show the user what happened so they can
+            // retry. Auto-navigating to /finish on a connection failure made
+            // the page look like it skipped the call entirely.
+            setDisconnectReason(reason ? `disconnected: ${reason}` : 'disconnected');
+            setJoined(false);
+          }}
+        >
+          <VideoGrid isFullscreen={isFullscreen} />
+          <RoomAudioRenderer />
+          <ControlBar />
+        </LiveKitRoom>
+      </div>
     </div>
   );
 };

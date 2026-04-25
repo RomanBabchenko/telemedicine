@@ -1,3 +1,16 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Reflow the LiveKit grid when one of the tiles is moved to the browser's
+ * Picture-in-Picture window. Without this, the source <video> stays in the
+ * grid as a black rectangle ("Playing in picture-in-picture"). We collapse
+ * the grid to 1×1 and hide the PiP'd tile so the remaining participant
+ * fills the freed space. */
+.lk-grid-layout:has(video:picture-in-picture) {
+  --lk-col-count: 1 !important;
+  --lk-row-count: 1 !important;
+}
+.lk-participant-tile:has(video:picture-in-picture) {
+  display: none;
+}
