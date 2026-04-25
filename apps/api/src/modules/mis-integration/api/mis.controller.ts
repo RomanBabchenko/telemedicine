@@ -39,6 +39,7 @@ import { OnlineAppointmentPayload } from '../domain/ports/mis-connector';
 import { TenantService } from '../../tenant/application/tenant.service';
 import { RecordingInfoResponseDto } from '../../recording/api/dto';
 import {
+  AppointmentInfoResponseDto,
   CancelAppointmentBodyDto,
   CancelAppointmentResponseDto,
   PaymentStatusResponseDto,
@@ -180,6 +181,49 @@ export class MisController {
     }
 
     return { received: true, event };
+  }
+
+  @Get(':tenantId/appointments/:appointmentId')
+  @UseGuards(ApiKeyGuard)
+  @Auditable({ action: 'mis.appointment.fetched', resource: 'Appointment' })
+  @ApiSecurity('api-key')
+  @ApiOperation({
+    summary: 'Fetch appointment + consultation snapshot (by internal id)',
+    description:
+      "Returns the current appointment status, scheduled times (post-reschedule), MIS payment fields, and a `consultation` block with actual call timing (startedAt/endedAt/patientJoinedAt/doctorJoinedAt) once a session has been created. Use for status polling — the recording endpoint only reflects audio readiness, not the full lifecycle.",
+    operationId: 'misGetAppointment',
+  })
+  @ApiParam({ name: 'tenantId', format: 'uuid' })
+  @ApiParam({ name: 'appointmentId', format: 'uuid' })
+  @ApiOkResponse({ type: AppointmentInfoResponseDto })
+  @ApiStandardErrors()
+  async getAppointment(
+    @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
+    @Param('appointmentId', new ParseUUIDPipe()) appointmentId: string,
+  ): Promise<AppointmentInfoResponseDto> {
+    await this.tenants.getOrThrow(tenantId);
+    return this.appointments.getInfo(tenantId, { kind: 'internal', appointmentId });
+  }
+
+  @Get(':tenantId/appointments/by-external/:externalAppointmentId')
+  @UseGuards(ApiKeyGuard)
+  @Auditable({ action: 'mis.appointment.fetched', resource: 'Appointment' })
+  @ApiSecurity('api-key')
+  @ApiOperation({
+    summary: 'Fetch appointment + consultation snapshot (by external id)',
+    operationId: 'misGetAppointmentByExternal',
+  })
+  @ApiParam({ name: 'tenantId', format: 'uuid' })
+  @ApiParam({ name: 'externalAppointmentId' })
+  @ApiOkResponse({ type: AppointmentInfoResponseDto })
+  @ApiStandardErrors()
+  async getAppointmentByExternal(
+    @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
+    @Param('externalAppointmentId') externalAppointmentId: string,
+    @Req() req: Request,
+  ): Promise<AppointmentInfoResponseDto> {
+    await this.tenants.getOrThrow(tenantId);
+    return this.appointments.getInfo(tenantId, externalLocator(externalAppointmentId, req));
   }
 
   @Patch(':tenantId/appointments/:appointmentId/payment-status')

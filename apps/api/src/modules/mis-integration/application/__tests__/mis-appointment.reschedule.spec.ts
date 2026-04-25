@@ -56,6 +56,7 @@ const build = (args: BuildArgs) => {
     { findOne: apptFindOne } as never, // appointments repo
     {} as never, // externalIds (only used by external locator)
     {} as never, // slots repo (top-level — service uses em.getRepository instead)
+    {} as never, // sessions repo (used by getInfo, not reschedule)
     appointmentService as never,
     {} as never, // recordings
     invites as never,

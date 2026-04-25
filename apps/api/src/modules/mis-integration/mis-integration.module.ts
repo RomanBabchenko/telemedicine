@@ -11,6 +11,7 @@ import { Patient } from '../patient/domain/entities/patient.entity';
 import { Slot } from '../booking/domain/entities/slot.entity';
 import { ServiceType } from '../booking/domain/entities/service-type.entity';
 import { Appointment } from '../booking/domain/entities/appointment.entity';
+import { ConsultationSession } from '../consultation/domain/entities/consultation-session.entity';
 import { User } from '../identity/domain/entities/user.entity';
 import { UserTenantMembership } from '../identity/domain/entities/user-tenant-membership.entity';
 import { ConsultationModule } from '../consultation/consultation.module';
@@ -42,6 +43,7 @@ import { IntegrationKeysAdminController } from './api/integration-keys-admin.con
       Slot,
       ServiceType,
       Appointment,
+      ConsultationSession,
       User,
       UserTenantMembership,
     ]),

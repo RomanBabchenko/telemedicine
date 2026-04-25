@@ -9,6 +9,7 @@ export * from './submit-appointment.body.dto';
 export * from './update-payment-status.body.dto';
 
 // Response DTOs
+export * from './appointment-info.response.dto';
 export * from './cancel-appointment.response.dto';
 export * from './integration-key.response.dto';
 export * from './invite-consume.response.dto';

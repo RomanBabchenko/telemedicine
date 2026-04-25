@@ -11,6 +11,8 @@
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh anon:now
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh recording <appointmentId>
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh recording:ext <externalAppointmentId>
+#   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh info <appointmentId>
+#   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh info:ext <externalAppointmentId>
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh cancel <appointmentId> [reason]
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh cancel:ext <externalAppointmentId> [reason]
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh reschedule <appointmentId> <startAt> <endAt> [reason]
@@ -227,6 +229,26 @@ case "$cmd" in
       -H "Authorization: ApiKey $API_KEY" | jq .
     ;;
 
+  # ─── Appointment + consultation status snapshot ────────────────────────
+  # Polls for "did the consultation actually happen?". Returns scheduled
+  # times, current AppointmentStatus, MIS payment fields, and a
+  # `consultation` block (null until first join) with patient/doctorJoinedAt
+  # and the actual startedAt/endedAt.
+  info)
+    require_api_key
+    appt_id="${2:?usage: $0 info <appointmentId>}"
+    curl -sS "$API/integrations/$TENANT/appointments/$appt_id" \
+      -H "Authorization: ApiKey $API_KEY" | jq .
+    ;;
+
+  info:ext)
+    require_api_key
+    ext_id="${2:?usage: $0 info:ext <externalAppointmentId>}"
+    curl -sS \
+      "$API/integrations/$TENANT/appointments/by-external/$ext_id" \
+      -H "Authorization: ApiKey $API_KEY" | jq .
+    ;;
+
   # ─── Cancel appointment (transitions to CANCELLED_BY_PROVIDER) ─────────
   # Also revokes all outstanding invite links for this appointment.
   cancel)
@@ -340,6 +362,8 @@ Commands:
   anon:now                       Anonymous + live time window (joinable right now)
   recording <id>                 Fetch recording by internal appointmentId
   recording:ext <extId>          Fetch recording by MIS externalAppointmentId
+  info <id>                      Get appointment + consultation snapshot (status, join times)
+  info:ext <extId>               Same, keyed by externalAppointmentId
   cancel <id> [reason]           Cancel appointment + revoke all invites
   cancel:ext <extId> [reason]    Same, keyed by externalAppointmentId
   reschedule <id> <startAt> <endAt> [reason]

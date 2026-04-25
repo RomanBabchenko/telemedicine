@@ -9,10 +9,12 @@ import { AppointmentStatus, SlotStatus } from '@telemed/shared-types';
 import { Appointment } from '../../booking/domain/entities/appointment.entity';
 import { Slot } from '../../booking/domain/entities/slot.entity';
 import { AppointmentService } from '../../booking/application/appointment.service';
+import { ConsultationSession } from '../../consultation/domain/entities/consultation-session.entity';
 import { RecordingService } from '../../recording/application/recording.service';
 import { RecordingInfoResponseDto } from '../../recording/api/dto';
 import { ExternalIdentity } from '../domain/entities/external-identity.entity';
 import { ConsultationInviteService } from './consultation-invite.service';
+import { AppointmentInfoResponseDto } from '../api/dto/appointment-info.response.dto';
 import { CancelAppointmentResponseDto } from '../api/dto/cancel-appointment.response.dto';
 import { PaymentStatusResponseDto } from '../api/dto/payment-status.response.dto';
 import { RescheduleAppointmentResponseDto } from '../api/dto/reschedule-appointment.response.dto';
@@ -43,6 +45,8 @@ export class MisAppointmentService {
     private readonly externalIds: Repository<ExternalIdentity>,
     @InjectRepository(Slot)
     private readonly slots: Repository<Slot>,
+    @InjectRepository(ConsultationSession)
+    private readonly sessions: Repository<ConsultationSession>,
     private readonly appointmentService: AppointmentService,
     private readonly recordings: RecordingService,
     private readonly invites: ConsultationInviteService,
@@ -78,6 +82,57 @@ export class MisAppointmentService {
     });
     if (!appt) throw new NotFoundException('Appointment not found');
     return appt;
+  }
+
+  /**
+   * Read-only snapshot of an appointment + its consultation session (if one
+   * exists yet). MIS uses this to answer:
+   *   - "what's the current appointment status?" (e.g. CONFIRMED → IN_PROGRESS
+   *     → COMPLETED) — useful for status polling instead of relying on the
+   *     /recording endpoint as a happened-or-not signal.
+   *   - "did anyone show up?" — `consultation.patientJoinedAt` /
+   *     `doctorJoinedAt` are populated as participants click join.
+   *   - "is the call over?" — `consultation.endedAt` is set on disconnect.
+   *
+   * `consultation` is null until the first joinToken request creates the
+   * session row (lazy creation in ConsultationService.ensureForAppointment),
+   * so MIS treats null as "still in pre-call state, nobody clicked join".
+   */
+  async getInfo(
+    tenantId: string,
+    locator: MisAppointmentLocator,
+  ): Promise<AppointmentInfoResponseDto> {
+    const appt = await this.resolveAppointment(tenantId, locator);
+
+    const session = appt.consultationSessionId
+      ? await this.sessions.findOne({ where: { id: appt.consultationSessionId } })
+      : null;
+
+    return {
+      appointmentId: appt.id,
+      status: appt.status,
+      startAt: appt.startAt.toISOString(),
+      endAt: appt.endAt.toISOString(),
+      cancelledReason: appt.cancelledReason,
+      isAnonymousPatient: appt.isAnonymousPatient,
+      misPaymentType: appt.misPaymentType,
+      misPaymentStatus: appt.misPaymentStatus,
+      consultation: session
+        ? {
+            sessionId: session.id,
+            status: session.status,
+            startedAt: session.startedAt ? session.startedAt.toISOString() : null,
+            endedAt: session.endedAt ? session.endedAt.toISOString() : null,
+            patientJoinedAt: session.patientJoinedAt
+              ? session.patientJoinedAt.toISOString()
+              : null,
+            doctorJoinedAt: session.doctorJoinedAt
+              ? session.doctorJoinedAt.toISOString()
+              : null,
+            recordingId: session.recordingId,
+          }
+        : null,
+    };
   }
 
   /**

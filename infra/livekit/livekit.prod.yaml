@@ -20,4 +20,21 @@ rtc:
   # and lo, so this is fine.
 keys:
   devkey: devsecretdevsecretdevsecretdevsecret
+# Egress coordinates with the LiveKit server through Redis pub/sub. Without
+# this block the egress container can publish to its own Redis namespace but
+# never sees room events, so StartRoomCompositeEgress hangs and no MP3 ever
+# lands in MinIO. Container name matches the docker-compose service.
+redis:
+  address: telemed-redis:6379
+# LiveKit POSTs lifecycle events (egress_ended, room_finished, …) signed with
+# the api_secret above. The recording webhook controller verifies the JWT and
+# uses egress_ended to mark the Recording row finalised in the DB. Without
+# this block recordings stay in "in_progress" forever even after egress
+# finishes uploading to MinIO. host.docker.internal works because the API runs
+# on the host (systemd, not in compose) and the docker-compose livekit service
+# has extra_hosts: host.docker.internal:host-gateway.
+webhook:
+  api_key: devkey
+  urls:
+    - http://host.docker.internal:3000/api/v1/webhooks/livekit
 log_level: info
