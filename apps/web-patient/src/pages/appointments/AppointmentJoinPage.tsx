@@ -9,7 +9,7 @@ import {
   RoomAudioRenderer,
   useTracks,
 } from '@livekit/components-react';
-import { Track, VideoPreset } from 'livekit-client';
+import { DisconnectReason, Track, VideoPreset } from 'livekit-client';
 import dayjs from 'dayjs';
 import { bookingApi, consultationApi } from '@telemed/api-client';
 import { Alert, Button, Card, PageHeader, Spinner } from '@telemed/ui';
@@ -154,7 +154,13 @@ export const AppointmentJoinPage = () => {
       if (!a?.consultationSessionId) throw new Error('Сесію ще не створено');
       return consultation.joinToken(a.consultationSessionId);
     },
-    onSuccess: () => setJoined(true),
+    onSuccess: () => {
+      // Clear any leftover disconnect alert from the previous attempt —
+      // otherwise a stale "Connection lost" stays visible after a
+      // successful rejoin.
+      setDisconnectReason(null);
+      setJoined(true);
+    },
     onError: (e: Error) => setError(e.message),
   });
 
@@ -281,9 +287,16 @@ export const AppointmentJoinPage = () => {
               ],
             },
           }}
+          onConnected={() => setDisconnectReason(null)}
           onError={(e) => setDisconnectReason(e.message)}
           onDisconnected={(reason) => {
-            setDisconnectReason(reason ? `disconnected: ${reason}` : 'disconnected');
+            // CLIENT_INITIATED fires for intentional disconnects (Leave
+            // button, page navigation, React StrictMode double-mount in
+            // dev). Skip the alert in that case — the connection didn't
+            // actually fail, so showing "Connection lost" misleads the user.
+            if (reason !== DisconnectReason.CLIENT_INITIATED) {
+              setDisconnectReason(reason ? `disconnected: ${reason}` : 'disconnected');
+            }
             setJoined(false);
           }}
         >
