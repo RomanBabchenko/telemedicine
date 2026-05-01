@@ -10,8 +10,8 @@ import { useAuthStore } from '../../stores/auth.store';
 const auth = authApi(apiClient);
 
 export const LoginPage = () => {
-  const [email, setEmail] = useState('doctor1@demo.local');
-  const [password, setPassword] = useState('demo1234');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [mfaCode, setMfaCode] = useState('');
   const [needsMfa, setNeedsMfa] = useState(false);
   const [error, setError] = useState<string | null>(null);

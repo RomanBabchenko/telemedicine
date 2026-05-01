@@ -10,7 +10,7 @@ import { useAuthStore } from '../../stores/auth.store';
 const auth = authApi(apiClient);
 
 export const OtpPage = () => {
-  const [phone, setPhone] = useState('+380500000001');
+  const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [stage, setStage] = useState<'request' | 'verify'>('request');
   const [error, setError] = useState<string | null>(null);
