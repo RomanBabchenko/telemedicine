@@ -93,7 +93,7 @@ async function bootstrap() {
     // so openapi-typescript / openapi-generator emit readable SDK method names.
     operationIdFactory: (_controllerKey: string, methodKey: string) => methodKey,
   });
-  SwaggerModule.setup(`${normalisedPrefix}/docs`, app, doc);
+  // SwaggerModule.setup(`${normalisedPrefix}/docs`, app, doc);
 
   await app.listen(config.apiPort);
   // eslint-disable-next-line no-console
@@ -101,9 +101,9 @@ async function bootstrap() {
     `🩺 Telemed API listening on http://localhost:${config.apiPort}/${normalisedPrefix}/v1`,
   );
   // eslint-disable-next-line no-console
-  console.log(
-    `📚 Swagger docs at http://localhost:${config.apiPort}/${normalisedPrefix}/docs`,
-  );
+  // console.log(
+  //   `📚 Swagger docs at http://localhost:${config.apiPort}/${normalisedPrefix}/docs`,
+  // );
 }
 
 bootstrap();
