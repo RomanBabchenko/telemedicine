@@ -67,6 +67,58 @@ const formatUntil = (targetMs: number, nowMs: number): string => {
   return remHours ? `${days} дн ${remHours} год` : `${days} дн`;
 };
 
+// Cross-browser fullscreen helpers. Safari < 16.4 still ships only the
+// `webkit*` variants, and iPhone Safari refuses real fullscreen on anything
+// other than a <video> — for that case the caller falls back to a CSS
+// "pseudo-fullscreen" (position: fixed, inset: 0).
+type FsDocument = Document & {
+  webkitFullscreenEnabled?: boolean;
+  webkitFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => Promise<void> | void;
+};
+type FsElement = HTMLElement & {
+  webkitRequestFullscreen?: () => Promise<void> | void;
+};
+const isRealFullscreenSupported = (): boolean => {
+  if (typeof document === 'undefined') return false;
+  const d = document as FsDocument;
+  return Boolean(d.fullscreenEnabled ?? d.webkitFullscreenEnabled);
+};
+const getFullscreenElement = (): Element | null => {
+  const d = document as FsDocument;
+  return d.fullscreenElement ?? d.webkitFullscreenElement ?? null;
+};
+const requestFullscreenCompat = (el: HTMLElement): Promise<void> | void => {
+  const e = el as FsElement;
+  const fn = e.requestFullscreen ?? e.webkitRequestFullscreen;
+  return fn?.call(el);
+};
+const exitFullscreenCompat = (): Promise<void> | void => {
+  const d = document as FsDocument;
+  const fn = d.exitFullscreen ?? d.webkitExitFullscreen;
+  return fn?.call(document);
+};
+
+const FullscreenIcon = ({ expanded }: { expanded: boolean }) => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    {expanded ? (
+      <path d="M8 3v4a2 2 0 0 1-2 2H2M16 3v4a2 2 0 0 0 2 2h4M8 21v-4a2 2 0 0 0-2-2H2M16 21v-4a2 2 0 0 1 2-2h4" />
+    ) : (
+      <path d="M3 9V5a2 2 0 0 1 2-2h4M21 9V5a2 2 0 0 0-2-2h-4M3 15v4a2 2 0 0 0 2 2h4M21 15v4a2 2 0 0 1-2 2h-4" />
+    )}
+  </svg>
+);
+
 // Switches between the regular grid and a custom focus layout when a tile is
 // pinned. The small icon on each ParticipantTile (FocusToggle, hover to
 // reveal) dispatches into the layout context, and we read it via
@@ -204,10 +256,18 @@ export const ConsultationPage = () => {
 
   // Sync local state when the user exits fullscreen via ESC or the browser UI
   // — without this listener the icon/label on the toggle button would lie.
+  // We listen for both the unprefixed and the webkit-prefixed event so older
+  // Safari (< 16.4) keeps the icon in sync. On iPhone Safari neither event
+  // fires (we use pseudo-fullscreen there), so the state is driven directly
+  // from the toggle handler.
   useEffect(() => {
-    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    const onChange = () => setIsFullscreen(!!getFullscreenElement());
     document.addEventListener('fullscreenchange', onChange);
-    return () => document.removeEventListener('fullscreenchange', onChange);
+    document.addEventListener('webkitfullscreenchange', onChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange);
+      document.removeEventListener('webkitfullscreenchange', onChange);
+    };
   }, []);
 
   // Disable browser PiP on every <video> rendered by LiveKit. We have our own
@@ -236,10 +296,18 @@ export const ConsultationPage = () => {
   }, [joined]);
 
   const toggleFullscreen = () => {
-    if (document.fullscreenElement) {
-      void document.exitFullscreen();
+    const el = fsContainerRef.current;
+    if (!el) return;
+    if (isRealFullscreenSupported()) {
+      if (getFullscreenElement()) {
+        void exitFullscreenCompat();
+      } else {
+        void requestFullscreenCompat(el);
+      }
     } else {
-      void fsContainerRef.current?.requestFullscreen();
+      // iPhone Safari path — flip CSS-based pseudo-fullscreen. The
+      // fullscreenchange event never fires here, so drive the state directly.
+      setIsFullscreen((prev) => !prev);
     }
   };
 
@@ -525,17 +593,20 @@ export const ConsultationPage = () => {
           {disconnectReason}. Перевірте мережу та натисніть «Розпочати консультацію» знову.
         </Alert>
       ) : null}
-      <div ref={fsContainerRef} className="relative overflow-hidden rounded-lg bg-black">
-        {/* Fullscreen toggle lives in the bottom control bar (next to LK
-         * controls) instead of the top-right corner — top-right collided
-         * with the per-tile FocusToggle icon LiveKit shows on hover. */}
-        <button
-          type="button"
-          onClick={toggleFullscreen}
-          className="lk-button absolute bottom-3 right-3 z-10"
-        >
-          {isFullscreen ? 'Звичайний режим' : 'На весь екран'}
-        </button>
+      <div
+        ref={fsContainerRef}
+        className="overflow-hidden rounded-lg bg-black"
+        style={
+          isFullscreen && !isRealFullscreenSupported()
+            ? {
+                position: 'fixed',
+                inset: 0,
+                zIndex: 9999,
+                borderRadius: 0,
+              }
+            : undefined
+        }
+      >
         <LiveKitRoom
           token={tokenM.data.token}
           serverUrl={livekitUrl}
@@ -595,7 +666,27 @@ export const ConsultationPage = () => {
           <LayoutContextProvider>
             <ConferenceLayout isFullscreen={isFullscreen} />
             <RoomAudioRenderer />
-            <ControlBar />
+            {/* Fullscreen toggle sits inside the same .lk-control-bar row as
+             * mic/camera/share — top-right used to collide with each tile's
+             * FocusToggle icon, and a separate absolute button overlapped
+             * the share-screen control on narrow viewports. The inner
+             * ControlBar uses `display: contents` so its buttons become flex
+             * siblings of our icon button under the outer wrapper. */}
+            <div
+              className="lk-control-bar"
+              style={{ flexWrap: 'wrap', maxHeight: 'none' }}
+            >
+              <ControlBar style={{ display: 'contents' }} />
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className="lk-button"
+                aria-label={isFullscreen ? 'Звичайний режим' : 'На весь екран'}
+                title={isFullscreen ? 'Звичайний режим' : 'На весь екран'}
+              >
+                <FullscreenIcon expanded={isFullscreen} />
+              </button>
+            </div>
           </LayoutContextProvider>
         </LiveKitRoom>
       </div>
