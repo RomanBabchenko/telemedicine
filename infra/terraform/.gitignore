@@ -18,3 +18,13 @@ crash.*.log
 
 # Plan output
 *.tfplan
+
+# SSH keys must never live in this directory — `git_ssh_private_key`
+# is passed via TF_VAR_…="$(cat ~/.ssh/id_…)" or via terraform.tfvars
+# (already gitignored above). A leaked key here once made it into
+# commit a035d4a' before being purged via filter-branch.
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+*.pem
