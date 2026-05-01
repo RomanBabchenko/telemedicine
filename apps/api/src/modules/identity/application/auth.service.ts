@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthResponseDto, Role } from '@telemed/shared-types';
@@ -6,12 +6,22 @@ import { AppConfig } from '../../../config/env.config';
 import { TenantContextService } from '../../../common/tenant/tenant-context.service';
 import { User } from '../domain/entities/user.entity';
 import { Patient } from '../../patient/domain/entities/patient.entity';
+import { TenantService } from '../../tenant/application/tenant.service';
 import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
 import { OtpService } from './otp.service';
 import { MagicLinkService } from './magic-link.service';
 import { MfaService } from './mfa.service';
 import { UserService } from './user.service';
+
+// Shape and code shared by every "tenant has disabled this login channel"
+// rejection. Frontends already render `e.response.data.message`, and the
+// `code` lets them branch (e.g. surface a "contact your clinic" hint)
+// without parsing the localised string.
+const LOGIN_DISABLED_ERROR = {
+  code: 'auth.login_disabled_for_role',
+  message: 'Вхід для цієї ролі вимкнено адміністратором клініки. Скористайтесь інвайт-посиланням від клініки.',
+} as const;
 
 interface AuditMeta {
   ip?: string | null;
@@ -31,7 +41,19 @@ export class AuthService {
     private readonly userService: UserService,
     private readonly config: AppConfig,
     private readonly tenantContext: TenantContextService,
+    private readonly tenants: TenantService,
   ) {}
+
+  // Patient-flow gate (OTP / magic-link / patient self-register). These
+  // all auto-create or upgrade a PATIENT user, so we only need the
+  // patient-side toggle. Throws when blocked. We deliberately gate at the
+  // *request* stage of OTP/magic-link so we don't burn an SMS or email
+  // for a login that's going to be rejected anyway.
+  private async assertPatientLoginAllowed(): Promise<void> {
+    const tenantId = this.tenantContext.getTenantId();
+    const allowed = await this.tenants.canLogin(tenantId, [Role.PATIENT]);
+    if (!allowed) throw new ForbiddenException(LOGIN_DISABLED_ERROR);
+  }
 
   async registerPatient(input: {
     email?: string;
@@ -44,6 +66,7 @@ export class AuthService {
     if (!input.email && !input.phone) {
       throw new BadRequestException('Email or phone is required');
     }
+    await this.assertPatientLoginAllowed();
     const existing = input.email
       ? await this.userService.findByEmail(input.email)
       : input.phone
@@ -112,14 +135,25 @@ export class AuthService {
 
     const tenantId = await this.userService.getDefaultTenantId(user.id);
     const roles = await this.userService.getRoles(user.id, tenantId);
+    // Tenant policy gate — block before issuing the JWT for users whose
+    // role(s) the tenant has disabled for full login. Admin/internal
+    // roles bypass this check inside `canLogin` so an operator can never
+    // lock themselves out by toggling the flags off.
+    if (tenantId && !(await this.tenants.canLogin(tenantId, roles))) {
+      throw new ForbiddenException(LOGIN_DISABLED_ERROR);
+    }
     return this.buildAuthResponse(user, roles, tenantId, meta);
   }
 
   async requestOtp(identifier: string, channel: 'EMAIL' | 'PHONE'): Promise<void> {
+    await this.assertPatientLoginAllowed();
     await this.otp.issue(identifier, channel);
   }
 
   async verifyOtp(identifier: string, code: string, meta: AuditMeta = {}): Promise<AuthResponseDto> {
+    // Defence-in-depth: requestOtp already gates, but a caller could
+    // skip the request (replaying a previously-issued code) — re-check.
+    await this.assertPatientLoginAllowed();
     const ok = await this.otp.verify(identifier, code);
     if (!ok) throw new UnauthorizedException('Invalid OTP');
 
@@ -165,10 +199,12 @@ export class AuthService {
   }
 
   async requestMagicLink(email: string): Promise<void> {
+    await this.assertPatientLoginAllowed();
     await this.magic.issue(email);
   }
 
   async consumeMagicLink(token: string, meta: AuditMeta = {}): Promise<AuthResponseDto> {
+    await this.assertPatientLoginAllowed();
     const email = await this.magic.consume(token);
     if (!email) throw new UnauthorizedException('Invalid or expired magic link');
     let user = await this.userService.findByEmail(email);

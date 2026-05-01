@@ -41,6 +41,18 @@ class TenantInvitePolicyInput {
   bindUserAgent?: boolean;
 }
 
+class TenantLoginPolicyInput {
+  @ApiPropertyOptional({ description: 'Allow full login for DOCTOR role (default true)' })
+  @IsOptional()
+  @IsBoolean()
+  doctorEnabled?: boolean;
+
+  @ApiPropertyOptional({ description: 'Allow full login for PATIENT role (default true)' })
+  @IsOptional()
+  @IsBoolean()
+  patientEnabled?: boolean;
+}
+
 export class UpdateTenantBodyDto implements UpdateTenantDto {
   @ApiPropertyOptional()
   @IsOptional()
@@ -77,4 +89,10 @@ export class UpdateTenantBodyDto implements UpdateTenantDto {
   @ValidateNested()
   @Type(() => TenantInvitePolicyInput)
   invitePolicy?: TenantInvitePolicyInput;
+
+  @ApiPropertyOptional({ type: TenantLoginPolicyInput })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TenantLoginPolicyInput)
+  loginPolicy?: TenantLoginPolicyInput;
 }

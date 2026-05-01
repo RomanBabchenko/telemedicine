@@ -13,6 +13,7 @@ export * from './set-user-status.body.dto';
 export * from './user-lookup.query.dto';
 
 // Response DTOs
+export * from './auth-config.response.dto';
 export * from './auth.response.dto';
 export * from './create-user.response.dto';
 export * from './me.response.dto';

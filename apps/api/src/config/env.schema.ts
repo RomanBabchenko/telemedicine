@@ -78,6 +78,23 @@ export const envSchema = z.object({
 
   PATIENT_APP_URL: z.string().url().default('http://localhost:5173'),
   DOCTOR_APP_URL: z.string().url().default('http://localhost:5174'),
+
+  // Platform-wide kill switch for full login (email+pwd / OTP /
+  // magic-link / patient self-register) — disables that role across
+  // every tenant regardless of per-tenant `loginPolicy`. Invite-link
+  // consumption (POST /auth/invite/consume) is *not* affected, and
+  // admin/internal roles (PLATFORM_SUPER_ADMIN, CLINIC_ADMIN,
+  // MIS_SERVICE, AUDITOR) still pass so an operator can never lock
+  // themselves out via env. Useful for incidents / maintenance windows
+  // and for deployments that operate exclusively through MIS invites.
+  AUTH_DISABLE_LOGIN_DOCTOR: z
+    .string()
+    .transform((v) => v === 'true')
+    .default('false'),
+  AUTH_DISABLE_LOGIN_PATIENT: z
+    .string()
+    .transform((v) => v === 'true')
+    .default('false'),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -1,4 +1,5 @@
 import type {
+  AuthConfigDto,
   AuthResponseDto,
   AuthTokensDto,
   AuthUserDto,
@@ -16,6 +17,7 @@ import type {
 import type { ApiClient } from '../http';
 
 export const authApi = (client: ApiClient) => ({
+  config: () => client.get<AuthConfigDto>('/auth/config'),
   registerPatient: (dto: RegisterPatientDto) =>
     client.post<AuthResponseDto>('/auth/register/patient', dto),
   registerDoctor: (dto: RegisterDoctorDto) =>

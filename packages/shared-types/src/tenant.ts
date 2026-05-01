@@ -29,6 +29,7 @@ export interface TenantDto {
   features: TenantFeatureMatrix;
   audioPolicy: TenantAudioPolicyDto;
   invitePolicy: TenantInvitePolicyDto;
+  loginPolicy: TenantLoginPolicyDto;
 }
 
 export interface TenantAudioPolicyDto {
@@ -43,6 +44,16 @@ export interface TenantAudioPolicyDto {
 export interface TenantInvitePolicyDto {
   bindIp?: boolean;
   bindUserAgent?: boolean;
+}
+
+// Per-tenant gate on *full* login (email+password / OTP / magic-link /
+// patient self-register). Missing or `true` = enabled — only explicit
+// `false` blocks the matching role from logging in. Invite-link
+// consumption (POST /auth/invite/consume) is unaffected; admin/internal
+// roles always bypass the gate.
+export interface TenantLoginPolicyDto {
+  doctorEnabled?: boolean;
+  patientEnabled?: boolean;
 }
 
 export interface CreateTenantDto {
@@ -64,4 +75,5 @@ export interface UpdateTenantDto {
   features?: Partial<TenantFeatureMatrix>;
   audioPolicy?: Partial<TenantAudioPolicyDto>;
   invitePolicy?: Partial<TenantInvitePolicyDto>;
+  loginPolicy?: Partial<TenantLoginPolicyDto>;
 }

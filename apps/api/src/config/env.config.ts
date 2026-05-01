@@ -114,4 +114,14 @@ export class AppConfig {
   get doctorAppUrl(): string {
     return this.config.get('DOCTOR_APP_URL', { infer: true });
   }
+
+  // Platform-wide login kill switches — when true, the matching role is
+  // blocked from full login across every tenant, regardless of per-tenant
+  // policy. Layered on top of `Tenant.loginPolicy` in TenantService.canLogin.
+  get auth() {
+    return {
+      disableLoginDoctor: this.config.get('AUTH_DISABLE_LOGIN_DOCTOR', { infer: true }),
+      disableLoginPatient: this.config.get('AUTH_DISABLE_LOGIN_PATIENT', { infer: true }),
+    };
+  }
 }

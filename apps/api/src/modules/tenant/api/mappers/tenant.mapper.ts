@@ -24,4 +24,5 @@ export const toTenantResponse = (t: Tenant): TenantResponseDto => ({
   features: t.featureMatrix,
   audioPolicy: toAudioPolicy(t.audioPolicy),
   invitePolicy: t.invitePolicy ?? {},
+  loginPolicy: t.loginPolicy ?? {},
 });

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminApi, adminUsersApi } from '@telemed/api-client';
 import type {
   TenantFeatureMatrix,
+  TenantLoginPolicyDto,
   UpdateTenantDto,
   UserDetailDto,
 } from '@telemed/shared-types';
@@ -84,6 +85,14 @@ export const PlatformTenantEditPage = () => {
   const [logoUrl, setLogoUrl] = useState('');
   const [locale, setLocale] = useState('uk');
   const [features, setFeatures] = useState<TenantFeatureMatrix | null>(null);
+  // loginPolicy: missing flag = enabled (server treats it that way too).
+  // Tracking the *enabled* booleans here (vs. nullable) keeps the
+  // checkbox UI obvious — both checked = both enabled, the default for
+  // every existing tenant.
+  const [loginPolicy, setLoginPolicy] = useState<TenantLoginPolicyDto>({
+    doctorEnabled: true,
+    patientEnabled: true,
+  });
 
   useEffect(() => {
     const t = tenantQ.data;
@@ -93,6 +102,10 @@ export const PlatformTenantEditPage = () => {
       setLogoUrl(t.logoUrl ?? '');
       setLocale(t.locale);
       setFeatures(t.features);
+      setLoginPolicy({
+        doctorEnabled: t.loginPolicy?.doctorEnabled !== false,
+        patientEnabled: t.loginPolicy?.patientEnabled !== false,
+      });
     }
   }, [tenantQ.data]);
 
@@ -122,6 +135,7 @@ export const PlatformTenantEditPage = () => {
       logoUrl: logoUrl || null,
       locale,
       features: features ?? undefined,
+      loginPolicy,
     });
   };
 
@@ -176,6 +190,36 @@ export const PlatformTenantEditPage = () => {
             )}
           </div>
         ) : null}
+      </Card>
+
+      <Card>
+        <h3 className="mb-1 font-semibold">Аутентифікація</h3>
+        <p className="mb-3 text-sm text-slate-500">
+          Інвайт-посилання працюють незалежно від цих налаштувань. Адміністратори
+          клініки завжди можуть увійти.
+        </p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <label className="flex items-center gap-2 rounded border border-slate-200 p-2 text-sm">
+            <input
+              type="checkbox"
+              checked={loginPolicy.doctorEnabled !== false}
+              onChange={(e) =>
+                setLoginPolicy((prev) => ({ ...prev, doctorEnabled: e.target.checked }))
+              }
+            />
+            Дозволити вхід для лікарів
+          </label>
+          <label className="flex items-center gap-2 rounded border border-slate-200 p-2 text-sm">
+            <input
+              type="checkbox"
+              checked={loginPolicy.patientEnabled !== false}
+              onChange={(e) =>
+                setLoginPolicy((prev) => ({ ...prev, patientEnabled: e.target.checked }))
+              }
+            />
+            Дозволити вхід для пацієнтів
+          </label>
+        </div>
       </Card>
 
       <div className="flex items-center gap-3">

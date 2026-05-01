@@ -26,9 +26,11 @@ import {
   ApiAuthErrors,
   ApiStandardErrors,
 } from '../../../common/swagger';
+import { AppConfig } from '../../../config/env.config';
 import { AuthService } from '../application/auth.service';
 import { UserService } from '../application/user.service';
 import {
+  AuthConfigResponseDto,
   AuthResponseDto,
   LoginBodyDto,
   MagicLinkConsumeBodyDto,
@@ -49,10 +51,27 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly users: UserService,
+    private readonly config: AppConfig,
   ) {}
 
   private metaFrom(req: Request) {
     return { ip: req.ip ?? null, userAgent: req.header('user-agent') ?? null };
+  }
+
+  @Get('config')
+  @Public()
+  @ApiOperation({
+    summary: 'Public auth configuration (login kill switches)',
+    description:
+      "Returns the platform-wide login flags (env vars AUTH_DISABLE_LOGIN_DOCTOR / AUTH_DISABLE_LOGIN_PATIENT). SPAs poll this on the login screen so they can render a 'use your invite link' notice instead of a form when full login is disabled. Per-tenant policy is NOT surfaced here — the patient app may not have a tenant context pre-auth.",
+    operationId: 'getAuthConfig',
+  })
+  @ApiOkResponse({ type: AuthConfigResponseDto })
+  authConfig(): AuthConfigResponseDto {
+    return {
+      doctorLoginEnabled: !this.config.auth.disableLoginDoctor,
+      patientLoginEnabled: !this.config.auth.disableLoginPatient,
+    };
   }
 
   @Post('register/patient')

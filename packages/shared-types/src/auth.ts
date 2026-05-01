@@ -93,6 +93,18 @@ export interface MfaEnrollResponseDto {
   qrCodeDataUrl: string;
 }
 
+// Surface of the platform-wide login kill switches (env vars
+// AUTH_DISABLE_LOGIN_DOCTOR / AUTH_DISABLE_LOGIN_PATIENT). Public so the
+// SPAs can fetch it pre-auth and hide the matching login forms outright,
+// rather than letting a user fill the form and only see the 403 on submit.
+// Per-tenant policy is *not* surfaced here — it requires a tenant context
+// the patient app may not have before login. Invite-link flow is
+// unaffected by these flags.
+export interface AuthConfigDto {
+  doctorLoginEnabled: boolean;
+  patientLoginEnabled: boolean;
+}
+
 export interface MfaVerifyDto {
   code: string;
 }

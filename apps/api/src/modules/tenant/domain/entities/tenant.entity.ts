@@ -40,6 +40,16 @@ export class Tenant extends BaseEntity {
   @Column({ type: 'jsonb', name: 'invite_policy', default: () => `'{}'::jsonb` })
   invitePolicy!: { bindIp?: boolean; bindUserAgent?: boolean };
 
+  // Per-tenant gate on full login (email+password / OTP / magic-link /
+  // patient self-register). Missing or `true` = enabled (so existing
+  // tenants stay working). Only explicit `false` blocks. Invite-link
+  // consumption is always allowed regardless — that's a separate endpoint
+  // (POST /auth/invite/consume) and a different JWT scope. Used by tenants
+  // that operate exclusively through MIS-issued invites and don't want
+  // self-service login at all.
+  @Column({ type: 'jsonb', name: 'login_policy', default: () => `'{}'::jsonb` })
+  loginPolicy!: { doctorEnabled?: boolean; patientEnabled?: boolean };
+
   @Column({ name: 'billing_plan_id', type: 'uuid', nullable: true })
   billingPlanId!: string | null;
 
