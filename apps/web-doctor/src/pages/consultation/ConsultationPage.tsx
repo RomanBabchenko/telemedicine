@@ -140,7 +140,13 @@ const ConferenceLayout = ({ isFullscreen }: { isFullscreen: boolean }) => {
   );
   const pinned = usePinnedTracks();
   const focused = pinned[0] ?? null;
-  const height = isFullscreen ? 'calc(100vh - 80px)' : 'calc(100vh - 320px)';
+  // Use dvh (dynamic viewport height) so the conference fills the visible
+  // area even on mobile Safari/Chrome where the URL bar appears and disappears
+  // — plain vh treats the URL bar as part of the viewport and pushes the
+  // layout off-screen.
+  const height = isFullscreen
+    ? 'calc(100dvh - 80px)'
+    : 'calc(100dvh - 320px)';
   const focusContainerRef = useRef<HTMLDivElement>(null);
   const [panelVisible, setPanelVisible] = useState(true);
 
@@ -298,18 +304,42 @@ export const ConsultationPage = () => {
   const toggleFullscreen = () => {
     const el = fsContainerRef.current;
     if (!el) return;
-    if (isRealFullscreenSupported()) {
-      if (getFullscreenElement()) {
-        void exitFullscreenCompat();
-      } else {
-        void requestFullscreenCompat(el);
-      }
-    } else {
-      // iPhone Safari path — flip CSS-based pseudo-fullscreen. The
-      // fullscreenchange event never fires here, so drive the state directly.
-      setIsFullscreen((prev) => !prev);
+    // Already in real fullscreen → exit via API. Already in pseudo (no real
+    // FS element but state says we are) → flip state off.
+    if (getFullscreenElement()) {
+      void exitFullscreenCompat();
+      return;
     }
+    if (isFullscreen) {
+      setIsFullscreen(false);
+      return;
+    }
+    // Try real fullscreen first, even on phones — Android Chrome supports it
+    // and produces a much cleaner result than CSS pseudo. Fall back to pseudo
+    // only if the request is rejected (e.g. iPhone Safari, where it always
+    // is for non-<video> elements).
+    if (isRealFullscreenSupported()) {
+      const result = requestFullscreenCompat(el);
+      if (result instanceof Promise) {
+        result.catch(() => setIsFullscreen(true));
+      }
+      return;
+    }
+    setIsFullscreen(true);
   };
+
+  // Pseudo-fullscreen body-scroll lock. Only applies when there's no real FS
+  // element (browser handles scroll itself for real FS). Without this, on
+  // iPhone Safari the page underneath stays scrollable behind the overlay
+  // and the user-visible viewport can drift, exposing the page header.
+  useEffect(() => {
+    if (!isFullscreen || getFullscreenElement()) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [isFullscreen]);
 
   // LiveKit's CSS variables (--lk-bg / --lk-fg / etc.) only kick in when an
   // ancestor has data-lk-theme. Their device-pickers render through React
@@ -597,10 +627,21 @@ export const ConsultationPage = () => {
         ref={fsContainerRef}
         className="overflow-hidden rounded-lg bg-black"
         style={
-          isFullscreen && !isRealFullscreenSupported()
+          // Pseudo-fullscreen styles — applied only when we are flagged as
+          // fullscreen but the real FS API is not in use (iPhone Safari, or
+          // a real-FS request that was rejected). Use explicit edge offsets
+          // and 100dvh so iOS' shrinking visual viewport (URL bar) doesn't
+          // push the bottom of the overlay below the visible area, leaving
+          // the page header peeking through at the top.
+          isFullscreen && !getFullscreenElement()
             ? {
                 position: 'fixed',
-                inset: 0,
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                width: '100vw',
+                height: '100dvh',
                 zIndex: 9999,
                 borderRadius: 0,
               }

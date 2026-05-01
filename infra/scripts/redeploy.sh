@@ -10,7 +10,11 @@
 set -euxo pipefail
 
 APP_DIR="/home/ubuntu/telemedicine"
-DOMAIN="${DOMAIN:-testing-core.link}"
+# The demo box is provisioned with DOMAIN=demo.testing-core.link, so its
+# nginx serves /var/www/patient.demo.testing-core.link/ etc. A previous
+# default of "testing-core.link" silently deployed bundles into the wrong
+# directory — the symptom was "I redeployed but the page looks unchanged".
+DOMAIN="${DOMAIN:-demo.testing-core.link}"
 
 cd "$APP_DIR"
 
