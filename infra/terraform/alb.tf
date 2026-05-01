@@ -78,3 +78,53 @@ resource "aws_lb_listener" "https" {
     target_group_arn = aws_lb_target_group.app.arn
   }
 }
+
+# Admin IP allowlist. Two rules layered on top of the default forward:
+#   - priority 100: host=admin AND source-ip IN allowed → forward to TG
+#   - priority 110: host=admin (anything else)          → 403
+# Both `count` on length(admin_allowed_cidrs); an empty list keeps the
+# legacy behaviour where admin is reachable from any IP. Source-IP is
+# the real client IP — ALB sees it directly since it terminates TLS.
+resource "aws_lb_listener_rule" "admin_allow" {
+  count        = length(var.admin_allowed_cidrs) > 0 ? 1 : 0
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 100
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app.arn
+  }
+
+  condition {
+    host_header {
+      values = ["admin.${var.domain}"]
+    }
+  }
+
+  condition {
+    source_ip {
+      values = var.admin_allowed_cidrs
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "admin_deny" {
+  count        = length(var.admin_allowed_cidrs) > 0 ? 1 : 0
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 110
+
+  action {
+    type = "fixed-response"
+    fixed_response {
+      content_type = "text/plain"
+      message_body = "Admin access from this IP is not allowed."
+      status_code  = "403"
+    }
+  }
+
+  condition {
+    host_header {
+      values = ["admin.${var.domain}"]
+    }
+  }
+}

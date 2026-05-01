@@ -67,3 +67,36 @@ variable "le_email" {
   type        = string
   description = "Email for Let's Encrypt notifications"
 }
+
+variable "admin_allowed_cidrs" {
+  type        = list(string)
+  description = <<EOT
+IP allowlist (CIDR list) for the admin SPA at admin.<domain>. When the
+list is non-empty, the ALB returns 403 to anyone outside these CIDRs
+hitting that host; an empty list keeps admin reachable from anywhere
+(legacy behaviour). Patient / doctor / api / livekit hosts are
+unaffected. Example: ["203.0.113.42/32", "198.51.100.0/24"].
+EOT
+  default     = []
+}
+
+# Platform-wide login kill switches. Map directly to the API's
+# AUTH_DISABLE_LOGIN_DOCTOR / AUTH_DISABLE_LOGIN_PATIENT env vars
+# (see apps/api/src/config/env.schema.ts). When true, the matching
+# role can't use email+password / OTP / magic-link / self-register —
+# only invite links from the MIS work. Admin/internal roles bypass
+# the gate inside the service so an operator can't lock themselves
+# out. Flipping these requires a re-apply because user_data is
+# templated; for a hot toggle, edit /home/ubuntu/telemedicine/.env
+# on the box and `systemctl restart telemed-api` instead.
+variable "auth_disable_login_doctor" {
+  type        = bool
+  description = "Disable full doctor login (invite links still work). See apps/api/.../env.schema.ts AUTH_DISABLE_LOGIN_DOCTOR."
+  default     = false
+}
+
+variable "auth_disable_login_patient" {
+  type        = bool
+  description = "Disable full patient login (invite links still work). See apps/api/.../env.schema.ts AUTH_DISABLE_LOGIN_PATIENT."
+  default     = false
+}

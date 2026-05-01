@@ -4,11 +4,14 @@
 # Logs go to /var/log/telemed-bootstrap.log AND /var/log/cloud-init-output.log.
 #
 # Variables substituted by Terraform templatefile():
-#   domain      — apex domain (testing-core.link)
-#   repo_url    — git URL of the monorepo
-#   repo_branch — branch to deploy
-#   le_email    — Let's Encrypt notification email
-#   public_ip   — Elastic IP attached to this instance (for LiveKit node IP)
+#   domain                     — apex domain (testing-core.link)
+#   repo_url                   — git URL of the monorepo
+#   repo_branch                — branch to deploy
+#   le_email                   — Let's Encrypt notification email
+#   public_ip                  — Elastic IP attached to this instance (LiveKit node IP)
+#   git_ssh_private_key        — optional SSH key for private git clone
+#   auth_disable_login_doctor  — bool, sets AUTH_DISABLE_LOGIN_DOCTOR in .env
+#   auth_disable_login_patient — bool, sets AUTH_DISABLE_LOGIN_PATIENT in .env
 #
 set -euxo pipefail
 exec > >(tee /var/log/telemed-bootstrap.log) 2>&1
@@ -158,6 +161,15 @@ DOCDREAM_STUB_ENABLED=true
 # ---- MIS Integration (invite link URLs) ----
 PATIENT_APP_URL=https://patient.$DOMAIN
 DOCTOR_APP_URL=https://doctor.$DOMAIN
+
+# ---- Auth kill switches ----
+# Toggling these via terraform requires user_data_replace_on_change=true
+# (currently set in ec2.tf), which rebootstraps the instance. For a hot
+# flip without rebuilding the box, edit this .env file in place and
+# `sudo systemctl restart telemed-api` — the values below are written
+# from terraform.tfvars only on initial bootstrap.
+AUTH_DISABLE_LOGIN_DOCTOR=${auth_disable_login_doctor}
+AUTH_DISABLE_LOGIN_PATIENT=${auth_disable_login_patient}
 
 # ---- Frontend (used by Vite during build below) ----
 VITE_API_URL=https://api.$DOMAIN/api/v1

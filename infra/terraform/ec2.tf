@@ -43,12 +43,14 @@ resource "aws_instance" "app" {
   }
 
   user_data = templatefile("${path.module}/user_data.sh.tpl", {
-    domain              = var.domain
-    repo_url            = var.repo_url
-    repo_branch         = var.repo_branch
-    le_email            = var.le_email
-    public_ip           = aws_eip.app.public_ip
-    git_ssh_private_key = var.git_ssh_private_key
+    domain                     = var.domain
+    repo_url                   = var.repo_url
+    repo_branch                = var.repo_branch
+    le_email                   = var.le_email
+    public_ip                  = aws_eip.app.public_ip
+    git_ssh_private_key        = var.git_ssh_private_key
+    auth_disable_login_doctor  = var.auth_disable_login_doctor
+    auth_disable_login_patient = var.auth_disable_login_patient
   })
 
   # Force re-bootstrap if the script changes (helpful while iterating).
