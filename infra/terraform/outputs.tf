@@ -29,6 +29,6 @@ output "urls" {
     patient = "https://patient.${var.domain}"
     doctor  = "https://doctor.${var.domain}"
     admin   = "https://admin.${var.domain}"
-    api     = "https://api.${var.domain}/api/v1/docs"
+    api     = "https://api.${var.domain}/api/docs"
   }
 }

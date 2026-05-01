@@ -14,6 +14,7 @@ import {
 import { DisconnectReason, Track, VideoPreset } from 'livekit-client';
 import dayjs from 'dayjs';
 import { bookingApi, consultationApi } from '@telemed/api-client';
+import { AppointmentStatus } from '@telemed/shared-types';
 import { Alert, Button, Card, PageHeader, Spinner } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth.store';
@@ -25,6 +26,34 @@ const booking = bookingApi(apiClient);
 // boundaries as the backend gate.
 const JOIN_OPENS_BEFORE_START_MIN = 15;
 const JOIN_CLOSES_AFTER_END_MIN = 30;
+
+// Mirrors TERMINAL_APPOINTMENT_STATUSES in ConsultationService — the
+// join-token endpoint 403s with `consultation.terminal` for these. We
+// short-circuit client-side so the doctor sees "session ended" instead of
+// the "Розпочати консультацію" button leading to an obscure error.
+const CANCELLED_STATUSES = new Set<AppointmentStatus>([
+  AppointmentStatus.CANCELLED_BY_PATIENT,
+  AppointmentStatus.CANCELLED_BY_PROVIDER,
+  AppointmentStatus.NO_SHOW_PATIENT,
+  AppointmentStatus.NO_SHOW_PROVIDER,
+  AppointmentStatus.REFUNDED,
+]);
+const COMPLETED_STATUSES = new Set<AppointmentStatus>([
+  AppointmentStatus.COMPLETED,
+  AppointmentStatus.DOCUMENTATION_COMPLETED,
+]);
+
+// NestJS ForbiddenException({ message, code }) lands as
+// { statusCode, message, code, ... } in axios's error.response.data.
+// Fall back to the generic axios message only if the body is missing.
+const extractApiMessage = (e: unknown, fallback: string): string => {
+  const body = (e as { response?: { data?: { message?: unknown } } })?.response?.data;
+  if (body && typeof body.message === 'string' && body.message.length > 0) {
+    return body.message;
+  }
+  if (e instanceof Error && e.message) return e.message;
+  return fallback;
+};
 
 const formatUntil = (targetMs: number, nowMs: number): string => {
   const totalMinutes = Math.max(0, Math.ceil((targetMs - nowMs) / 60_000));
@@ -267,7 +296,8 @@ export const ConsultationPage = () => {
       setDisconnectReason(null);
       setJoined(true);
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) =>
+      setError(extractApiMessage(e, 'Не вдалося підключитись до зустрічі')),
   });
 
   // Invite-scoped doctors (coming from MIS) don't run the documentation flow
@@ -279,8 +309,12 @@ export const ConsultationPage = () => {
     onSuccess: () => {
       setJoined(false);
       setDisconnectReason('Консультацію завершено');
+      // Refetch so the terminal-state branch flips the page from the
+      // "Розпочати консультацію" lobby straight to "Зустріч завершено".
+      void apptQ.refetch();
     },
-    onError: (e: Error) => setError(e.message),
+    onError: (e: Error) =>
+      setError(extractApiMessage(e, 'Не вдалося завершити консультацію')),
   });
 
   const livekitUrl = useMemo(
@@ -290,6 +324,35 @@ export const ConsultationPage = () => {
 
   if (sessionQ.isLoading || apptQ.isLoading || phase === 'loading') {
     return <Spinner />;
+  }
+
+  // Terminal-state short-circuit — once cancelled/completed the join-token
+  // endpoint will 403, so don't show "Розпочати консультацію" only to fail
+  // on click. Mirrors backend's `consultation.terminal` gate.
+  const apptStatus = apptQ.data?.status;
+  if (apptStatus && CANCELLED_STATUSES.has(apptStatus)) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Зустріч скасовано" />
+        <Card>
+          <Alert variant="info">
+            Цю зустріч скасовано — підключення недоступне.
+          </Alert>
+        </Card>
+      </div>
+    );
+  }
+  if (apptStatus && COMPLETED_STATUSES.has(apptStatus)) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Зустріч завершено" />
+        <Card>
+          <Alert variant="info">
+            Цю зустріч уже завершено — підключення недоступне.
+          </Alert>
+        </Card>
+      </div>
+    );
   }
 
   if (phase === 'too_late') {
@@ -417,6 +480,10 @@ export const ConsultationPage = () => {
               setDisconnectReason(reason ? `disconnected: ${reason}` : 'disconnected');
             }
             setJoined(false);
+            // Refetch the appointment so the terminal-state branch can take
+            // over when the *other* side ended the call (the backend deletes
+            // the LK room and flips the appointment to COMPLETED).
+            void apptQ.refetch();
           }}
         >
           <LayoutContextProvider>
