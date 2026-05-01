@@ -17,6 +17,7 @@ import { bookingApi, consultationApi } from '@telemed/api-client';
 import { AppointmentStatus } from '@telemed/shared-types';
 import { Alert, Button, Card, PageHeader, Spinner } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
+import { LobbyDeviceState, LobbyPreview } from './LobbyPreview';
 
 const booking = bookingApi(apiClient);
 const consultation = consultationApi(apiClient);
@@ -177,6 +178,17 @@ export const AppointmentJoinPage = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const fsContainerRef = useRef<HTMLDivElement>(null);
 
+  // Device choices made in the pre-join lobby — passed to LiveKitRoom on
+  // connect so the call starts with the camera/mic the user previewed.
+  const [deviceState, setDeviceState] = useState<LobbyDeviceState>({
+    cameraEnabled: true,
+    micEnabled: true,
+    videoDeviceId: undefined,
+    audioDeviceId: undefined,
+  });
+  const updateDeviceState = (next: Partial<LobbyDeviceState>) =>
+    setDeviceState((prev) => ({ ...prev, ...next }));
+
   // Sync local state when the user exits fullscreen via ESC or the browser UI
   // — without this listener the icon/label on the toggle button would lie.
   useEffect(() => {
@@ -221,12 +233,14 @@ export const AppointmentJoinPage = () => {
   // LiveKit's CSS variables (--lk-bg / --lk-fg / etc.) only kick in when an
   // ancestor has data-lk-theme. Their device-pickers render through React
   // portals straight into <body>, so the attribute has to live on body to
-  // cover them. Without this the camera/mic dropdown shows as transparent
-  // background + black text on top of the dark video.
+  // cover them. Only set it while we're actually in the call — applying it
+  // in the lobby leaks LK's dark foreground into our native <select>
+  // dropdowns (white-on-white option list).
   useEffect(() => {
+    if (!joined) return;
     document.body.setAttribute('data-lk-theme', 'default');
     return () => document.body.removeAttribute('data-lk-theme');
-  }, []);
+  }, [joined]);
 
   const apptQ = useQuery({
     queryKey: ['appointment', id],
@@ -241,6 +255,18 @@ export const AppointmentJoinPage = () => {
         ? 15_000
         : false;
     },
+  });
+
+  // Poll the session while the patient is in the lobby — the doctorPresent
+  // flag is server-derived from LiveKit room presence and drives the
+  // "Лікар онлайн / ще не приєднався" indicator. Stops polling once we
+  // join (we'll see the doctor directly via LiveKit then).
+  const sessionId = apptQ.data?.consultationSessionId ?? null;
+  const sessionQ = useQuery({
+    queryKey: ['session-presence', sessionId],
+    queryFn: () => consultation.getById(sessionId!),
+    enabled: !!sessionId && !joined,
+    refetchInterval: !joined ? 5_000 : false,
   });
 
   const paymentRequired =
@@ -397,20 +423,69 @@ export const AppointmentJoinPage = () => {
   }
 
   if (!joined || !tokenM.data) {
+    const doctor = apptQ.data?.doctor;
+    const doctorName = doctor
+      ? `${doctor.firstName} ${doctor.lastName}`.trim()
+      : 'Ваш лікар';
+    const doctorSpec =
+      doctor && doctor.specializations.length > 0
+        ? doctor.specializations.join(', ')
+        : null;
+    const doctorPresent = sessionQ.data?.doctorPresent ?? false;
+
     return (
       <div className="space-y-6">
-        <PageHeader title="Зала очікування" description="Підготуйте мікрофон та камеру" />
-        <Card>
-          <Alert variant="info" title="Інструкції">
-            Натисніть кнопку нижче, щоб під'єднатись до відеоконсультації. Лікар бачитиме, що ви онлайн.
-          </Alert>
-          {error ? <Alert variant="danger">{error}</Alert> : null}
-          <div className="mt-4">
-            <Button onClick={() => tokenM.mutate()} isLoading={tokenM.isPending}>
-              Підключитись
-            </Button>
-          </div>
-        </Card>
+        <PageHeader
+          title="Зала очікування"
+          description="Підготуйте мікрофон та камеру"
+        />
+        <div className="grid gap-6 lg:grid-cols-[2fr_3fr]">
+          <Card>
+            <div className="space-y-4">
+              <div>
+                <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Ваш лікар
+                </span>
+                <h3 className="mt-1 text-lg font-semibold text-slate-900">
+                  {doctorName}
+                </h3>
+                {doctorSpec ? (
+                  <p className="text-sm text-slate-600">{doctorSpec}</p>
+                ) : null}
+              </div>
+              <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2">
+                <span
+                  className={`inline-block h-2.5 w-2.5 rounded-full ${
+                    doctorPresent ? 'bg-emerald-500' : 'bg-amber-400'
+                  } ${doctorPresent ? '' : 'animate-pulse'}`}
+                  aria-hidden
+                />
+                <span className="text-sm text-slate-700">
+                  {doctorPresent
+                    ? 'Лікар онлайн — можна підключатись'
+                    : 'Очікуємо лікаря…'}
+                </span>
+              </div>
+              <p className="text-sm text-slate-600">
+                Натисніть «Підключитись», коли будете готові. Перед цим можете
+                перевірити, як виглядає ваше відео й налаштувати потрібну камеру
+                та мікрофон праворуч.
+              </p>
+              {error ? <Alert variant="danger">{error}</Alert> : null}
+              <Button
+                onClick={() => tokenM.mutate()}
+                isLoading={tokenM.isPending}
+                fullWidth
+                size="lg"
+              >
+                Підключитись
+              </Button>
+            </div>
+          </Card>
+          <Card>
+            <LobbyPreview state={deviceState} onChange={updateDeviceState} />
+          </Card>
+        </div>
       </div>
     );
   }
@@ -438,8 +513,20 @@ export const AppointmentJoinPage = () => {
           token={tokenM.data.token}
           serverUrl={livekitUrl}
           connect={true}
-          video={true}
-          audio={true}
+          video={
+            deviceState.cameraEnabled
+              ? deviceState.videoDeviceId
+                ? { deviceId: { exact: deviceState.videoDeviceId } }
+                : true
+              : false
+          }
+          audio={
+            deviceState.micEnabled
+              ? deviceState.audioDeviceId
+                ? { deviceId: { exact: deviceState.audioDeviceId } }
+                : true
+              : false
+          }
           // Low-bandwidth defaults — see ConsultationPage.tsx in web-doctor.
           options={{
             adaptiveStream: true,

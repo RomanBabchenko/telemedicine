@@ -29,4 +29,14 @@ export class ConsultationSessionResponseDto implements ConsultationSessionDto {
 
   @ApiProperty({ type: String, nullable: true, format: 'uuid' })
   recordingId!: string | null;
+
+  @ApiProperty({
+    description: 'True when a doctor is currently connected to the LiveKit room',
+  })
+  doctorPresent!: boolean;
+
+  @ApiProperty({
+    description: 'True when a patient is currently connected to the LiveKit room',
+  })
+  patientPresent!: boolean;
 }

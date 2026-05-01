@@ -202,7 +202,6 @@ export class BookingController {
   async getById(
     @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<AppointmentResponseDto> {
-    const appointment = await this.appointments.getById(id);
-    return toAppointmentResponse(appointment);
+    return this.appointments.getByIdWithSummaries(id);
   }
 }

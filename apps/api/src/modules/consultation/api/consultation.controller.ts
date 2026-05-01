@@ -53,7 +53,8 @@ export class ConsultationController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<ConsultationSessionResponseDto> {
     const session = await this.service.getById(id);
-    return toConsultationSessionResponse(session);
+    const presence = await this.service.getPresence(session.livekitRoomName);
+    return toConsultationSessionResponse(session, presence);
   }
 
   @Post(':id/join-token')

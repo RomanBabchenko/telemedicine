@@ -131,6 +131,24 @@ export class AppointmentService {
     return appt;
   }
 
+  // Same shape as listForRole rows — caller (the patient/doctor lobby) needs
+  // joined doctor + patient summaries to show "Лікар: ... (спеціальність)"
+  // and the patient name on the doctor side.
+  async getByIdWithSummaries(id: string): Promise<AppointmentResponseDto> {
+    const appt = await this.getById(id);
+    const [patient, doctorMap]: [Patient | null, Map<string, Doctor>] = await Promise.all([
+      appt.patientId
+        ? this.patients.findOne({ where: { id: appt.patientId } })
+        : Promise.resolve(null),
+      this.providerService.getDoctorsByIds([appt.doctorId]),
+    ]);
+    return toAppointmentResponseWithSummaries(
+      appt,
+      patient ?? undefined,
+      doctorMap.get(appt.doctorId),
+    );
+  }
+
   async reserve(input: { slotId: string; patientId: string; reasonText?: string }): Promise<Appointment> {
     const tenantId = this.tenantContext.getTenantId();
 

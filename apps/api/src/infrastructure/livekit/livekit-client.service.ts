@@ -125,4 +125,19 @@ export class LiveKitClientService {
       // ignore
     }
   }
+
+  /**
+   * Best-effort list of identities currently connected to a room. Returns []
+   * if the room doesn't exist or LiveKit is unreachable — callers (the lobby
+   * presence indicator) treat that as "no one connected" rather than a hard
+   * error, since the data only drives a UI hint.
+   */
+  async listParticipantIdentities(roomName: string): Promise<string[]> {
+    try {
+      const participants = await this.roomService.listParticipants(roomName);
+      return participants.map((p) => p.identity);
+    } catch {
+      return [];
+    }
+  }
 }

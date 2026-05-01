@@ -1,8 +1,14 @@
 import { ConsultationSession } from '../../domain/entities/consultation-session.entity';
 import { ConsultationSessionResponseDto } from '../dto/consultation-session.response.dto';
 
+export interface SessionPresence {
+  doctorPresent: boolean;
+  patientPresent: boolean;
+}
+
 export const toConsultationSessionResponse = (
   s: ConsultationSession,
+  presence: SessionPresence = { doctorPresent: false, patientPresent: false },
 ): ConsultationSessionResponseDto => ({
   id: s.id,
   appointmentId: s.appointmentId,
@@ -13,4 +19,6 @@ export const toConsultationSessionResponse = (
   patientJoinedAt: s.patientJoinedAt ? s.patientJoinedAt.toISOString() : null,
   doctorJoinedAt: s.doctorJoinedAt ? s.doctorJoinedAt.toISOString() : null,
   recordingId: s.recordingId,
+  doctorPresent: presence.doctorPresent,
+  patientPresent: presence.patientPresent,
 });

@@ -75,6 +75,26 @@ export class ConsultationService {
     return s;
   }
 
+  /**
+   * Returns who is currently in the LiveKit room based on the identity
+   * prefix scheme used in issueJoinToken: `doctor-...`, `patient-...`,
+   * `patient-anon-...`. Used by the lobby UIs to show online indicators
+   * before they themselves connect to the room.
+   */
+  async getPresence(roomName: string): Promise<{
+    doctorPresent: boolean;
+    patientPresent: boolean;
+  }> {
+    const identities = await this.livekit.listParticipantIdentities(roomName);
+    let doctorPresent = false;
+    let patientPresent = false;
+    for (const id of identities) {
+      if (id.startsWith('doctor-')) doctorPresent = true;
+      else if (id.startsWith('patient-')) patientPresent = true;
+    }
+    return { doctorPresent, patientPresent };
+  }
+
   async issueJoinToken(sessionId: string, user: AuthUser): Promise<{
     token: string;
     livekitUrl: string;

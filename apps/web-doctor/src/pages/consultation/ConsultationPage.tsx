@@ -18,6 +18,7 @@ import { AppointmentStatus } from '@telemed/shared-types';
 import { Alert, Button, Card, PageHeader, Spinner } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth.store';
+import { LobbyDeviceState, LobbyPreview } from './LobbyPreview';
 
 const consultation = consultationApi(apiClient);
 const booking = bookingApi(apiClient);
@@ -191,6 +192,16 @@ export const ConsultationPage = () => {
   const fsContainerRef = useRef<HTMLDivElement>(null);
   const isInviteScope = useAuthStore((s) => s.user?.scope === 'invite');
 
+  // Pre-join device choices — see web-patient/.../AppointmentJoinPage.tsx.
+  const [deviceState, setDeviceState] = useState<LobbyDeviceState>({
+    cameraEnabled: true,
+    micEnabled: true,
+    videoDeviceId: undefined,
+    audioDeviceId: undefined,
+  });
+  const updateDeviceState = (next: Partial<LobbyDeviceState>) =>
+    setDeviceState((prev) => ({ ...prev, ...next }));
+
   // Sync local state when the user exits fullscreen via ESC or the browser UI
   // — without this listener the icon/label on the toggle button would lie.
   useEffect(() => {
@@ -235,17 +246,23 @@ export const ConsultationPage = () => {
   // LiveKit's CSS variables (--lk-bg / --lk-fg / etc.) only kick in when an
   // ancestor has data-lk-theme. Their device-pickers render through React
   // portals straight into <body>, so the attribute has to live on body to
-  // cover them. Without this the camera/mic dropdown shows as transparent
-  // background + black text on top of the dark video.
+  // cover them. Only set it while we're actually in the call — applying it
+  // in the lobby leaks LK's dark foreground into our native <select>
+  // dropdowns (white-on-white option list).
   useEffect(() => {
+    if (!joined) return;
     document.body.setAttribute('data-lk-theme', 'default');
     return () => document.body.removeAttribute('data-lk-theme');
-  }, []);
+  }, [joined]);
 
   const sessionQ = useQuery({
     queryKey: ['session', sessionId],
     queryFn: () => consultation.getById(sessionId!),
     enabled: !!sessionId,
+    // Poll while in the lobby so the patient-presence indicator updates.
+    // Once the doctor connects the LiveKit room exposes presence directly
+    // and this server-side poll is no longer needed.
+    refetchInterval: !joined ? 5_000 : false,
   });
 
   // Second hop — we need the appointment's startAt/endAt to render the
@@ -383,20 +400,68 @@ export const ConsultationPage = () => {
   }
 
   if (!joined || !tokenM.data) {
+    const patient = apptQ.data?.patient;
+    const isAnon = apptQ.data?.isAnonymousPatient;
+    const patientName = isAnon
+      ? 'Анонімний пацієнт'
+      : patient
+        ? `${patient.firstName} ${patient.lastName}`.trim() || 'Пацієнт'
+        : 'Пацієнт';
+    const patientPresent = sessionQ.data?.patientPresent ?? false;
+
     return (
       <div className="space-y-6">
-        <PageHeader title="Підготовка до консультації" />
-        <Card>
-          <Alert variant="info" title="Перед стартом">
-            Перевірте мікрофон і камеру. Натисніть кнопку, щоб увійти в кімнату.
-          </Alert>
-          {error ? <Alert variant="danger">{error}</Alert> : null}
-          <div className="mt-4">
-            <Button onClick={() => tokenM.mutate()} isLoading={tokenM.isPending}>
-              Розпочати консультацію
-            </Button>
-          </div>
-        </Card>
+        <PageHeader
+          title="Підготовка до консультації"
+          description="Перевірте мікрофон і камеру перед стартом"
+        />
+        <div className="grid gap-6 lg:grid-cols-[2fr_3fr]">
+          <Card>
+            <div className="space-y-4">
+              <div>
+                <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Пацієнт
+                </span>
+                <h3 className="mt-1 text-lg font-semibold text-slate-900">
+                  {patientName}
+                </h3>
+                {!isAnon && patient?.phone ? (
+                  <p className="text-sm text-slate-600">{patient.phone}</p>
+                ) : null}
+              </div>
+              <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2">
+                <span
+                  className={`inline-block h-2.5 w-2.5 rounded-full ${
+                    patientPresent ? 'bg-emerald-500' : 'bg-amber-400'
+                  } ${patientPresent ? '' : 'animate-pulse'}`}
+                  aria-hidden
+                />
+                <span className="text-sm text-slate-700">
+                  {patientPresent
+                    ? 'Пацієнт онлайн'
+                    : 'Пацієнт ще не приєднався'}
+                </span>
+              </div>
+              <p className="text-sm text-slate-600">
+                Праворуч можна перевірити, як виглядає ваше відео, та обрати
+                потрібну камеру/мікрофон. Натисніть «Розпочати консультацію»,
+                коли будете готові.
+              </p>
+              {error ? <Alert variant="danger">{error}</Alert> : null}
+              <Button
+                onClick={() => tokenM.mutate()}
+                isLoading={tokenM.isPending}
+                fullWidth
+                size="lg"
+              >
+                Розпочати консультацію
+              </Button>
+            </div>
+          </Card>
+          <Card>
+            <LobbyPreview state={deviceState} onChange={updateDeviceState} />
+          </Card>
+        </div>
       </div>
     );
   }
@@ -447,8 +512,20 @@ export const ConsultationPage = () => {
           token={tokenM.data.token}
           serverUrl={livekitUrl}
           connect={true}
-          video={true}
-          audio={true}
+          video={
+            deviceState.cameraEnabled
+              ? deviceState.videoDeviceId
+                ? { deviceId: { exact: deviceState.videoDeviceId } }
+                : true
+              : false
+          }
+          audio={
+            deviceState.micEnabled
+              ? deviceState.audioDeviceId
+                ? { deviceId: { exact: deviceState.audioDeviceId } }
+                : true
+              : false
+          }
           // Low-bandwidth defaults for unstable Wi-Fi:
           //   - cap publish bitrate so the encoder targets ~150 kbps video
           //   - use VP8 (more forgiving than H.264 with packet loss)

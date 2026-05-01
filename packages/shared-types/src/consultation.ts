@@ -10,6 +10,11 @@ export interface ConsultationSessionDto {
   patientJoinedAt: string | null;
   doctorJoinedAt: string | null;
   recordingId: string | null;
+  // Live room presence — derived from LiveKit on each fetch (not persisted),
+  // so the lobby can show "Лікар онлайн" / "Пацієнт онлайн" without
+  // connecting to the room. False also when LiveKit is unreachable.
+  doctorPresent: boolean;
+  patientPresent: boolean;
 }
 
 export interface JoinTokenDto {
