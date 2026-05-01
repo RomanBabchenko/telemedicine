@@ -16,6 +16,7 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { AuthUser, CurrentUser, Public } from '../../../common/auth/decorators';
 import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
@@ -76,6 +77,11 @@ export class AuthController {
 
   @Post('register/patient')
   @Public()
+  // Slow registration spam — a real new patient signs up once, not five
+  // times a minute. NAT'd clinics shouldn't hit this from many users so
+  // 5/min/IP is safe. Counts against ALL register attempts (including
+  // failed ones) to prevent enumeration.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @HttpCode(HttpStatus.CREATED)
   @Auditable({ action: 'auth.patient.registered', resource: 'User' })
   @ApiOperation({
@@ -96,6 +102,11 @@ export class AuthController {
 
   @Post('login')
   @Public()
+  // Brute-force shield: a human typing a password retries a handful of
+  // times, never tens. 10/min/IP allows for typo correction without
+  // letting an attacker iterate through password lists. Even at 10/min
+  // a 10k-password dictionary needs 16 hours per account.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   @Auditable({ action: 'auth.login', resource: 'User' })
   @ApiOperation({
@@ -116,6 +127,9 @@ export class AuthController {
 
   @Post('otp/request')
   @Public()
+  // OTP requests cost real money (SMS) and can spam inboxes. 5/min/IP
+  // is plenty for a user fixing a typo once or twice.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Request a one-time password',
@@ -133,6 +147,10 @@ export class AuthController {
 
   @Post('otp/verify')
   @Public()
+  // OTP brute-force shield. 6-digit codes have a 1/1M guess chance, but
+  // with no rate limit an attacker can drain that in seconds. 10/min/IP
+  // is permissive for typo retries while making blind guessing useless.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   @Auditable({ action: 'auth.otp.verified', resource: 'User' })
   @ApiOperation({
@@ -154,6 +172,9 @@ export class AuthController {
 
   @Post('magic-link/request')
   @Public()
+  // Same reasoning as OTP request — magic links go out via email and
+  // shouldn't be requested in bulk.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Request a magic-link email',
@@ -169,6 +190,9 @@ export class AuthController {
 
   @Post('magic-link/consume')
   @Public()
+  // Magic-link tokens are long random strings, but bound the attempt
+  // rate anyway as defence-in-depth against token-guessing.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(HttpStatus.OK)
   @Auditable({ action: 'auth.magic-link.consumed', resource: 'User' })
   @ApiOperation({

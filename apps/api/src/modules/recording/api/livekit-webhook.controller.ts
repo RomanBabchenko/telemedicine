@@ -7,6 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { WebhookReceiver } from 'livekit-server-sdk';
 import { Public } from '../../../common/auth/decorators';
@@ -20,6 +21,12 @@ import { RecordingService } from '../application/recording.service';
 // and we read req.rawBody below instead of parsing from the framework-decoded
 // body.
 
+// LiveKit hits this endpoint from one or two server IPs and can fire
+// many events per minute across all live rooms (track_published, room
+// _started, egress_*, …). Skip the global throttler — the JWT signature
+// check above is the auth boundary, and rate-limiting LiveKit itself
+// just causes retry storms.
+@SkipThrottle()
 @ApiExcludeController()
 @Controller('webhooks/livekit')
 export class LiveKitWebhookController {

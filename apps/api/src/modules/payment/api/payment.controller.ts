@@ -19,6 +19,7 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { Public } from '../../../common/auth/decorators';
 import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
@@ -61,6 +62,10 @@ export class PaymentController {
 
   @Post('webhook/:provider')
   @Public()
+  // Skip global throttler — payment providers (Stripe/LiqPay) retry
+  // hard on any non-2xx and can blast events from a small set of IPs.
+  // HMAC signature inside `service.handleWebhook` is the auth boundary.
+  @SkipThrottle()
   @HttpCode(HttpStatus.OK)
   @Auditable({ action: 'payment.webhook.received', resource: 'Payment' })
   @ApiOperation({

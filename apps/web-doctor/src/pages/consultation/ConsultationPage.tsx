@@ -408,6 +408,10 @@ export const ConsultationPage = () => {
         ? `${patient.firstName} ${patient.lastName}`.trim() || 'Пацієнт'
         : 'Пацієнт';
     const patientPresent = sessionQ.data?.patientPresent ?? false;
+    // Numeric DD.MM.YYYY + HH:mm – HH:mm. Mirror of the patient lobby
+    // formatting; no dayjs locale loaded so we avoid month names.
+    const start = apptQ.data ? dayjs(apptQ.data.startAt) : null;
+    const end = apptQ.data ? dayjs(apptQ.data.endAt) : null;
 
     return (
       <div className="space-y-6">
@@ -418,17 +422,41 @@ export const ConsultationPage = () => {
         <div className="grid gap-6 lg:grid-cols-[2fr_3fr]">
           <Card>
             <div className="space-y-4">
-              <div>
-                <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                  Пацієнт
-                </span>
-                <h3 className="mt-1 text-lg font-semibold text-slate-900">
-                  {patientName}
-                </h3>
-                {!isAnon && patient?.phone ? (
-                  <p className="text-sm text-slate-600">{patient.phone}</p>
-                ) : null}
-              </div>
+              {/* Anonymous appointments carry no PII (no Patient row, no
+               * name) — there's nothing meaningful to show, and rendering
+               * "Анонімний пацієнт" as a label adds noise without
+               * informing. Skip the block entirely; the time-of-consultation
+               * + presence indicator below still tell the doctor what they
+               * need before joining. */}
+              {!isAnon ? (
+                <div>
+                  <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Пацієнт
+                  </span>
+                  <h3 className="mt-1 text-lg font-semibold text-slate-900">
+                    {patientName}
+                  </h3>
+                  {patient?.phone ? (
+                    <p className="text-sm text-slate-600">{patient.phone}</p>
+                  ) : null}
+                </div>
+              ) : null}
+              {start && end ? (
+                <div className="rounded-lg bg-slate-50 px-3 py-2">
+                  <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Час консультації
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-baseline gap-x-2 text-sm text-slate-800">
+                    <span className="font-medium">{start.format('DD.MM.YYYY')}</span>
+                    <span className="text-slate-400">·</span>
+                    <span>
+                      {start.format('HH:mm')}
+                      <span className="mx-1 text-slate-400">–</span>
+                      {end.format('HH:mm')}
+                    </span>
+                  </div>
+                </div>
+              ) : null}
               <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2">
                 <span
                   className={`inline-block h-2.5 w-2.5 rounded-full ${
@@ -539,6 +567,7 @@ export const ConsultationPage = () => {
               videoSimulcastLayers: [
                 new VideoPreset(320, 180, 150_000, 15),
                 new VideoPreset(640, 360, 400_000, 20),
+                new VideoPreset(1280, 720, 1_500_000, 30),
               ],
             },
           }}

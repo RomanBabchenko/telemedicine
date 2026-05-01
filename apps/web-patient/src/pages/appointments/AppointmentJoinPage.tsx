@@ -432,6 +432,11 @@ export const AppointmentJoinPage = () => {
         ? doctor.specializations.join(', ')
         : null;
     const doctorPresent = sessionQ.data?.doctorPresent ?? false;
+    // Numeric DD.MM.YYYY + HH:mm – HH:mm. dayjs has no locale loaded in
+    // this app, so we avoid month-name formats to keep things readable
+    // for Ukrainian users without pulling a locale bundle.
+    const start = apptQ.data ? dayjs(apptQ.data.startAt) : null;
+    const end = apptQ.data ? dayjs(apptQ.data.endAt) : null;
 
     return (
       <div className="space-y-6">
@@ -453,6 +458,22 @@ export const AppointmentJoinPage = () => {
                   <p className="text-sm text-slate-600">{doctorSpec}</p>
                 ) : null}
               </div>
+              {start && end ? (
+                <div className="rounded-lg bg-slate-50 px-3 py-2">
+                  <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Час консультації
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-baseline gap-x-2 text-sm text-slate-800">
+                    <span className="font-medium">{start.format('DD.MM.YYYY')}</span>
+                    <span className="text-slate-400">·</span>
+                    <span>
+                      {start.format('HH:mm')}
+                      <span className="mx-1 text-slate-400">–</span>
+                      {end.format('HH:mm')}
+                    </span>
+                  </div>
+                </div>
+              ) : null}
               <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2">
                 <span
                   className={`inline-block h-2.5 w-2.5 rounded-full ${
@@ -536,6 +557,7 @@ export const AppointmentJoinPage = () => {
               videoSimulcastLayers: [
                 new VideoPreset(320, 180, 150_000, 15),
                 new VideoPreset(640, 360, 400_000, 20),
+                new VideoPreset(1280, 720, 1_500_000, 30),
               ],
             },
           }}

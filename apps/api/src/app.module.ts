@@ -1,10 +1,10 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { CqrsModule } from '@nestjs/cqrs';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppConfig } from './config/env.config';
 import { envSchema } from './config/env.schema';
 import { DatabaseModule } from './infrastructure/database/database.module';
@@ -46,7 +46,10 @@ import { HealthModule } from './modules/health/health.module';
     EventEmitterModule.forRoot(),
     CqrsModule.forRoot(),
     ScheduleModule.forRoot(),
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
+    // Generous default ceiling — meant as a DoS shield, not a per-feature
+    // limit. Auth routes set tight per-route @Throttle overrides; hot
+    // polling/webhook routes opt out via @SkipThrottle.
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }]),
     DatabaseModule,
     RedisModule,
     BullSharedModule,
@@ -75,6 +78,13 @@ import { HealthModule } from './modules/health/health.module';
   ],
   providers: [
     AppConfig,
+    // Global rate limit (120 req/min/IP from ThrottlerModule.forRoot
+    // above). Auth endpoints layer stricter per-route @Throttle limits
+    // on top to slow brute-force / SMS-spam attempts.
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
     // Idempotency runs BEFORE Audit so a replay (cache hit) short-circuits the
     // handler and still records one audit entry per real execution (from the
     // first request). Nest applies global interceptors in registration order.

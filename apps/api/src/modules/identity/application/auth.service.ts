@@ -122,6 +122,19 @@ export class AuthService {
     if (!user || !user.passwordHash) {
       throw new UnauthorizedException('Invalid credentials');
     }
+
+    // Tenant/env login gate runs BEFORE password + MFA verification so a
+    // disabled account can't be used as a password oracle: an attacker
+    // probing the disabled login channel gets the same 403 regardless
+    // of whether the password was right. Admin/internal roles bypass
+    // this check inside `canLogin` so an operator can never lock
+    // themselves out by toggling the flags off.
+    const tenantId = await this.userService.getDefaultTenantId(user.id);
+    const roles = await this.userService.getRoles(user.id, tenantId);
+    if (tenantId && !(await this.tenants.canLogin(tenantId, roles))) {
+      throw new ForbiddenException(LOGIN_DISABLED_ERROR);
+    }
+
     const ok = await this.passwords.verify(user.passwordHash, input.password);
     if (!ok) throw new UnauthorizedException('Invalid credentials');
     if (user.status !== 'ACTIVE') throw new UnauthorizedException('Account inactive');
@@ -133,15 +146,6 @@ export class AuthService {
       }
     }
 
-    const tenantId = await this.userService.getDefaultTenantId(user.id);
-    const roles = await this.userService.getRoles(user.id, tenantId);
-    // Tenant policy gate — block before issuing the JWT for users whose
-    // role(s) the tenant has disabled for full login. Admin/internal
-    // roles bypass this check inside `canLogin` so an operator can never
-    // lock themselves out by toggling the flags off.
-    if (tenantId && !(await this.tenants.canLogin(tenantId, roles))) {
-      throw new ForbiddenException(LOGIN_DISABLED_ERROR);
-    }
     return this.buildAuthResponse(user, roles, tenantId, meta);
   }
 
@@ -243,6 +247,13 @@ export class AuthService {
     await this.tokens.revoke(session.id);
     const tenantId = await this.userService.getDefaultTenantId(user.id);
     const roles = await this.userService.getRoles(user.id, tenantId);
+    // Same gate as `login()` — without this, a refresh token issued
+    // before the operator disabled the login channel would keep
+    // minting access tokens for the full 30-day refresh TTL. The old
+    // session is already revoked above, so the bearer can't retry.
+    if (tenantId && !(await this.tenants.canLogin(tenantId, roles))) {
+      throw new ForbiddenException(LOGIN_DISABLED_ERROR);
+    }
     return this.buildAuthResponse(user, roles, tenantId, meta);
   }
 
