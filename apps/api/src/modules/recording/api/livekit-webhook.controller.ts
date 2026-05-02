@@ -9,7 +9,7 @@ import {
 import { ApiExcludeController } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { Request } from 'express';
-import { WebhookReceiver } from 'livekit-server-sdk';
+import { EgressStatus, TrackType, WebhookReceiver } from 'livekit-server-sdk';
 import { Public } from '../../../common/auth/decorators';
 import { AppConfig } from '../../../config/env.config';
 import { RecordingService } from '../application/recording.service';
@@ -66,19 +66,49 @@ export class LiveKitWebhookController {
     }
 
     this.logger.log(
-      `LiveKit webhook: event=${event.event} egressId=${event.egressInfo?.egressId ?? '-'} room=${event.room?.name ?? '-'}`,
+      `LiveKit webhook: event=${event.event} ` +
+        `room=${event.room?.name ?? '-'} ` +
+        `participant=${event.participant?.identity ?? '-'} ` +
+        `track=${event.track?.sid ?? '-'} ` +
+        `trackType=${event.track ? TrackType[event.track.type] ?? event.track.type : '-'} ` +
+        `egressId=${event.egressInfo?.egressId ?? '-'}`,
     );
 
-    // Only events we care about for now. Extend this switch as more signals
-    // become useful (e.g. room_finished → auto-end consultation).
     if (event.event === 'egress_ended' && event.egressInfo) {
+      const failed =
+        event.egressInfo.status === EgressStatus.EGRESS_FAILED ||
+        event.egressInfo.status === EgressStatus.EGRESS_ABORTED;
       await this.recording.handleEgressEnded(
         event.egressInfo.egressId,
         computeEgressDurationSec(event.egressInfo),
+        failed,
+      );
+    } else if (
+      event.event === 'track_published' &&
+      event.room &&
+      event.participant &&
+      event.track
+    ) {
+      await this.recording.handleTrackPublished(
+        event.room.name,
+        event.participant.identity,
+        event.track.sid,
+        trackKindFromType(event.track.type),
       );
     }
 
     return { received: true };
+  }
+}
+
+function trackKindFromType(t: TrackType): 'AUDIO' | 'VIDEO' | 'DATA' {
+  switch (t) {
+    case TrackType.AUDIO:
+      return 'AUDIO';
+    case TrackType.VIDEO:
+      return 'VIDEO';
+    default:
+      return 'DATA';
   }
 }
 

@@ -18,6 +18,11 @@ DOMAIN="${DOMAIN:-demo.testing-core.link}"
 
 cd "$APP_DIR"
 
+# RecordingMergeProcessor spawns ffmpeg; without it merge jobs throw ENOENT.
+# Install via setup-on-instance.sh (idempotent), not here.
+command -v ffmpeg >/dev/null 2>&1 || \
+  echo "WARNING: ffmpeg not on PATH — recording merge jobs will fail. Run infra/scripts/setup-on-instance.sh."
+
 git pull --ff-only
 
 npm ci

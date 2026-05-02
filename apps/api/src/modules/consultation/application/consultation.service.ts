@@ -195,9 +195,16 @@ export class ConsultationService {
       } catch {
         // already in progress
       }
-      // Auto-start audio recording
+      // Auto-start audio recording.
+      // NB: startAuto loads its own copy of `session` and writes
+      // session.recordingId itself. We must sync that value back into THIS
+      // function's `session` object — otherwise the `sessions.save(session)`
+      // a few lines down overwrites the recordingId with the stale null,
+      // and the track_published webhook for the doctor that fires moments
+      // later sees session.recordingId=null and skips starting his egress.
       try {
-        await this.recording.startAuto(session.id);
+        const recording = await this.recording.startAuto(session.id);
+        session.recordingId = recording.id;
       } catch (e) {
         this.logger.warn(`Auto-recording failed for session ${session.id}: ${(e as Error).message}`);
       }

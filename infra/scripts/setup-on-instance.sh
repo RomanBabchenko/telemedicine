@@ -63,6 +63,17 @@ if [[ -f "$APP_DIR/infra/livekit/livekit.prod.yaml" ]]; then
   sudo -u "$APP_USER" -- bash -lc "cd $APP_DIR && docker compose --env-file .env up -d --force-recreate livekit livekit-egress"
 fi
 
+# ---------- 1b. ffmpeg (for RecordingMergeProcessor) ----------
+# The API mixes per-track OGG egresses into a single MP3 by spawning ffmpeg
+# (apps/api/src/modules/recording/application/recording-merge.processor.ts).
+# Without it, every recording-merge job fails with ENOENT.
+if ! command -v ffmpeg >/dev/null 2>&1; then
+  echo "==> install ffmpeg"
+  apt-get update -y
+  apt-get install -y --no-install-recommends ffmpeg
+fi
+ffmpeg -version | head -n 1
+
 # ---------- 2. Install + build ----------
 echo "==> npm ci"
 sudo -u "$APP_USER" -- bash -lc "cd $APP_DIR && npm ci"
