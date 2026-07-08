@@ -27,8 +27,8 @@
 
 set -euo pipefail
 
-API="${API:-http://localhost:3000/api/v1}"
-TENANT="${TENANT:-11111111-1111-4111-8111-111111111111}"
+API="${API:-https://api.demo.testing-core.link/api/v1}"
+TENANT="${TENANT:-5506f474-6218-476f-9afe-83947f682fbd}"
 API_KEY="${API_KEY:-}"
 
 cmd="${1:-help}"
@@ -117,8 +117,8 @@ case "$cmd" in
         "patientLastName": "Шевченко",
         "patientEmail": "dshevchenko@example.com",
         "patientPhone": "+380509876543",
-        "startAt": "2026-04-22T12:00:00Z",
-        "endAt": "2026-04-22T12:30:00Z",
+        "startAt": "2026-05-10T12:00:00Z",
+        "endAt": "2026-05-10T12:30:00Z",
         "paymentType": "postpaid",
         "paymentStatus": "unpaid"
       }' | jq .
@@ -139,13 +139,13 @@ case "$cmd" in
       -H 'Content-Type: application/json' \
       -d '{
         "type": "appointment.online",
-        "externalAppointmentId": "dd-anon-001",
+        "externalAppointmentId": "dd-anon-0014",
         "doctorExternalId": "docdream-doc-77",
         "doctorFirstName": "Анна",
         "doctorLastName": "Коваленко",
         "doctorSpecialization": "Кардіологія",
-        "startAt": "2026-04-25T09:00:00Z",
-        "endAt": "2026-04-25T09:30:00Z",
+        "startAt": "2026-05-01T20:00:00+03:00",
+        "endAt": "2026-05-01T20:00:30+03:00",
         "paymentType": "postpaid",
         "paymentStatus": "unpaid",
         "isAnonymousPatient": true

@@ -616,6 +616,18 @@ export class WebhookEventHandler {
     const existing = await this.users.findOne({ where: { email: input.email } });
     if (existing) return existing;
 
+    // `phone` carries a global UNIQUE index (idx_users_phone WHERE phone IS NOT
+    // NULL). Two MIS patients that share a phone but differ by externalId —
+    // common in test data and legitimate for family members reusing one number
+    // — resolve to distinct synthetic emails, so the email lookup above misses.
+    // Without this second lookup the INSERT below collides on the phone index
+    // and surfaces as a 500. Reuse the phone's owner instead; the caller links
+    // the tenant membership regardless.
+    if (input.phone) {
+      const byPhone = await this.users.findOne({ where: { phone: input.phone } });
+      if (byPhone) return byPhone;
+    }
+
     const passwordHash = await this.passwords.hash(`mis-import-${Date.now()}`);
     const user = this.users.create({
       email: input.email,
