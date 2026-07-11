@@ -22,7 +22,13 @@ export class FeatureGuard implements CanActivate {
     ]);
     if (!feature) return true;
 
-    const tenantId = this.tenantContext.getTenantId();
+    // Prefer the :tenantId route param (MIS ApiKey routes target a tenant in
+    // the URL and run before ApiKeyGuard rewrites the context — the ambient
+    // context there is whatever the Host header resolved to). Tenant
+    // ownership of the param is still enforced downstream by ApiKeyGuard /
+    // controller checks; this guard only answers "is the module on".
+    const req = context.switchToHttp().getRequest<{ params?: Record<string, string> }>();
+    const tenantId = req.params?.tenantId ?? this.tenantContext.getTenantId();
     const tenant = await this.tenants.getOrThrow(tenantId);
     if (!this.tenants.hasFeature(tenant, feature)) {
       throw new ForbiddenException({

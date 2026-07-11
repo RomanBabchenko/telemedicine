@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -22,7 +23,7 @@ import {
 } from '@nestjs/swagger';
 import { Request } from 'express';
 import { Role } from '@telemed/shared-types';
-import { Public, Roles } from '../../../common/auth/decorators';
+import { AuthUser, CurrentUser, Public, Roles } from '../../../common/auth/decorators';
 import { ApiKeyGuard } from '../../../common/auth/api-key.guard';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { Auditable } from '../../../common/audit/decorators';
@@ -82,6 +83,15 @@ export class MisController {
     private readonly appointments: MisAppointmentService,
   ) {}
 
+  // The JWT admin routes take :tenantId in the URL; a CLINIC_ADMIN must not
+  // trigger syncs / read errors of a foreign tenant by swapping the UUID.
+  private assertOwnTenant(user: AuthUser, tenantId: string): void {
+    if (user.roles.includes(Role.PLATFORM_SUPER_ADMIN)) return;
+    if (user.tenantId !== tenantId) {
+      throw new ForbiddenException('You may only access your own tenant');
+    }
+  }
+
   @Post(':tenantId/sync/full')
   @UseGuards(RolesGuard)
   @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
@@ -96,7 +106,9 @@ export class MisController {
   @ApiStandardErrors()
   async fullSync(
     @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
+    @CurrentUser() user: AuthUser,
   ): Promise<SyncJobResponseDto> {
+    this.assertOwnTenant(user, tenantId);
     const job = await this.sync.runFullSync(tenantId);
     return { ok: true, jobId: job.id, stats: job.stats, status: job.status };
   }
@@ -115,7 +127,9 @@ export class MisController {
   @ApiStandardErrors()
   async incrementalSync(
     @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
+    @CurrentUser() user: AuthUser,
   ): Promise<SyncJobResponseDto> {
+    this.assertOwnTenant(user, tenantId);
     const job = await this.sync.runIncrementalSync(tenantId);
     return { ok: true, jobId: job.id, stats: job.stats, status: job.status };
   }
@@ -130,7 +144,11 @@ export class MisController {
   })
   @ApiParam({ name: 'tenantId', format: 'uuid' })
   @ApiStandardErrors()
-  status(@Param('tenantId', new ParseUUIDPipe()) tenantId: string) {
+  status(
+    @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    this.assertOwnTenant(user, tenantId);
     return this.sync.status(tenantId);
   }
 
@@ -144,7 +162,11 @@ export class MisController {
   })
   @ApiParam({ name: 'tenantId', format: 'uuid' })
   @ApiStandardErrors()
-  errors(@Param('tenantId', new ParseUUIDPipe()) tenantId: string) {
+  errors(
+    @Param('tenantId', new ParseUUIDPipe()) tenantId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    this.assertOwnTenant(user, tenantId);
     return this.sync.listErrors(tenantId);
   }
 

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 const CONTROLLERS_ROOT = join(__dirname, '..', 'modules');
 const HTTP_METHOD_RE = /^\s*@(Get|Post|Put|Patch|Delete|All)\s*\(/;
 const DECORATOR_RE = /^\s*@(\w+)/;
-const AUTH_DECORATOR_RE = /^\s*(ApiBearerAuth|ApiAuth|ApiSecurity)/;
+const AUTH_DECORATOR_RE = /^\s*@(ApiBearerAuth|ApiAuth|ApiSecurity)\b/;
 
 const findControllers = (dir: string): string[] => {
   const out: string[] = [];
