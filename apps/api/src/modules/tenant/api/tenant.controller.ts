@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -20,7 +21,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Role } from '@telemed/shared-types';
-import { Public, Roles } from '../../../common/auth/decorators';
+import { AuthUser, CurrentUser, Public, Roles } from '../../../common/auth/decorators';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { Auditable } from '../../../common/audit/decorators';
 import { ApiAuth, ApiStandardErrors } from '../../../common/swagger';
@@ -107,7 +108,15 @@ export class TenantController {
   async update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() body: UpdateTenantBodyDto,
+    @CurrentUser() user: AuthUser,
   ): Promise<TenantResponseDto> {
+    // Enforce what the description promises: a CLINIC_ADMIN may only touch
+    // their own tenant. Without this check any clinic admin knowing another
+    // tenant's UUID could rewrite its branding/features/policies.
+    const isPlatformAdmin = user.roles.includes(Role.PLATFORM_SUPER_ADMIN);
+    if (!isPlatformAdmin && user.tenantId !== id) {
+      throw new ForbiddenException('You may only update your own tenant');
+    }
     const t = await this.service.update(id, body);
     return toTenantResponse(t);
   }

@@ -17,6 +17,40 @@ export interface TenantFeatureMatrix {
   apiAccess: boolean;
 }
 
+export type TenantFeatureKey = keyof TenantFeatureMatrix;
+
+// Canonical defaults — the single source of truth used by the API's
+// FeatureGuard fallback, TenantService.create and the seeds. A tenant whose
+// featureMatrix misses a key behaves per this map instead of "everything off".
+export const DEFAULT_FEATURE_MATRIX: TenantFeatureMatrix = {
+  b2cListing: false,
+  bookingWidget: true,
+  embeddedConsultation: true,
+  prescriptionModule: true,
+  analyticsPackage: true,
+  brandedPatientPortal: true,
+  misSync: false,
+  advancedReports: false,
+  audioArchive: false,
+  apiAccess: false,
+};
+
+export const FEATURE_KEYS = Object.keys(DEFAULT_FEATURE_MATRIX) as TenantFeatureKey[];
+
+// Shared admin-UI labels (previously two hand-maintained copies in web-admin).
+export const FEATURE_LABELS: Record<TenantFeatureKey, string> = {
+  b2cListing: 'B2C каталог лікарів',
+  bookingWidget: 'Віджет бронювання',
+  embeddedConsultation: 'Вбудовані відеоконсультації',
+  prescriptionModule: 'Модуль рецептів',
+  analyticsPackage: 'Аналітика',
+  brandedPatientPortal: 'Брендований портал пацієнта',
+  misSync: 'Синхронізація з МІС',
+  advancedReports: 'Розширені звіти',
+  audioArchive: 'Аудіоархів консультацій',
+  apiAccess: 'API-доступ (інтеграційні ключі)',
+};
+
 export interface TenantDto {
   id: string;
   slug: string;

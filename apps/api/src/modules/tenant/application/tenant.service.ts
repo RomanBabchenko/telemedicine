@@ -1,7 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Role } from '@telemed/shared-types';
+import {
+  DEFAULT_FEATURE_MATRIX,
+  Role,
+  type TenantFeatureKey,
+} from '@telemed/shared-types';
 import { AppConfig } from '../../../config/env.config';
 import { Tenant } from '../domain/entities/tenant.entity';
 import { RevenueShareRule } from '../domain/entities/revenue-share-rule.entity';
@@ -99,18 +103,7 @@ export class TenantService {
       locale: input.locale ?? 'uk',
       currency: input.currency ?? 'UAH',
       billingPlanId: input.billingPlanId ?? null,
-      featureMatrix: {
-        b2cListing: false,
-        bookingWidget: true,
-        embeddedConsultation: true,
-        prescriptionModule: true,
-        analyticsPackage: true,
-        brandedPatientPortal: true,
-        misSync: false,
-        advancedReports: false,
-        audioArchive: false,
-        apiAccess: false,
-      },
+      featureMatrix: { ...DEFAULT_FEATURE_MATRIX },
       audioPolicy: { enabled: false, retentionDays: 30, consentRequired: true },
     });
     return this.repo.save(tenant);
@@ -138,7 +131,12 @@ export class TenantService {
   }
 
   hasFeature(tenant: Tenant, feature: string): boolean {
-    return tenant.featureMatrix?.[feature] === true;
+    // Fall back to the canonical defaults when the key is absent — tenants
+    // created outside TenantService.create() have an empty matrix, and an
+    // empty matrix must not mean "every module off".
+    const explicit = tenant.featureMatrix?.[feature];
+    if (explicit !== undefined) return explicit === true;
+    return DEFAULT_FEATURE_MATRIX[feature as TenantFeatureKey] === true;
   }
 
   // Whether full login (email+pwd / OTP / magic-link / patient register)

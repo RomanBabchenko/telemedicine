@@ -7,6 +7,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppConfig } from './config/env.config';
 import { JwtAuthGuard } from './common/auth/jwt-auth.guard';
+import { FeatureGuard } from './common/tenant/feature.guard';
 import { envSchema } from './config/env.schema';
 import { DatabaseModule } from './infrastructure/database/database.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
@@ -91,6 +92,12 @@ import { HealthModule } from './modules/health/health.module';
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    // Tenant feature-matrix enforcement: routes marked @RequireFeature('<key>')
+    // return 403 FEATURE_DISABLED when the clinic has the module off.
+    {
+      provide: APP_GUARD,
+      useClass: FeatureGuard,
     },
     // Idempotency runs BEFORE Audit so a replay (cache hit) short-circuits the
     // handler and still records one audit entry per real execution (from the

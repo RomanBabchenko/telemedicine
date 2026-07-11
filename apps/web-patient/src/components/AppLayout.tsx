@@ -30,7 +30,8 @@ export const AppLayout = () => {
             </span>
           </Link>
           <nav className="flex items-center gap-3 text-sm">
-            {!isInviteScope && (
+            {/* Hidden when the b2cListing module is off (API enforces it too). */}
+            {!isInviteScope && tenant?.features?.b2cListing !== false && (
               <Link to="/doctors" className="text-slate-700 hover:underline">
                 Лікарі
               </Link>

@@ -30,11 +30,13 @@ import {
   StartRecordingBodyDto,
   StartRecordingResponseDto,
 } from './dto';
+import { RequireFeature } from '../../../common/tenant/decorators';
 
 @ApiTags('recording')
 @Controller('sessions')
 @UseGuards(RolesGuard)
 @ApiAuth()
+@RequireFeature('audioArchive')
 export class RecordingController {
   constructor(private readonly service: RecordingService) {}
 

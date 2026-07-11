@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { config as loadEnv } from 'dotenv';
 import { join } from 'path';
 import { DataSource } from 'typeorm';
+import { DEFAULT_FEATURE_MATRIX } from '@telemed/shared-types';
 import dataSource from '../../config/typeorm.config';
 import { hashPassword } from '../../common/crypto/password.util';
 
@@ -29,29 +30,23 @@ async function seed(ds: DataSource): Promise<void> {
     );
 
     // ---------- tenants ----------
+    // Demo-specific overrides on top of the canonical defaults — keeps the
+    // seeds from drifting when DEFAULT_FEATURE_MATRIX gains a key.
     const platformFeatures = JSON.stringify({
+      ...DEFAULT_FEATURE_MATRIX,
       b2cListing: true,
-      bookingWidget: true,
-      embeddedConsultation: true,
-      prescriptionModule: true,
-      analyticsPackage: true,
       brandedPatientPortal: false,
-      misSync: false,
       advancedReports: true,
-      audioArchive: false,
       apiAccess: true,
     });
     const clinicFeatures = JSON.stringify({
-      b2cListing: false,
-      bookingWidget: true,
-      embeddedConsultation: true,
-      prescriptionModule: true,
-      analyticsPackage: true,
-      brandedPatientPortal: true,
+      ...DEFAULT_FEATURE_MATRIX,
       misSync: true,
       advancedReports: true,
       audioArchive: true,
-      apiAccess: false,
+      // MIS demo flows (invites, payment status, recording fetch) authenticate
+      // with integration API keys — keep machine access on for the clinic.
+      apiAccess: true,
     });
     const audioPolicy = JSON.stringify({ enabled: true, retentionDays: 30, consentRequired: true });
 

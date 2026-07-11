@@ -50,6 +50,7 @@ import {
   SyncJobResponseDto,
   UpdatePaymentStatusBodyDto,
 } from './dto';
+import { RequireFeature } from '../../../common/tenant/decorators';
 
 const connectorIdFromRequest = (req: Request): string => {
   const apiKey = (req as Request & { apiKey?: { connectorId: string } }).apiKey;
@@ -71,6 +72,7 @@ const externalLocator = (
 
 @ApiTags('mis-integration')
 @Controller('integrations')
+@RequireFeature('misSync')
 export class MisController {
   constructor(
     private readonly sync: SyncJobService,

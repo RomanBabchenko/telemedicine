@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminApi, adminUsersApi } from '@telemed/api-client';
-import type {
+import {
+  FEATURE_LABELS,
   TenantFeatureMatrix,
   TenantLoginPolicyDto,
   UpdateTenantDto,
@@ -38,19 +39,6 @@ const errorMessage = (e: unknown): string => {
     if (typeof m === 'string') return m;
   }
   return 'Сталася помилка';
-};
-
-const FEATURE_LABELS: Record<keyof TenantFeatureMatrix, string> = {
-  b2cListing: 'B2C каталог',
-  bookingWidget: 'Віджет бронювання',
-  embeddedConsultation: 'Вбудована консультація',
-  prescriptionModule: 'Модуль рецептів',
-  analyticsPackage: 'Аналітика',
-  brandedPatientPortal: 'Брендований портал пацієнта',
-  misSync: 'Синхронізація з МІС',
-  advancedReports: 'Розширені звіти',
-  audioArchive: 'Архів аудіо',
-  apiAccess: 'Доступ до API',
 };
 
 export const PlatformTenantEditPage = () => {

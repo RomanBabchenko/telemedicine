@@ -1,17 +1,20 @@
 import { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@telemed/ui';
+import type { TenantFeatureKey } from '@telemed/shared-types';
 import { useAuthStore } from '../stores/auth.store';
+import { useTenant } from '../hooks/useTenant';
 
-const CLINIC_NAV: Array<{ to: string; label: string }> = [
+// `feature` hides the item when the tenant module is off (see FeaturesPage).
+const CLINIC_NAV: Array<{ to: string; label: string; feature?: TenantFeatureKey }> = [
   { to: '/', label: 'Дашборд' },
   { to: '/doctors', label: 'Лікарі' },
   { to: '/appointments', label: 'Прийоми' },
   { to: '/users', label: 'Користувачі' },
-  { to: '/integrations', label: 'МІС' },
-  { to: '/integration-keys', label: 'API ключі' },
+  { to: '/integrations', label: 'МІС', feature: 'misSync' },
+  { to: '/integration-keys', label: 'API ключі', feature: 'apiAccess' },
   { to: '/billing', label: 'Білінг' },
-  { to: '/analytics', label: 'Аналітика' },
+  { to: '/analytics', label: 'Аналітика', feature: 'analyticsPackage' },
   { to: '/branding', label: 'Брендинг' },
   { to: '/features', label: 'Модулі' },
   { to: '/audit', label: 'Аудит' },
@@ -27,7 +30,13 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
   const loc = useLocation();
+  const tenant = useTenant();
   const isPlatformAdmin = user?.roles?.includes('PLATFORM_SUPER_ADMIN') ?? false;
+  // Until the tenant loads, show everything — hiding is cosmetic; the API
+  // enforces the modules server-side.
+  const nav = CLINIC_NAV.filter(
+    (item) => !item.feature || !tenant || tenant.features?.[item.feature] !== false,
+  );
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
@@ -55,7 +64,7 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
         </div>
         <nav className="mx-auto max-w-7xl px-4">
           <div className="flex flex-wrap items-center gap-1 py-2 text-sm">
-            {CLINIC_NAV.map((item) => {
+            {nav.map((item) => {
               const active = loc.pathname === item.to;
               return (
                 <Link

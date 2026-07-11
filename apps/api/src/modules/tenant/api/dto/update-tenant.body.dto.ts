@@ -7,9 +7,29 @@ import {
   IsOptional,
   IsString,
   Min,
+  Validate,
   ValidateNested,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
 } from 'class-validator';
+import { FEATURE_KEYS } from '@telemed/shared-types';
 import type { UpdateTenantDto } from '@telemed/shared-types';
+
+// Rejects unknown feature keys and non-boolean values — a typo'd key used to
+// be silently persisted into featureMatrix and then read back as "disabled".
+@ValidatorConstraint({ name: 'featureMatrix', async: false })
+class IsFeatureMatrixConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown): boolean {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+    return Object.entries(value).every(
+      ([k, v]) => (FEATURE_KEYS as string[]).includes(k) && typeof v === 'boolean',
+    );
+  }
+
+  defaultMessage(): string {
+    return `features may only contain boolean values for keys: ${FEATURE_KEYS.join(', ')}`;
+  }
+}
 
 class TenantAudioPolicyInput {
   @ApiPropertyOptional()
@@ -76,6 +96,7 @@ export class UpdateTenantBodyDto implements UpdateTenantDto {
 
   @ApiPropertyOptional({ type: Object, description: 'Partial feature matrix overrides' })
   @IsOptional()
+  @Validate(IsFeatureMatrixConstraint)
   features?: Record<string, boolean>;
 
   @ApiPropertyOptional({ type: TenantAudioPolicyInput })

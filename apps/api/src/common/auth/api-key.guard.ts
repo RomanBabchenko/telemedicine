@@ -9,6 +9,7 @@ import { Role } from '@telemed/shared-types';
 import { Request } from 'express';
 import { TenantContextService } from '../tenant/tenant-context.service';
 import { IntegrationApiKeyService } from '../../modules/mis-integration/application/integration-api-key.service';
+import { TenantService } from '../../modules/tenant/application/tenant.service';
 import { AuthUser } from './decorators';
 
 // Pseudo user id for audit logs — distinct UUID, not confused with real users.
@@ -26,6 +27,7 @@ export class ApiKeyGuard implements CanActivate {
   constructor(
     private readonly keys: IntegrationApiKeyService,
     private readonly tenantContext: TenantContextService,
+    private readonly tenants: TenantService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -58,6 +60,16 @@ export class ApiKeyGuard implements CanActivate {
     const clientIp = this.resolveClientIp(req);
     if (!this.keys.ipMatches(key.ipAllowlist, clientIp)) {
       throw new ForbiddenException('Source IP is not in the key allowlist');
+    }
+
+    // Tenant module gate: every ApiKey route is machine-to-machine access,
+    // so the apiAccess feature switches all of them off at once.
+    const tenant = await this.tenants.getOrThrow(key.tenantId);
+    if (!this.tenants.hasFeature(tenant, 'apiAccess')) {
+      throw new ForbiddenException({
+        message: 'Module "apiAccess" is disabled for this clinic',
+        code: 'FEATURE_DISABLED',
+      });
     }
 
     const authUser: AuthUser = {

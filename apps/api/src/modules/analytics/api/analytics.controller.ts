@@ -21,11 +21,13 @@ import {
   PlatformOverviewResponseDto,
   TenantStatsResponseDto,
 } from './dto';
+import { RequireFeature } from '../../../common/tenant/decorators';
 
 @ApiTags('analytics')
 @Controller('analytics')
 @UseGuards(RolesGuard)
 @ApiAuth()
+@RequireFeature('analyticsPackage')
 export class AnalyticsController {
   constructor(private readonly service: AnalyticsService) {}
 

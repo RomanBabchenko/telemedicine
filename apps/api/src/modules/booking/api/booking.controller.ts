@@ -29,6 +29,7 @@ import {
 } from '../../../common/auth/decorators';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { Auditable } from '../../../common/audit/decorators';
+import { RequireFeature } from '../../../common/tenant/decorators';
 import { Idempotent } from '../../../common/decorators/idempotent.decorator';
 import { ApiAuth, ApiStandardErrors } from '../../../common/swagger';
 import { AvailabilityService } from '../application/availability.service';
@@ -57,6 +58,7 @@ export class BookingController {
 
   @Get('availability')
   @Public()
+  @RequireFeature('bookingWidget')
   @ApiOperation({
     summary: "List a doctor's open slots within a time window",
     description: 'Returns only slots with status OPEN in the current tenant. Public endpoint — no authentication required.',
@@ -75,6 +77,7 @@ export class BookingController {
   }
 
   @Post('appointments/reserve')
+  @RequireFeature('bookingWidget')
   @HttpCode(HttpStatus.CREATED)
   @UseGuards(RolesGuard)
   @Roles(Role.PATIENT, Role.CLINIC_OPERATOR, Role.CLINIC_ADMIN)

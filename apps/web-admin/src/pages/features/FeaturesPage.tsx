@@ -1,24 +1,20 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { tenantsApi } from '@telemed/api-client';
+import { FEATURE_LABELS } from '@telemed/shared-types';
 import { Button, Card, PageHeader, Spinner } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth.store';
 
 const tenants = tenantsApi(apiClient);
 
-const FEATURE_LABELS: Record<string, string> = {
-  b2cListing: 'B2C-каталог',
-  bookingWidget: 'Віджет запису',
-  embeddedConsultation: 'Вбудована консультація',
-  prescriptionModule: 'Модуль рецептів',
-  analyticsPackage: 'Аналітика',
-  brandedPatientPortal: 'Брендований кабінет',
-  misSync: 'Синхронізація з МІС',
-  advancedReports: 'Розширені звіти',
-  audioArchive: 'Аудіоархів',
-  apiAccess: 'API-доступ',
-};
+// Flags without server-side enforcement yet (POC) — toggling them only
+// changes the stored matrix, not behavior.
+const DECORATIVE: ReadonlySet<string> = new Set([
+  'embeddedConsultation',
+  'brandedPatientPortal',
+  'advancedReports',
+]);
 
 export const FeaturesPage = () => {
   const tenantId = useAuthStore((s) => s.tenantId);
@@ -44,7 +40,12 @@ export const FeaturesPage = () => {
         <div className="space-y-2">
           {Object.entries(FEATURE_LABELS).map(([key, label]) => (
             <label key={key} className="flex items-center justify-between border-b border-slate-100 py-2">
-              <span>{label}</span>
+              <span>
+                {label}
+                {DECORATIVE.has(key) ? (
+                  <span className="ml-2 text-xs text-slate-400">(поки що декоративний)</span>
+                ) : null}
+              </span>
               <input
                 type="checkbox"
                 checked={!!features[key]}

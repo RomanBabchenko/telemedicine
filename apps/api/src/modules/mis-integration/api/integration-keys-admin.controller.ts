@@ -39,6 +39,7 @@ import {
   IntegrationKeyRevokeResponseDto,
   ListIntegrationKeysQueryDto,
 } from './dto';
+import { RequireFeature } from '../../../common/tenant/decorators';
 
 const isPlatformActor = (roles: Role[]): boolean =>
   roles.includes(Role.PLATFORM_SUPER_ADMIN);
@@ -90,6 +91,7 @@ const toCreatedDto = (k: CreatedIntegrationApiKey): CreatedIntegrationKeyRespons
 @UseGuards(RolesGuard)
 @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
 @ApiAuth()
+@RequireFeature('misSync')
 export class IntegrationKeysAdminController {
   constructor(
     private readonly keys: IntegrationApiKeyService,

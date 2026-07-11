@@ -22,6 +22,7 @@ import {
 } from '@nestjs/swagger';
 import { Role } from '@telemed/shared-types';
 import { Public, Roles } from '../../../common/auth/decorators';
+import { RequireFeature } from '../../../common/tenant/decorators';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { Auditable } from '../../../common/audit/decorators';
 import { OkResponseDto } from '../../../common/dto/ok-response.dto';
@@ -46,6 +47,7 @@ export class ProviderController {
 
   @Get()
   @Public()
+  @RequireFeature('b2cListing')
   @ApiOperation({
     summary: 'Search published doctors in the current tenant',
     description:
@@ -88,6 +90,7 @@ export class ProviderController {
 
   @Get(':id')
   @Public()
+  @RequireFeature('b2cListing')
   @ApiOperation({
     summary: 'Fetch a single doctor card in the current tenant',
     operationId: 'getDoctorById',

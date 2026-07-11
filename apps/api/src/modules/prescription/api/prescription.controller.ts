@@ -34,11 +34,13 @@ import {
   toPrescriptionResponse,
   toReferralResponse,
 } from './mappers/prescription.mapper';
+import { RequireFeature } from '../../../common/tenant/decorators';
 
 @ApiTags('prescriptions')
 @Controller()
 @UseGuards(RolesGuard)
 @ApiAuth()
+@RequireFeature('prescriptionModule')
 export class PrescriptionController {
   constructor(private readonly service: PrescriptionService) {}
 
