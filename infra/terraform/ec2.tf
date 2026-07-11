@@ -35,6 +35,15 @@ resource "aws_instance" "app" {
   vpc_security_group_ids = [aws_security_group.app.id]
   subnet_id              = data.aws_subnets.default.ids[0]
 
+  # IMDSv2 only — user_data carries the full production .env and the git
+  # deploy key, and IMDSv1 would let any SSRF/compromised container read it
+  # from http://169.254.169.254/latest/user-data without a session token.
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 1
+  }
+
   root_block_device {
     volume_size           = var.root_volume_gb
     volume_type           = "gp3"

@@ -43,23 +43,24 @@ cd "$APP_DIR"
 # ---------- 1. Pull latest ----------
 if [[ "$SKIP_PULL" != "1" ]]; then
   echo "==> git pull"
+  # Older deploys overwrote the tracked livekit.yaml with the prod variant;
+  # restore it so --ff-only doesn't refuse to pull over a dirty tree.
+  sudo -u "$APP_USER" git checkout -- infra/livekit/livekit.yaml 2>/dev/null || true
   sudo -u "$APP_USER" git pull --ff-only
 fi
 
 # ---------- 1a. LiveKit config for prod ----------
-# infra/livekit/livekit.yaml is committed for the developer's local box
-# (binds to a specific LAN IP, restricts to wlan0). On EC2 those bindings
-# don't exist, so LiveKit silently skips listening and the WSS handshake
-# from the browser dies with "could not establish signal connection".
-# We swap in livekit.prod.yaml (bind 0.0.0.0, no interface restriction)
-# and recreate the container so it picks the new file up.
-if [[ -f "$APP_DIR/infra/livekit/livekit.prod.yaml" ]]; then
-  echo "==> swap LiveKit config to prod variant"
-  cp "$APP_DIR/infra/livekit/livekit.prod.yaml" "$APP_DIR/infra/livekit/livekit.yaml"
-  chown "$APP_USER:$APP_USER" "$APP_DIR/infra/livekit/livekit.yaml"
-  # Also ensure the egress container is running — it's required for audio
-  # recording and may be missing on instances provisioned before egress
-  # was added to the compose stack.
+# Render infra/livekit/*.gen.yaml from the tracked templates using the
+# credentials in .env (idempotent — never regenerates secrets), and point
+# docker-compose at them via LIVEKIT_CONFIG_FILE / EGRESS_CONFIG_FILE.
+# This replaces the old `cp livekit.prod.yaml livekit.yaml` which dirtied a
+# tracked file and kept the public devkey pair in production.
+if [[ -f "$APP_DIR/infra/scripts/render-livekit-config.sh" ]]; then
+  echo "==> render LiveKit configs from .env"
+  APP_DIR="$APP_DIR" bash "$APP_DIR/infra/scripts/render-livekit-config.sh"
+  chown "$APP_USER:$APP_USER" "$APP_DIR"/infra/livekit/*.gen.yaml
+  # Recreate so the containers pick up config changes; egress may also be
+  # missing on instances provisioned before it was added to the stack.
   sudo -u "$APP_USER" -- bash -lc "cd $APP_DIR && docker compose --env-file .env up -d --force-recreate livekit livekit-egress"
 fi
 

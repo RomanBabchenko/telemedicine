@@ -64,6 +64,9 @@ apps/api/openapi.json
 # docker volumes
 docker-data
 
+# rendered LiveKit configs (real credentials — see infra/scripts/render-livekit-config.sh)
+infra/livekit/*.gen.yaml
+
 # claude code local state
 .claude
 CLAUDE.local.md

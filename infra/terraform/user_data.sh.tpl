@@ -97,6 +97,15 @@ cd "$APP_DIR"
 JWT_ACCESS=$(openssl rand -base64 48 | tr -d '\n')
 JWT_REFRESH=$(openssl rand -base64 48 | tr -d '\n')
 STUB_WEBHOOK=$(openssl rand -hex 32)
+# Service credentials — generated per deploy instead of the public dev
+# defaults (devkey/telemed) that used to live here. Consumed by the API via
+# .env and by docker-compose (postgres/minio) plus the rendered LiveKit
+# configs (see infra/scripts/render-livekit-config.sh).
+DB_PASS=$(openssl rand -hex 24)
+MINIO_KEY=$(openssl rand -hex 12)
+MINIO_SECRET=$(openssl rand -hex 24)
+LK_KEY=LK$(openssl rand -hex 8)
+LK_SECRET=$(openssl rand -hex 24)
 
 cat > "$APP_DIR/.env" <<EOF
 NODE_ENV=production
@@ -109,7 +118,7 @@ CORS_ORIGINS=https://patient.$DOMAIN,https://doctor.$DOMAIN,https://admin.$DOMAI
 DB_HOST=localhost
 DB_PORT=5432
 DB_USER=telemed
-DB_PASSWORD=telemed
+DB_PASSWORD=$DB_PASS
 DB_NAME=telemed
 DB_SYNCHRONIZE=false
 DB_LOGGING=false
@@ -133,8 +142,8 @@ JWT_REFRESH_TTL=30d
 MINIO_ENDPOINT=localhost
 MINIO_PORT=9000
 MINIO_USE_SSL=false
-MINIO_ACCESS_KEY=telemed
-MINIO_SECRET_KEY=telemed-secret
+MINIO_ACCESS_KEY=$MINIO_KEY
+MINIO_SECRET_KEY=$MINIO_SECRET
 MINIO_BUCKET=telemed-files
 MINIO_REGION=us-east-1
 MINIO_PUBLIC_URL=https://minio.$DOMAIN
@@ -146,8 +155,8 @@ MINIO_EGRESS_ENDPOINT=telemed-minio
 
 # ---- LiveKit ----
 LIVEKIT_URL=wss://livekit.$DOMAIN
-LIVEKIT_API_KEY=devkey
-LIVEKIT_API_SECRET=devsecretdevsecretdevsecretdevsecret
+LIVEKIT_API_KEY=$LK_KEY
+LIVEKIT_API_SECRET=$LK_SECRET
 LIVEKIT_NODE_IP=$PUBLIC_IP
 
 # ---- SMTP (MailHog in compose, not exposed) ----
@@ -205,7 +214,15 @@ EOF
 
 chown -R ubuntu:ubuntu "$APP_DIR/apps"
 
-# ---------- 8. Bring up infra in docker compose ----------
+# ---------- 8. Render LiveKit configs + bring up infra in docker compose ----------
+# The tracked livekit/egress YAMLs carry dev placeholders; render the real
+# credentials from .env into gitignored *.gen.yaml BEFORE the containers
+# mount them, otherwise LiveKit would sign with devkey while the API expects
+# the generated pair.
+chmod +x "$APP_DIR/infra/scripts/render-livekit-config.sh"
+APP_DIR="$APP_DIR" bash "$APP_DIR/infra/scripts/render-livekit-config.sh"
+chown ubuntu:ubuntu "$APP_DIR"/infra/livekit/*.gen.yaml
+
 # livekit-egress is required for audio recording of every consultation —
 # without it, LiveKit rooms work but no MP3 ever lands in MinIO.
 sudo -u ubuntu -- bash -lc "cd $APP_DIR && docker compose --env-file .env up -d postgres redis minio mailhog livekit livekit-egress"

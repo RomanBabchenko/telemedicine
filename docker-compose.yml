@@ -7,7 +7,9 @@ services:
       - telemed
     environment:
       POSTGRES_USER: telemed
-      POSTGRES_PASSWORD: telemed
+      # Overridden in production via the root .env (docker compose --env-file .env);
+      # the fallback keeps zero-config local dev working.
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-telemed}
       POSTGRES_DB: telemed
     ports:
       - '5432:5432'
@@ -44,8 +46,8 @@ services:
       - telemed
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: telemed
-      MINIO_ROOT_PASSWORD: telemed-secret
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-telemed}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-telemed-secret}
     ports:
       - '9000:9000'
       - '9001:9001'
@@ -67,9 +69,8 @@ services:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://minio:9000 telemed telemed-secret &&
+      mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY:-telemed} ${MINIO_SECRET_KEY:-telemed-secret} &&
       (mc mb local/telemed-files || true) &&
-      mc anonymous set download local/telemed-files &&
       exit 0
       "
 
@@ -102,7 +103,9 @@ services:
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     volumes:
-      - ./infra/livekit/livekit.yaml:/etc/livekit.yaml:ro
+      # Production points this at the rendered infra/livekit/livekit.gen.yaml
+      # (see infra/scripts/render-livekit-config.sh); dev uses the tracked file.
+      - ${LIVEKIT_CONFIG_FILE:-./infra/livekit/livekit.yaml}:/etc/livekit.yaml:ro
 
   livekit-egress:
     image: livekit/egress:latest
@@ -111,7 +114,7 @@ services:
     networks:
       - telemed
     volumes:
-      - ./infra/livekit/egress.yaml:/etc/egress.yaml:ro
+      - ${EGRESS_CONFIG_FILE:-./infra/livekit/egress.yaml}:/etc/egress.yaml:ro
     environment:
       EGRESS_CONFIG_FILE: /etc/egress.yaml
 
