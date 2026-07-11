@@ -12,6 +12,7 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { AppConfig } from './config/env.config';
+import { RedisIoAdapter } from './infrastructure/redis/redis-io.adapter';
 
 async function bootstrap() {
   // rawBody: true preserves the original request bytes on req.rawBody so
@@ -31,6 +32,12 @@ async function bootstrap() {
     type: ['application/json', 'application/webhook+json'],
   });
   const config = app.get(AppConfig);
+
+  // Redis-backed socket.io rooms — waiting-room chat/presence must reach
+  // participants regardless of which API instance holds their socket.
+  const ioAdapter = new RedisIoAdapter(app, config.redis.host, config.redis.port);
+  await ioAdapter.connectToRedis();
+  app.useWebSocketAdapter(ioAdapter);
 
   app.use(helmet());
   app.enableCors({

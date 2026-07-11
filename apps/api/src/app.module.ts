@@ -11,6 +11,7 @@ import { FeatureGuard } from './common/tenant/feature.guard';
 import { envSchema } from './config/env.schema';
 import { DatabaseModule } from './infrastructure/database/database.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
+import { RedisThrottlerStorage } from './infrastructure/redis/redis-throttler.storage';
 import { BullSharedModule } from './infrastructure/bull/bull.module';
 import { MailerModule } from './infrastructure/mailer/mailer.module';
 import { MinioModule } from './infrastructure/minio/minio.module';
@@ -50,7 +51,15 @@ import { HealthModule } from './modules/health/health.module';
     // Generous default ceiling — meant as a DoS shield, not a per-feature
     // limit. Auth routes set tight per-route @Throttle overrides; hot
     // polling/webhook routes opt out via @SkipThrottle.
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }]),
+    // Counters live in Redis so limits stay global across API instances
+    // (in-memory storage would multiply every limit by the instance count).
+    ThrottlerModule.forRoot({
+      throttlers: [{ ttl: 60_000, limit: 300 }],
+      storage: new RedisThrottlerStorage(
+        process.env.REDIS_HOST ?? 'localhost',
+        Number(process.env.REDIS_PORT ?? 6379),
+      ),
+    }),
     DatabaseModule,
     RedisModule,
     BullSharedModule,

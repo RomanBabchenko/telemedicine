@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
 import { SessionRecording } from '../domain/entities/session-recording.entity';
+import { RedisService } from '../../../infrastructure/redis/redis.service';
 
 @Injectable()
 export class RetentionCleaner {
@@ -10,10 +11,13 @@ export class RetentionCleaner {
 
   constructor(
     @InjectRepository(SessionRecording) private readonly recordings: Repository<SessionRecording>,
+    private readonly redis: RedisService,
   ) {}
 
   @Cron(CronExpression.EVERY_HOUR)
   async cleanup(): Promise<void> {
+    // One instance per tick is enough (see ExpiredHoldsCleaner).
+    if (!(await this.redis.setNxEx('cron-lock:recording-retention', '1', 3300))) return;
     const expired = await this.recordings.find({
       where: { retentionUntil: LessThan(new Date()) },
       take: 100,
