@@ -2,6 +2,7 @@ import type {
   AppointmentDto,
   AvailabilityQuery,
   CancelAppointmentDto,
+  ReissueInvitesDto,
   RescheduleAppointmentDto,
   ReserveAppointmentDto,
   SlotDto,
@@ -22,4 +23,6 @@ export const bookingApi = (client: ApiClient) => ({
     client.post<AppointmentDto>(`/appointments/${id}/reschedule`, dto),
   list: () => client.get<AppointmentDto[]>('/appointments'),
   getById: (id: string) => client.get<AppointmentDto>(`/appointments/${id}`),
+  // Admin-only: revoke old invite links and get a fresh patient/doctor pair.
+  reissueInvites: (id: string) => client.post<ReissueInvitesDto>(`/appointments/${id}/invites`),
 });

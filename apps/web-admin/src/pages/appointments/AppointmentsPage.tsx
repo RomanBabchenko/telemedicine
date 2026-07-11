@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
-import { bookingApi, consultationApi } from '@telemed/api-client';
+import { bookingApi } from '@telemed/api-client';
 import { AppointmentStatus } from '@telemed/shared-types';
 import {
   Badge,
-  Button,
   EmptyState,
   FormField,
   Input,
@@ -22,9 +21,9 @@ import {
 } from '@telemed/ui';
 import { useTableControls } from '@telemed/web-shared';
 import { apiClient } from '../../lib/api';
+import { AppointmentDetailsModal } from './AppointmentDetailsModal';
 
 const booking = bookingApi(apiClient);
-const consultation = consultationApi(apiClient);
 
 const STATUS_OPTIONS: Array<{ value: '' | AppointmentStatus; label: string }> = [
   { value: '', label: 'Усі статуси' },
@@ -36,45 +35,8 @@ const fullName = (first?: string, last?: string): string => {
   return value || '—';
 };
 
-const RecordingCell = ({ sessionId }: { sessionId: string }) => {
-  const [url, setUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [notFound, setNotFound] = useState(false);
-
-  const handleClick = async () => {
-    setLoading(true);
-    try {
-      const res = await consultation.getRecording(sessionId);
-      if (res.downloadUrl) {
-        setUrl(res.downloadUrl);
-      } else {
-        setNotFound(true);
-      }
-    } catch {
-      setNotFound(true);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (notFound) return <span className="text-sm text-gray-400">—</span>;
-
-  if (url) {
-    return (
-      <audio controls preload="none" className="h-8 w-48">
-        <source src={url} type="audio/ogg" />
-      </audio>
-    );
-  }
-
-  return (
-    <Button size="sm" variant="secondary" onClick={handleClick} disabled={loading}>
-      {loading ? '...' : 'Прослухати'}
-    </Button>
-  );
-};
-
 export const AppointmentsPage = () => {
+  const [openId, setOpenId] = useState<string | null>(null);
   const { data, isLoading } = useQuery({
     queryKey: ['admin-appointments'],
     queryFn: () => booking.list(),
@@ -158,7 +120,11 @@ export const AppointmentsPage = () => {
           </THead>
           <TBody>
             {rows.map((a) => (
-              <TR key={a.id}>
+              <TR
+                key={a.id}
+                className="cursor-pointer hover:bg-slate-50"
+                onClick={() => setOpenId(a.id)}
+              >
                 <TD>{dayjs(a.startAt).format('DD.MM.YYYY HH:mm')}</TD>
                 <TD>{fullName(a.patient?.firstName, a.patient?.lastName)}</TD>
                 <TD>{a.patient?.phone ?? '—'}</TD>
@@ -167,18 +133,17 @@ export const AppointmentsPage = () => {
                 <TD>
                   <Badge>{a.status}</Badge>
                 </TD>
-                <TD>
-                  {a.consultationSessionId ? (
-                    <RecordingCell sessionId={a.consultationSessionId} />
-                  ) : (
-                    '—'
-                  )}
-                </TD>
+                {/* Full player lives in the details modal now. */}
+                <TD>{a.consultationSessionId ? '🎧' : '—'}</TD>
               </TR>
             ))}
           </TBody>
         </Table>
       )}
+
+      {openId ? (
+        <AppointmentDetailsModal appointmentId={openId} onClose={() => setOpenId(null)} />
+      ) : null}
     </div>
   );
 };

@@ -251,7 +251,8 @@ export class WebhookEventHandler {
 
   // ─── Idempotent reissue ────────────────────────────────────────────────────
 
-  private async reissueInvites(tenantId: string, appointmentId: string) {
+  // Public: also used by the admin reissue endpoint (AdminInviteController).
+  async reissueInvites(tenantId: string, appointmentId: string) {
     const appointment = await this.appointments.findOne({
       where: { id: appointmentId, tenantId },
     });

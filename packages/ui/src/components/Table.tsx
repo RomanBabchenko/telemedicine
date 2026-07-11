@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import React, { ReactNode } from 'react';
 
 interface TableProps {
   children: ReactNode;
@@ -16,7 +16,10 @@ export const TBody = ({ children }: TableProps) => (
   <tbody className="divide-y divide-slate-100">{children}</tbody>
 );
 
-export const TR = ({ children }: TableProps) => <tr>{children}</tr>;
+export const TR = ({
+  children,
+  ...rest
+}: TableProps & React.HTMLAttributes<HTMLTableRowElement>) => <tr {...rest}>{children}</tr>;
 
 export const TH = ({ children }: TableProps) => (
   <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">

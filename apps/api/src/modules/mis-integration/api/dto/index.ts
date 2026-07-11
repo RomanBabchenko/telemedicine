@@ -17,3 +17,4 @@ export * from './payment-status.response.dto';
 export * from './reschedule-appointment.response.dto';
 export * from './revoke-invites.response.dto';
 export * from './sync-job.response.dto';
+export * from './reissue-invites.response.dto';

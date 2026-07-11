@@ -80,6 +80,15 @@ export interface AppointmentDto {
   doctor?: AppointmentDoctorSummary;
 }
 
+// Response of the admin invite reissue endpoint
+// (POST /appointments/:id/invites) — old links are revoked.
+export interface ReissueInvitesDto {
+  appointmentId: string;
+  consultationSessionId: string;
+  patientInviteUrl: string;
+  doctorInviteUrl: string;
+}
+
 export interface CancelAppointmentDto {
   reason?: string;
 }

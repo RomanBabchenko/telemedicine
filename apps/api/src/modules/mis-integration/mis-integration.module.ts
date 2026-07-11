@@ -27,6 +27,7 @@ import { ApiKeyGuard } from '../../common/auth/api-key.guard';
 import { DocDreamStubConnector } from './infrastructure/adapters/docdream-stub.connector';
 import { MisController } from './api/mis.controller';
 import { InviteController } from './api/invite.controller';
+import { AdminInviteController } from './api/admin-invite.controller';
 import { IntegrationKeysAdminController } from './api/integration-keys-admin.controller';
 
 @Module({
@@ -61,7 +62,7 @@ import { IntegrationKeysAdminController } from './api/integration-keys-admin.con
     InviteConsumeService,
     ApiKeyGuard,
   ],
-  controllers: [MisController, InviteController, IntegrationKeysAdminController],
+  controllers: [MisController, InviteController, AdminInviteController, IntegrationKeysAdminController],
   exports: [ConnectorRegistry, SyncJobService, IntegrationApiKeyService],
 })
 export class MisIntegrationModule {}
