@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminUsersApi } from '@telemed/api-client';
@@ -11,6 +11,7 @@ import {
   FormField,
   Input,
   PageHeader,
+  Pagination,
   Select,
   Spinner,
   Table,
@@ -20,6 +21,7 @@ import {
   THead,
   TR,
 } from '@telemed/ui';
+import { useDebouncedValue } from '@telemed/web-shared';
 import { apiClient } from '../../lib/api';
 import { UserFormModal } from './UserFormModal';
 
@@ -67,11 +69,20 @@ export const UsersPage = ({ scope }: Props) => {
   const [search, setSearch] = useState('');
   const [role, setRole] = useState<'' | Role>('');
   const [status, setStatus] = useState<'' | 'ACTIVE' | 'BLOCKED' | 'PENDING'>('');
+  const [page, setPage] = useState(1);
+
+  const debouncedSearch = useDebouncedValue(search);
+
+  // Filter changes restart pagination from the first page.
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, role, status]);
 
   const query: ListUsersQuery = {
-    pageSize: 100,
+    page,
+    pageSize: 20,
     scope,
-    search: search.trim() || undefined,
+    search: debouncedSearch.trim() || undefined,
     role: (role || undefined) as Role | undefined,
     status: (status || undefined) as 'ACTIVE' | 'BLOCKED' | 'PENDING' | undefined,
   };
@@ -150,6 +161,7 @@ export const UsersPage = ({ scope }: Props) => {
       ) : (listQ.data?.items.length ?? 0) === 0 ? (
         <EmptyState title="Користувачі не знайдені" />
       ) : (
+        <>
         <Table>
           <THead>
             <TR>
@@ -227,6 +239,13 @@ export const UsersPage = ({ scope }: Props) => {
             ))}
           </TBody>
         </Table>
+        <Pagination
+          page={page}
+          pageSize={20}
+          total={listQ.data?.total ?? 0}
+          onPageChange={setPage}
+        />
+        </>
       )}
 
       <UserFormModal

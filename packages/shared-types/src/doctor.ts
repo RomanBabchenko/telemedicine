@@ -28,11 +28,11 @@ export interface DoctorTenantProfileDto {
   slotSourceIsMis: boolean;
 }
 
+// city/tenantId were removed: no backing column / resolved from context —
+// they were silently ignored by the server.
 export interface DoctorSearchQuery {
   specialization?: string;
   language?: string;
-  city?: string;
-  tenantId?: string;
   minPrice?: number;
   maxPrice?: number;
   page?: number;

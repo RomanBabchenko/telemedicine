@@ -16,6 +16,7 @@ import {
   Modal,
   PageHeader,
   Select,
+  SortableTH,
   Spinner,
   Table,
   TBody,
@@ -25,6 +26,7 @@ import {
   THead,
   TR,
 } from '@telemed/ui';
+import { useTableControls } from '@telemed/web-shared';
 import { apiClient } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth.store';
 
@@ -50,6 +52,20 @@ export const IntegrationKeysPage = () => {
     queryKey: ['integration-keys', tenantId],
     queryFn: () => keysApi.list(tenantId!),
     enabled: !!tenantId,
+  });
+
+  const [statusFilter, setStatusFilter] = useState<'' | 'active' | 'revoked'>('');
+
+  const { rows, toggleSort, sortActive } = useTableControls(keysQ.data, {
+    sortValues: {
+      createdAt: (k) => k.createdAt,
+    },
+    filter: (k) => {
+      if (statusFilter === 'active') return !k.revokedAt;
+      if (statusFilter === 'revoked') return !!k.revokedAt;
+      return true;
+    },
+    initialSort: { field: 'createdAt', dir: 'desc' },
   });
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -116,9 +132,26 @@ export const IntegrationKeysPage = () => {
         }
       />
 
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <FormField label="Статус">
+          <Select
+            value={statusFilter}
+            onChange={(e) =>
+              setStatusFilter(e.target.value as '' | 'active' | 'revoked')
+            }
+          >
+            <option value="">Усі статуси</option>
+            <option value="active">Активний</option>
+            <option value="revoked">Відкликано</option>
+          </Select>
+        </FormField>
+      </div>
+
       <Card>
         {keysQ.isLoading ? (
           <Spinner />
+        ) : keysQ.data && keysQ.data.length > 0 && rows.length === 0 ? (
+          <EmptyState title="Нічого не знайдено за фільтром" />
         ) : keysQ.data && keysQ.data.length > 0 ? (
           <Table>
             <THead>
@@ -128,13 +161,18 @@ export const IntegrationKeysPage = () => {
                 <TH>Ключ</TH>
                 <TH>IP allowlist</TH>
                 <TH>Останнє використання</TH>
-                <TH>Створено</TH>
+                <SortableTH
+                  active={sortActive('createdAt')}
+                  onSort={() => toggleSort('createdAt')}
+                >
+                  Створено
+                </SortableTH>
                 <TH>Статус</TH>
                 <TH>{' '}</TH>
               </TR>
             </THead>
             <TBody>
-              {keysQ.data.map((k) => (
+              {rows.map((k) => (
                 <TR key={k.id}>
                   <TD>{k.connectorId}</TD>
                   <TD>{k.name ?? <span className="text-slate-400">—</span>}</TD>

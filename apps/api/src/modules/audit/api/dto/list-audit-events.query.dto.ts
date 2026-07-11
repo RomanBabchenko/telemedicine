@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import { IsISO8601, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 
 export class ListAuditEventsQueryDto {
   @ApiPropertyOptional({ description: 'Filter by domain resource type (e.g. "Appointment", "User")' })
@@ -22,6 +22,16 @@ export class ListAuditEventsQueryDto {
   @IsOptional()
   @IsString()
   action?: string;
+
+  @ApiPropertyOptional({ description: 'Events created at/after this ISO timestamp' })
+  @IsOptional()
+  @IsISO8601()
+  from?: string;
+
+  @ApiPropertyOptional({ description: 'Events created at/before this ISO timestamp' })
+  @IsOptional()
+  @IsISO8601()
+  to?: string;
 
   @ApiPropertyOptional({ minimum: 1, default: 1 })
   @IsOptional()

@@ -1,7 +1,20 @@
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { paymentsApi } from '@telemed/api-client';
-import { Card, EmptyState, PageHeader, Spinner, Table, TBody, TD, TH, THead, TR } from '@telemed/ui';
+import {
+  Card,
+  EmptyState,
+  PageHeader,
+  SortableTH,
+  Spinner,
+  Table,
+  TBody,
+  TD,
+  TH,
+  THead,
+  TR,
+} from '@telemed/ui';
+import { useTableControls } from '@telemed/web-shared';
 import { apiClient } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth.store';
 
@@ -20,6 +33,23 @@ export const BillingPage = () => {
     enabled: !!tenantId,
   });
 
+  const ledger = useTableControls(ledgerQ.data, {
+    sortValues: {
+      date: (e) => e.createdAt,
+      debit: (e) => Number(e.debit) || 0,
+      credit: (e) => Number(e.credit) || 0,
+    },
+    initialSort: { field: 'date', dir: 'desc' },
+  });
+
+  const invoices = useTableControls(invoicesQ.data, {
+    sortValues: {
+      period: (i) => i.periodStart,
+      amount: (i) => Number(i.totalAmount),
+    },
+    initialSort: { field: 'period', dir: 'desc' },
+  });
+
   if (ledgerQ.isLoading || invoicesQ.isLoading) return <Spinner />;
 
   return (
@@ -33,15 +63,21 @@ export const BillingPage = () => {
           <Table>
             <THead>
               <TR>
-                <TH>Дата</TH>
+                <SortableTH active={ledger.sortActive('date')} onSort={() => ledger.toggleSort('date')}>
+                  Дата
+                </SortableTH>
                 <TH>Рахунок</TH>
-                <TH>Дебет</TH>
-                <TH>Кредит</TH>
+                <SortableTH active={ledger.sortActive('debit')} onSort={() => ledger.toggleSort('debit')}>
+                  Дебет
+                </SortableTH>
+                <SortableTH active={ledger.sortActive('credit')} onSort={() => ledger.toggleSort('credit')}>
+                  Кредит
+                </SortableTH>
                 <TH>Memo</TH>
               </TR>
             </THead>
             <TBody>
-              {ledgerQ.data?.map((e) => (
+              {ledger.rows.map((e) => (
                 <TR key={e.id}>
                   <TD>{dayjs(e.createdAt).format('DD.MM HH:mm')}</TD>
                   <TD>{e.account}</TD>
@@ -63,13 +99,23 @@ export const BillingPage = () => {
           <Table>
             <THead>
               <TR>
-                <TH>Період</TH>
-                <TH>Сума</TH>
+                <SortableTH
+                  active={invoices.sortActive('period')}
+                  onSort={() => invoices.toggleSort('period')}
+                >
+                  Період
+                </SortableTH>
+                <SortableTH
+                  active={invoices.sortActive('amount')}
+                  onSort={() => invoices.toggleSort('amount')}
+                >
+                  Сума
+                </SortableTH>
                 <TH>Статус</TH>
               </TR>
             </THead>
             <TBody>
-              {invoicesQ.data?.map((i) => (
+              {invoices.rows.map((i) => (
                 <TR key={i.id}>
                   <TD>
                     {dayjs(i.periodStart).format('DD.MM')}—{dayjs(i.periodEnd).format('DD.MM.YYYY')}

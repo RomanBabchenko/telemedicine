@@ -15,6 +15,8 @@ export interface AuditQueryFilters {
   resourceId?: string;
   actorUserId?: string;
   action?: string;
+  from?: string;
+  to?: string;
   page?: number;
   pageSize?: number;
 }
@@ -44,6 +46,8 @@ export class AuditQueryService {
     if (filters.resourceId) qb.andWhere('e.resource_id = :rid', { rid: filters.resourceId });
     if (filters.actorUserId) qb.andWhere('e.actor_user_id = :aid', { aid: filters.actorUserId });
     if (filters.action) qb.andWhere('e.action = :action', { action: filters.action });
+    if (filters.from) qb.andWhere('e.created_at >= :from', { from: filters.from });
+    if (filters.to) qb.andWhere('e.created_at <= :to', { to: filters.to });
 
     const page = filters.page ?? 1;
     const pageSize = filters.pageSize ?? 50;

@@ -1,4 +1,5 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect } from 'react';
+import { cn } from '../lib/cn';
 
 interface Props {
   open: boolean;
@@ -6,19 +7,41 @@ interface Props {
   title?: string;
   children: ReactNode;
   footer?: ReactNode;
+  /** md — forms (default); xl — detail views with wide content (audio player, tables). */
+  size?: 'md' | 'xl';
 }
 
-export const Modal = ({ open, onClose, title, children, footer }: Props) => {
+const sizeClasses = {
+  md: 'max-w-lg',
+  xl: 'max-w-3xl',
+};
+
+export const Modal = ({ open, onClose, title, children, footer, size = 'md' }: Props) => {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className={cn('w-full rounded-xl bg-white shadow-xl', sizeClasses[size])}
+        onClick={(e) => e.stopPropagation()}
+      >
         {title ? (
           <div className="border-b border-slate-200 px-5 py-4">
             <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
           </div>
         ) : null}
-        <div className="px-5 py-4">{children}</div>
+        <div className="max-h-[70vh] overflow-y-auto px-5 py-4">{children}</div>
         {footer ? (
           <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-3">
             {footer}

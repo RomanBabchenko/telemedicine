@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { doctorsApi } from '@telemed/api-client';
 import type {
   CreateDoctorDto,
   DoctorDto,
+  DoctorSearchQuery,
   UpdateDoctorDto,
 } from '@telemed/shared-types';
 import {
@@ -11,8 +12,11 @@ import {
   Badge,
   Button,
   EmptyState,
+  FormField,
+  Input,
   Modal,
   PageHeader,
+  Pagination,
   Spinner,
   Table,
   TBody,
@@ -21,6 +25,7 @@ import {
   THead,
   TR,
 } from '@telemed/ui';
+import { useDebouncedValue } from '@telemed/web-shared';
 import { apiClient } from '../../lib/api';
 import { DoctorFormModal } from './DoctorFormModal';
 
@@ -47,9 +52,31 @@ export const DoctorsPage = () => {
   const qc = useQueryClient();
   const [modal, setModal] = useState<ModalState>({ kind: 'closed' });
 
+  const [specialization, setSpecialization] = useState('');
+  const [minPrice, setMinPrice] = useState('');
+  const [maxPrice, setMaxPrice] = useState('');
+  const [page, setPage] = useState(1);
+
+  const debouncedSpecialization = useDebouncedValue(specialization);
+  const debouncedMinPrice = useDebouncedValue(minPrice);
+  const debouncedMaxPrice = useDebouncedValue(maxPrice);
+
+  // Filter changes restart pagination from the first page.
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSpecialization, debouncedMinPrice, debouncedMaxPrice]);
+
+  const query: DoctorSearchQuery = {
+    page,
+    pageSize: 20,
+    specialization: debouncedSpecialization.trim() || undefined,
+    minPrice: debouncedMinPrice !== '' ? Number(debouncedMinPrice) : undefined,
+    maxPrice: debouncedMaxPrice !== '' ? Number(debouncedMaxPrice) : undefined,
+  };
+
   const listQ = useQuery({
-    queryKey: ['admin-doctors'],
-    queryFn: () => doctors.searchAdmin({ pageSize: 100 }),
+    queryKey: ['admin-doctors', query],
+    queryFn: () => doctors.searchAdmin(query),
   });
 
   const close = () => setModal({ kind: 'closed' });
@@ -112,6 +139,34 @@ export const DoctorsPage = () => {
         }
       />
 
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <FormField label="Спеціальність">
+          <Input
+            value={specialization}
+            onChange={(e) => setSpecialization(e.target.value)}
+            placeholder="Наприклад: терапевт"
+          />
+        </FormField>
+        <FormField label="Ціна від, ₴">
+          <Input
+            type="number"
+            min={0}
+            value={minPrice}
+            onChange={(e) => setMinPrice(e.target.value)}
+            placeholder="0"
+          />
+        </FormField>
+        <FormField label="Ціна до, ₴">
+          <Input
+            type="number"
+            min={0}
+            value={maxPrice}
+            onChange={(e) => setMaxPrice(e.target.value)}
+            placeholder="2000"
+          />
+        </FormField>
+      </div>
+
       {listQ.isLoading ? (
         <Spinner />
       ) : listQ.isError ? (
@@ -119,6 +174,7 @@ export const DoctorsPage = () => {
       ) : (listQ.data?.items.length ?? 0) === 0 ? (
         <EmptyState title="У клініці поки немає лікарів" />
       ) : (
+        <>
         <Table>
           <THead>
             <TR>
@@ -202,6 +258,13 @@ export const DoctorsPage = () => {
             ))}
           </TBody>
         </Table>
+        <Pagination
+          page={page}
+          pageSize={20}
+          total={listQ.data?.total ?? 0}
+          onPageChange={setPage}
+        />
+        </>
       )}
 
       <DoctorFormModal

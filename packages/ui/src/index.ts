@@ -11,6 +11,7 @@ export * from './components/Spinner';
 export * from './components/EmptyState';
 export * from './components/Stat';
 export * from './components/Table';
+export * from './components/Pagination';
 export * from './components/PageHeader';
 export * from './components/FormField';
 export * from './theme/ThemeProvider';

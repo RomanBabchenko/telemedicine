@@ -8,7 +8,10 @@ import {
   Badge,
   Button,
   EmptyState,
+  FormField,
+  Input,
   PageHeader,
+  SortableTH,
   Spinner,
   Table,
   TBody,
@@ -17,6 +20,7 @@ import {
   THead,
   TR,
 } from '@telemed/ui';
+import { useTableControls } from '@telemed/web-shared';
 import { apiClient } from '../../lib/api';
 import { TenantFormModal } from './TenantFormModal';
 
@@ -35,10 +39,23 @@ const errorMessage = (e: unknown): string => {
 export const PlatformTenantsPage = () => {
   const qc = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
+  const [search, setSearch] = useState('');
 
   const tenantsQ = useQuery({
     queryKey: ['admin-tenants'],
     queryFn: () => admin.listTenants(),
+  });
+
+  const needle = search.trim().toLowerCase();
+  const { rows, toggleSort, sortActive } = useTableControls(tenantsQ.data, {
+    sortValues: {
+      name: (t) => t.brandName,
+      slug: (t) => t.slug,
+    },
+    filter: (t) =>
+      !needle ||
+      t.brandName.toLowerCase().includes(needle) ||
+      t.slug.toLowerCase().includes(needle),
   });
 
   const createM = useMutation({
@@ -57,18 +74,34 @@ export const PlatformTenantsPage = () => {
         actions={<Button onClick={() => setModalOpen(true)}>Створити клініку</Button>}
       />
 
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <FormField label="Пошук">
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Назва або slug"
+          />
+        </FormField>
+      </div>
+
       {tenantsQ.isLoading ? (
         <Spinner />
       ) : tenantsQ.isError ? (
         <Alert variant="danger">{errorMessage(tenantsQ.error)}</Alert>
       ) : (tenantsQ.data?.length ?? 0) === 0 ? (
         <EmptyState title="Поки немає клінік" />
+      ) : rows.length === 0 ? (
+        <EmptyState title="Нічого не знайдено за пошуком" />
       ) : (
         <Table>
           <THead>
             <TR>
-              <TH>Назва</TH>
-              <TH>Slug</TH>
+              <SortableTH active={sortActive('name')} onSort={() => toggleSort('name')}>
+                Назва
+              </SortableTH>
+              <SortableTH active={sortActive('slug')} onSort={() => toggleSort('slug')}>
+                Slug
+              </SortableTH>
               <TH>Поддомен</TH>
               <TH>Локаль</TH>
               <TH>Валюта</TH>
@@ -76,7 +109,7 @@ export const PlatformTenantsPage = () => {
             </TR>
           </THead>
           <TBody>
-            {tenantsQ.data?.map((t) => (
+            {rows.map((t) => (
               <TR key={t.id}>
                 <TD>
                   <Link

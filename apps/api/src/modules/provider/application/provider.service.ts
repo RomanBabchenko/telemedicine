@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, In, Raw, Repository } from 'typeorm';
 import { Role, ServiceMode, SlotStatus, VerificationStatus } from '@telemed/shared-types';
 import { Doctor } from '../domain/entities/doctor.entity';
 import { DoctorTenantProfile } from '../domain/entities/doctor-tenant-profile.entity';
@@ -17,6 +17,8 @@ import { toDoctorResponse } from '../api/mappers/doctor.mapper';
 export interface DoctorSearchInput {
   specialization?: string;
   language?: string;
+  minPrice?: number;
+  maxPrice?: number;
   page?: number;
   pageSize?: number;
   /**
@@ -127,6 +129,15 @@ export class ProviderService {
     }
     if (doctorIdFilter) {
       where.doctorId = In(doctorIdFilter);
+    }
+    // Price filter lives on the tenant profile (numeric stored as string).
+    if (input.minPrice != null || input.maxPrice != null) {
+      const minPrice = input.minPrice ?? 0;
+      const maxPrice = input.maxPrice ?? Number.MAX_SAFE_INTEGER;
+      where.price = Raw((alias) => `${alias} BETWEEN :minPrice AND :maxPrice`, {
+        minPrice,
+        maxPrice,
+      });
     }
 
     const [profiles, total] = await this.profiles.findAndCount({

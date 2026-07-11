@@ -13,6 +13,18 @@ export class DoctorSearchQueryDto {
   @IsString()
   language?: string;
 
+  @ApiPropertyOptional({ minimum: 0, description: 'Minimum consultation price' })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(0)
+  minPrice?: number;
+
+  @ApiPropertyOptional({ minimum: 0, description: 'Maximum consultation price' })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(0)
+  maxPrice?: number;
+
   @ApiPropertyOptional({ minimum: 1, default: 1 })
   @IsOptional()
   @Type(() => Number)
