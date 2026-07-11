@@ -35,7 +35,7 @@ export DEBIAN_FRONTEND=noninteractive
 # garbage). Don't drop this package unless you know what's replacing it.
 apt-get update
 apt-get install -y \
-  git curl ufw nginx \
+  git curl nginx \
   build-essential ca-certificates gnupg openssl \
   fonts-dejavu-core
 
@@ -57,12 +57,17 @@ apt-get install -y \
   docker-buildx-plugin docker-compose-plugin
 usermod -aG docker ubuntu
 
-# ---------- 4. UFW ----------
-# Defence in depth on top of the SG. ALB talks to us on :80, no 443 here.
-ufw allow 22/tcp
-ufw allow 80/tcp
-ufw allow 50000:50100/udp
-ufw --force enable
+# ---------- 4. Firewall ----------
+# Intentionally NOT installing/enabling UFW. Network filtering is handled
+# by the AWS Security Group attached to this instance (see infra/terraform/
+# security.tf), which is the canonical source of truth for ingress rules.
+# UFW on top of that breaks Docker's iptables rules — specifically, traffic
+# from the docker bridge to host-bound ports (e.g. LiveKit container POSTing
+# webhooks to the Node API on host port 3000) gets silently dropped because
+# Docker writes its FORWARD rules in a chain UFW doesn't know about. We hit
+# this in production: every webhook timed out with `dial 172.17.0.1:3000:
+# i/o timeout`. AWS SG already restricts external ingress to 22/80/443 and
+# the LiveKit RTC UDP range (50000-50100), which is what UFW was duplicating.
 
 # ---------- 5. Install ubuntu's git SSH identity (only when key is provided) ----------
 # We embed the key here from a Terraform sensitive variable. The key never leaves
