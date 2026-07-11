@@ -21,7 +21,7 @@ import {
 } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { Request } from 'express';
-import { Public } from '../../../common/auth/decorators';
+import { AuthUser, CurrentUser, Public } from '../../../common/auth/decorators';
 import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { Auditable } from '../../../common/audit/decorators';
 import { Idempotent } from '../../../common/decorators/idempotent.decorator';
@@ -92,12 +92,16 @@ export class PaymentController {
   }
 
   @Post('stub/succeed/:intentId')
-  @Public()
+  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @Auditable({ action: 'payment.stub.succeed', resource: 'Payment' })
+  @ApiAuth()
   @ApiExcludeEndpoint()
-  async stubSucceed(@Param('intentId') intentId: string): Promise<OkResponseDto> {
-    await this.service.stubSimulateSuccess(intentId);
+  async stubSucceed(
+    @Param('intentId') intentId: string,
+    @CurrentUser() user: AuthUser,
+  ): Promise<OkResponseDto> {
+    await this.service.stubSimulateSuccess(intentId, user);
     return OkResponseDto.value;
   }
 

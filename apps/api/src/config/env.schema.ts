@@ -71,6 +71,10 @@ export const envSchema = z.object({
     .default('11111111-1111-4111-8111-111111111111'),
 
   PAYMENT_PROVIDER: z.enum(['stub', 'liqpay', 'fondy']).default('stub'),
+  // HMAC secret for the stub provider's webhook signature (x-stub-signature).
+  // The dev default keeps zero-config local flows working; production deploys
+  // generate a random value in user_data.
+  STUB_WEBHOOK_SECRET: z.string().default('stub-dev-secret'),
   DOCDREAM_STUB_ENABLED: z
     .string()
     .transform((v) => v === 'true')

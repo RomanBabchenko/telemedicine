@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { v4 as uuid } from 'uuid';
+import * as crypto from 'node:crypto';
 import { RedisService } from '../../../../infrastructure/redis/redis.service';
+import { AppConfig } from '../../../../config/env.config';
 import {
   CreateIntentInput,
   CreateIntentResult,
@@ -23,10 +25,20 @@ export class StubPaymentProvider implements PaymentProvider {
   readonly id = 'stub';
   private readonly logger = new Logger(StubPaymentProvider.name);
 
-  constructor(private readonly redis: RedisService) {}
+  constructor(
+    private readonly redis: RedisService,
+    private readonly config: AppConfig,
+  ) {}
 
   private key(intentId: string): string {
     return `stub-payment:${intentId}`;
+  }
+
+  signWebhook(rawBody: string | Buffer): string {
+    return crypto
+      .createHmac('sha256', this.config.stubWebhookSecret)
+      .update(rawBody)
+      .digest('hex');
   }
 
   async createIntent(input: CreateIntentInput): Promise<CreateIntentResult> {
@@ -73,9 +85,19 @@ export class StubPaymentProvider implements PaymentProvider {
   }
 
   async parseWebhook(
-    _headers: Record<string, string>,
+    headers: Record<string, string>,
     rawBody: string | Buffer,
   ): Promise<NormalizedWebhookEvent | null> {
+    // Even the stub verifies an HMAC — this is the deployed provider, so the
+    // public webhook route must not accept unsigned payloads.
+    const given = headers['x-stub-signature'] ?? '';
+    const expected = this.signWebhook(rawBody);
+    const a = Buffer.from(given);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      this.logger.warn('Stub webhook rejected: bad or missing x-stub-signature');
+      return null;
+    }
     try {
       const body = JSON.parse(typeof rawBody === 'string' ? rawBody : rawBody.toString());
       if (!body?.intentId) return null;

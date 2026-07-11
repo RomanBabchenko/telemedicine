@@ -73,7 +73,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
         `${request.method} ${request.originalUrl}: ${exception.message}`,
         exception.stack,
       );
-      body.message = exception.message;
+      // Don't leak internals (driver/SQL errors, paths) to clients in production
+      if (process.env.NODE_ENV !== 'production') {
+        body.message = exception.message;
+      }
     }
 
     response.status(status).json(body);

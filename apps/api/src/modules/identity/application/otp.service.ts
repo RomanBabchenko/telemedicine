@@ -27,7 +27,7 @@ export class OtpService {
       { identifier, consumedAt: undefined as never },
       { consumedAt: new Date() },
     );
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const code = String(crypto.randomInt(100000, 1000000));
     const entity = this.repo.create({
       identifier,
       channel,
@@ -49,8 +49,10 @@ export class OtpService {
         this.logger.warn(`Mail delivery failed (dev fallback): ${(e as Error).message}`);
       }
     }
-    // SMS — log only in dev/MVP
-    this.logger.log(`📱 OTP for ${identifier} (${channel}): ${code}`);
+    // SMS — log only in dev/MVP; never expose codes in production logs
+    if (process.env.NODE_ENV !== 'production') {
+      this.logger.log(`📱 OTP for ${identifier} (${channel}): ${code}`);
+    }
     return code; // dev convenience: returned so seed/tests can pick it up if needed
   }
 

@@ -1,13 +1,22 @@
-import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { EventBus } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import { PaymentStatus } from '@telemed/shared-types';
+import { PaymentStatus, Role } from '@telemed/shared-types';
 import { Payment } from '../domain/entities/payment.entity';
 import { PAYMENT_PROVIDER, PaymentProvider } from '../domain/ports/payment-provider';
 import { AppointmentService } from '../../booking/application/appointment.service';
 import { ServiceType } from '../../booking/domain/entities/service-type.entity';
 import { TenantContextService } from '../../../common/tenant/tenant-context.service';
+import { AuthUser } from '../../../common/auth/decorators';
+import { PatientService } from '../../patient/application/patient.service';
 import { LedgerService } from './ledger.service';
 import { PaymentSucceededEvent } from '../events/payment.events';
 
@@ -21,6 +30,7 @@ export class PaymentService {
     @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider,
     private readonly tenantContext: TenantContextService,
     private readonly appointments: AppointmentService,
+    private readonly patientService: PatientService,
     private readonly ledger: LedgerService,
     private readonly dataSource: DataSource,
     private readonly eventBus: EventBus,
@@ -148,9 +158,37 @@ export class PaymentService {
     });
   }
 
-  async stubSimulateSuccess(intentId: string): Promise<void> {
+  async stubSimulateSuccess(intentId: string, user: AuthUser): Promise<void> {
+    // The endpoint exists only for the stub demo flow — a real provider
+    // confirms via its signed webhook, never via this route.
+    if (this.provider.id !== 'stub') {
+      throw new NotFoundException('Stub payments are not enabled');
+    }
+
+    const tenantId = this.tenantContext.getTenantId();
+    const payment = await this.payments.findOne({
+      where: { provider: 'stub', providerIntentId: intentId, tenantId },
+    });
+    if (!payment) throw new NotFoundException('Payment not found');
+
+    // Only the patient who owns the intent (or a clinic/platform admin) may
+    // simulate the success — otherwise anyone with an intentId gets a free
+    // appointment confirmation.
+    const isAdmin = user.roles.some(
+      (r) => r === Role.CLINIC_ADMIN || r === Role.PLATFORM_SUPER_ADMIN,
+    );
+    if (!isAdmin) {
+      const patient = await this.patientService.getByUserId(user.id);
+      if (patient.id !== payment.patientId) {
+        throw new ForbiddenException('Payment belongs to another patient');
+      }
+    }
+
     // Tell the provider to mark its in-Redis intent as succeeded, then push a fake webhook through ourselves.
-    const provider = this.provider as unknown as { markSucceeded?: (id: string) => Promise<unknown> };
+    const provider = this.provider as unknown as {
+      markSucceeded?: (id: string) => Promise<unknown>;
+      signWebhook?: (raw: string) => string;
+    };
     if (provider.markSucceeded) {
       await provider.markSucceeded(intentId);
     }
@@ -159,6 +197,10 @@ export class PaymentService {
       intentId,
       type: 'payment.succeeded',
     });
-    await this.handleWebhook(fakePayload, {});
+    // Sign our own payload so it passes the same HMAC gate as external posts.
+    const headers: Record<string, string> = provider.signWebhook
+      ? { 'x-stub-signature': provider.signWebhook(fakePayload) }
+      : {};
+    await this.handleWebhook(fakePayload, headers);
   }
 }

@@ -103,6 +103,10 @@ export class AppConfig {
     return this.config.get('PAYMENT_PROVIDER', { infer: true });
   }
 
+  get stubWebhookSecret(): string {
+    return this.config.get('STUB_WEBHOOK_SECRET', { infer: true });
+  }
+
   get docdreamStubEnabled(): boolean {
     return this.config.get('DOCDREAM_STUB_ENABLED', { infer: true });
   }

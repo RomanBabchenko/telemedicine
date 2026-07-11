@@ -96,6 +96,7 @@ cd "$APP_DIR"
 # ---------- 6. Root .env (production secrets) ----------
 JWT_ACCESS=$(openssl rand -base64 48 | tr -d '\n')
 JWT_REFRESH=$(openssl rand -base64 48 | tr -d '\n')
+STUB_WEBHOOK=$(openssl rand -hex 32)
 
 cat > "$APP_DIR/.env" <<EOF
 NODE_ENV=production
@@ -161,6 +162,7 @@ PLATFORM_TENANT_ID=11111111-1111-4111-8111-111111111111
 
 # ---- Adapters ----
 PAYMENT_PROVIDER=stub
+STUB_WEBHOOK_SECRET=$STUB_WEBHOOK
 DOCDREAM_STUB_ENABLED=true
 
 # ---- MIS Integration (invite link URLs) ----
