@@ -23,7 +23,6 @@ import {
 import { Role } from '@telemed/shared-types';
 import { AuthUser, CurrentUser, Roles } from '../../../common/auth/decorators';
 import { Auditable } from '../../../common/audit/decorators';
-import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { ApiAuth, ApiStandardErrors } from '../../../common/swagger';
 import { TenantContextService } from '../../../common/tenant/tenant-context.service';
@@ -88,7 +87,7 @@ const toCreatedDto = (k: CreatedIntegrationApiKey): CreatedIntegrationKeyRespons
 
 @ApiTags('admin-integration-keys')
 @Controller('admin/integrations')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(RolesGuard)
 @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
 @ApiAuth()
 export class IntegrationKeysAdminController {

@@ -20,7 +20,6 @@ import {
 } from '@nestjs/swagger';
 import { Role } from '@telemed/shared-types';
 import { Roles } from '../../../common/auth/decorators';
-import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { Auditable } from '../../../common/audit/decorators';
 import { OkResponseDto } from '../../../common/dto/ok-response.dto';
@@ -34,7 +33,7 @@ import {
 
 @ApiTags('recording')
 @Controller('sessions')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(RolesGuard)
 @ApiAuth()
 export class RecordingController {
   constructor(private readonly service: RecordingService) {}

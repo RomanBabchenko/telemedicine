@@ -27,7 +27,6 @@ import {
   Public,
   Roles,
 } from '../../../common/auth/decorators';
-import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { Auditable } from '../../../common/audit/decorators';
 import { Idempotent } from '../../../common/decorators/idempotent.decorator';
@@ -77,7 +76,7 @@ export class BookingController {
 
   @Post('appointments/reserve')
   @HttpCode(HttpStatus.CREATED)
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles(Role.PATIENT, Role.CLINIC_OPERATOR, Role.CLINIC_ADMIN)
   @Auditable({ action: 'appointment.reserved', resource: 'Appointment' })
   @Idempotent()
@@ -110,7 +109,7 @@ export class BookingController {
 
   @Post('appointments/:id/confirm')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles(Role.PATIENT, Role.CLINIC_OPERATOR, Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
   @Auditable({ action: 'appointment.confirmed', resource: 'Appointment' })
   @ApiAuth()
@@ -131,7 +130,6 @@ export class BookingController {
 
   @Post('appointments/:id/cancel')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard)
   @Auditable({ action: 'appointment.cancelled', resource: 'Appointment' })
   @ApiAuth()
   @ApiOperation({
@@ -155,7 +153,6 @@ export class BookingController {
   }
 
   @Get('appointments')
-  @UseGuards(JwtAuthGuard)
   @ApiAuth()
   @ApiOperation({
     summary: "List the caller's appointments",
@@ -187,7 +184,6 @@ export class BookingController {
   }
 
   @Get('appointments/:id')
-  @UseGuards(JwtAuthGuard)
   @InviteAccessible('appointmentId')
   @ApiAuth()
   @ApiOperation({

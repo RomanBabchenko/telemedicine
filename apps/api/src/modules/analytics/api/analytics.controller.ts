@@ -13,7 +13,6 @@ import {
 } from '@nestjs/swagger';
 import { Role } from '@telemed/shared-types';
 import { Roles } from '../../../common/auth/decorators';
-import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { ApiAuth, ApiStandardErrors } from '../../../common/swagger';
 import { AnalyticsService } from '../application/analytics.service';
@@ -25,7 +24,7 @@ import {
 
 @ApiTags('analytics')
 @Controller('analytics')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(RolesGuard)
 @ApiAuth()
 export class AnalyticsController {
   constructor(private readonly service: AnalyticsService) {}

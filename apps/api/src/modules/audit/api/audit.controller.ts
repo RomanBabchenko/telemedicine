@@ -1,7 +1,6 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Role } from '@telemed/shared-types';
-import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { Roles } from '../../../common/auth/decorators';
 import { ApiAuth, ApiStandardErrors } from '../../../common/swagger';
@@ -10,7 +9,7 @@ import { AuditEventsPageResponseDto, ListAuditEventsQueryDto } from './dto';
 
 @ApiTags('audit')
 @Controller('audit')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(RolesGuard)
 @ApiAuth()
 export class AuditController {
   constructor(private readonly query: AuditQueryService) {}

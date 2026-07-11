@@ -6,6 +6,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppConfig } from './config/env.config';
+import { JwtAuthGuard } from './common/auth/jwt-auth.guard';
 import { envSchema } from './config/env.schema';
 import { DatabaseModule } from './infrastructure/database/database.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
@@ -84,6 +85,14 @@ import { HealthModule } from './modules/health/health.module';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    // Fail-closed auth: every route requires a JWT unless explicitly marked
+    // @Public(). Routes authenticated by other means (ApiKeyGuard on
+    // /integrations/*) carry @Public() so this guard steps aside while their
+    // own guard still enforces access.
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
     },
     // Idempotency runs BEFORE Audit so a replay (cache hit) short-circuits the
     // handler and still records one audit entry per real execution (from the

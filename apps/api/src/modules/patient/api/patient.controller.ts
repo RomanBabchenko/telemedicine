@@ -8,7 +8,6 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -19,7 +18,6 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthUser, CurrentUser } from '../../../common/auth/decorators';
-import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { Auditable } from '../../../common/audit/decorators';
 import { ApiAuth, ApiStandardErrors } from '../../../common/swagger';
 import { AppointmentResponseDto } from '../../booking/api/dto/appointment.response.dto';
@@ -40,7 +38,6 @@ import {
 
 @ApiTags('patients')
 @Controller('patients/me')
-@UseGuards(JwtAuthGuard)
 @ApiAuth()
 export class PatientController {
   constructor(private readonly service: PatientService) {}

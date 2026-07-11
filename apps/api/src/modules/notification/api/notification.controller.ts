@@ -8,7 +8,6 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -18,7 +17,6 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthUser, CurrentUser } from '../../../common/auth/decorators';
-import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { OkResponseDto } from '../../../common/dto/ok-response.dto';
 import { ApiAuth, ApiStandardErrors } from '../../../common/swagger';
 import { NotificationService } from '../application/notification.service';
@@ -34,7 +32,6 @@ import {
 
 @ApiTags('notifications')
 @Controller()
-@UseGuards(JwtAuthGuard)
 @ApiAuth()
 export class NotificationController {
   constructor(private readonly service: NotificationService) {}

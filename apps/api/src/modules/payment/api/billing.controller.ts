@@ -13,7 +13,6 @@ import {
 } from '@nestjs/swagger';
 import { Role } from '@telemed/shared-types';
 import { Roles } from '../../../common/auth/decorators';
-import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { Auditable } from '../../../common/audit/decorators';
 import { ApiAuth, ApiStandardErrors } from '../../../common/swagger';
@@ -23,7 +22,7 @@ import { toInvoiceResponse, toLedgerEntryResponse } from './mappers/payment.mapp
 
 @ApiTags('billing')
 @Controller('billing')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(RolesGuard)
 @ApiAuth()
 export class BillingController {
   constructor(private readonly service: BillingService) {}

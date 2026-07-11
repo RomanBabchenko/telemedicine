@@ -8,7 +8,6 @@ import {
   ParseUUIDPipe,
   Post,
   Req,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -22,7 +21,6 @@ import {
 import { SkipThrottle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { AuthUser, CurrentUser, Public } from '../../../common/auth/decorators';
-import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { Auditable } from '../../../common/audit/decorators';
 import { Idempotent } from '../../../common/decorators/idempotent.decorator';
 import { OkResponseDto } from '../../../common/dto/ok-response.dto';
@@ -43,7 +41,6 @@ export class PaymentController {
   constructor(private readonly service: PaymentService) {}
 
   @Post('intent')
-  @UseGuards(JwtAuthGuard)
   @Auditable({ action: 'payment.intent.created', resource: 'Payment' })
   @Idempotent()
   @ApiAuth()
@@ -92,7 +89,6 @@ export class PaymentController {
   }
 
   @Post('stub/succeed/:intentId')
-  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @Auditable({ action: 'payment.stub.succeed', resource: 'Payment' })
   @ApiAuth()
@@ -106,7 +102,6 @@ export class PaymentController {
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
   @ApiAuth()
   @ApiOperation({
     summary: 'Fetch a payment row',

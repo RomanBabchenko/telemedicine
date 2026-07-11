@@ -22,7 +22,6 @@ import {
 } from '@nestjs/swagger';
 import { Role } from '@telemed/shared-types';
 import { AuthUser, CurrentUser, Roles } from '../../../common/auth/decorators';
-import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { Auditable } from '../../../common/audit/decorators';
 import { ApiAuth, ApiStandardErrors } from '../../../common/swagger';
@@ -59,7 +58,7 @@ const isPlatformActor = (roles: Role[]): boolean =>
 
 @ApiTags('admin-users')
 @Controller('admin/users')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(RolesGuard)
 @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
 @ApiAuth()
 export class AdminUserController {

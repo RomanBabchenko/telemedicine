@@ -19,7 +19,6 @@ import {
 } from '@nestjs/swagger';
 import { Role } from '@telemed/shared-types';
 import { AuthUser, CurrentUser, Roles } from '../../../common/auth/decorators';
-import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { Auditable, AuditViewAccess } from '../../../common/audit/decorators';
 import { ApiAuth, ApiStandardErrors } from '../../../common/swagger';
@@ -38,7 +37,7 @@ import {
 
 @ApiTags('prescriptions')
 @Controller()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(RolesGuard)
 @ApiAuth()
 export class PrescriptionController {
   constructor(private readonly service: PrescriptionService) {}

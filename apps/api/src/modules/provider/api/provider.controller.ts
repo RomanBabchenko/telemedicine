@@ -22,7 +22,6 @@ import {
 } from '@nestjs/swagger';
 import { Role } from '@telemed/shared-types';
 import { Public, Roles } from '../../../common/auth/decorators';
-import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { Auditable } from '../../../common/audit/decorators';
 import { OkResponseDto } from '../../../common/dto/ok-response.dto';
@@ -65,7 +64,7 @@ export class ProviderController {
   // NOTE: declared before `@Get(':id')` so the static `admin/list` segment
   // is matched before the param route.
   @Get('admin/list')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
   @ApiAuth()
   @ApiOperation({
@@ -102,7 +101,7 @@ export class ProviderController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
   @Auditable({ action: 'doctor.created', resource: 'Doctor', captureBody: true })
   @ApiAuth()
@@ -120,7 +119,7 @@ export class ProviderController {
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles(Role.DOCTOR, Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
   @Auditable({ action: 'doctor.updated', resource: 'Doctor' })
   @ApiAuth()
@@ -142,7 +141,7 @@ export class ProviderController {
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
   @Auditable({ action: 'doctor.deactivated', resource: 'Doctor' })
   @ApiAuth()
@@ -163,7 +162,7 @@ export class ProviderController {
 
   @Post(':id/activate')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
   @Auditable({ action: 'doctor.activated', resource: 'Doctor' })
   @ApiAuth()
@@ -182,7 +181,7 @@ export class ProviderController {
 
   @Post(':id/documents/verify')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
   @Auditable({ action: 'doctor.verified', resource: 'Doctor' })
   @ApiAuth()
@@ -201,7 +200,7 @@ export class ProviderController {
 
   @Post(':id/slots/regenerate')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
   @Auditable({ action: 'doctor.slots.regenerated', resource: 'Doctor' })
   @ApiAuth()
@@ -220,7 +219,6 @@ export class ProviderController {
   }
 
   @Get(':id/availability')
-  @UseGuards(JwtAuthGuard)
   @ApiAuth()
   @ApiOperation({
     summary: "List a doctor's availability rules in the current tenant",
@@ -237,7 +235,7 @@ export class ProviderController {
 
   @Post(':id/availability')
   @HttpCode(HttpStatus.CREATED)
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles(Role.DOCTOR, Role.CLINIC_ADMIN)
   @Auditable({ action: 'availability.rule.created', resource: 'AvailabilityRule' })
   @ApiAuth()
@@ -258,7 +256,7 @@ export class ProviderController {
   }
 
   @Delete(':id/availability/:ruleId')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles(Role.DOCTOR, Role.CLINIC_ADMIN)
   @Auditable({ action: 'availability.rule.deleted', resource: 'AvailabilityRule' })
   @ApiAuth()

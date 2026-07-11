@@ -21,7 +21,6 @@ import {
 } from '@nestjs/swagger';
 import { Role } from '@telemed/shared-types';
 import { Public, Roles } from '../../../common/auth/decorators';
-import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { Auditable } from '../../../common/audit/decorators';
 import { ApiAuth, ApiStandardErrors } from '../../../common/swagger';
@@ -59,7 +58,7 @@ export class TenantController {
   }
 
   @Get('admin/tenants')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles(Role.PLATFORM_SUPER_ADMIN)
   @ApiAuth()
   @ApiOperation({
@@ -75,7 +74,7 @@ export class TenantController {
 
   @Post('admin/tenants')
   @HttpCode(HttpStatus.CREATED)
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles(Role.PLATFORM_SUPER_ADMIN)
   @Auditable({ action: 'tenant.created', resource: 'Tenant', captureBody: true })
   @ApiAuth()
@@ -92,7 +91,7 @@ export class TenantController {
   }
 
   @Patch('admin/tenants/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles(Role.PLATFORM_SUPER_ADMIN, Role.CLINIC_ADMIN)
   @Auditable({ action: 'tenant.updated', resource: 'Tenant', captureBody: true })
   @ApiAuth()

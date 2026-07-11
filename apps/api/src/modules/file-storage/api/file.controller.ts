@@ -7,7 +7,6 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -18,7 +17,6 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthUser, CurrentUser } from '../../../common/auth/decorators';
-import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { Auditable } from '../../../common/audit/decorators';
 import { ApiAuth, ApiStandardErrors } from '../../../common/swagger';
 import { DownloadUrlResponseDto } from '../../patient/api/dto/download-url.response.dto';
@@ -27,7 +25,6 @@ import { UploadIntentBodyDto, UploadIntentResponseDto } from './dto';
 
 @ApiTags('files')
 @Controller('files')
-@UseGuards(JwtAuthGuard)
 @ApiAuth()
 export class FileController {
   constructor(private readonly service: FileStorageService) {}

@@ -22,9 +22,8 @@ import {
 } from '@nestjs/swagger';
 import { Request } from 'express';
 import { Role } from '@telemed/shared-types';
-import { Roles } from '../../../common/auth/decorators';
+import { Public, Roles } from '../../../common/auth/decorators';
 import { ApiKeyGuard } from '../../../common/auth/api-key.guard';
-import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { Auditable } from '../../../common/audit/decorators';
 import { ApiAuth, ApiStandardErrors } from '../../../common/swagger';
@@ -82,7 +81,7 @@ export class MisController {
   ) {}
 
   @Post(':tenantId/sync/full')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
   @Auditable({ action: 'mis.sync.full', resource: 'MisSyncJob' })
   @ApiAuth()
@@ -101,7 +100,7 @@ export class MisController {
   }
 
   @Post(':tenantId/sync/incremental')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
   @Auditable({ action: 'mis.sync.incremental', resource: 'MisSyncJob' })
   @ApiAuth()
@@ -120,7 +119,7 @@ export class MisController {
   }
 
   @Get(':tenantId/status')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
   @ApiAuth()
   @ApiOperation({
@@ -134,7 +133,7 @@ export class MisController {
   }
 
   @Get(':tenantId/errors')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(RolesGuard)
   @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
   @ApiAuth()
   @ApiOperation({
@@ -148,6 +147,7 @@ export class MisController {
   }
 
   @Post(':tenantId/appointments')
+  @Public() // @Public only skips the global JwtAuthGuard — ApiKeyGuard still enforces auth
   @UseGuards(ApiKeyGuard)
   @Auditable({ action: 'mis.appointment.submitted', resource: 'MisSyncJob' })
   @ApiSecurity('api-key')
@@ -184,6 +184,7 @@ export class MisController {
   }
 
   @Get(':tenantId/appointments/:appointmentId')
+  @Public() // @Public only skips the global JwtAuthGuard — ApiKeyGuard still enforces auth
   @UseGuards(ApiKeyGuard)
   @Auditable({ action: 'mis.appointment.fetched', resource: 'Appointment' })
   @ApiSecurity('api-key')
@@ -206,6 +207,7 @@ export class MisController {
   }
 
   @Get(':tenantId/appointments/by-external/:externalAppointmentId')
+  @Public() // @Public only skips the global JwtAuthGuard — ApiKeyGuard still enforces auth
   @UseGuards(ApiKeyGuard)
   @Auditable({ action: 'mis.appointment.fetched', resource: 'Appointment' })
   @ApiSecurity('api-key')
@@ -227,6 +229,7 @@ export class MisController {
   }
 
   @Patch(':tenantId/appointments/:appointmentId/payment-status')
+  @Public() // @Public only skips the global JwtAuthGuard — ApiKeyGuard still enforces auth
   @UseGuards(ApiKeyGuard)
   @Auditable({ action: 'mis.payment.updated', resource: 'Appointment' })
   @ApiSecurity('api-key')
@@ -255,6 +258,7 @@ export class MisController {
   }
 
   @Patch(':tenantId/appointments/by-external/:externalAppointmentId/payment-status')
+  @Public() // @Public only skips the global JwtAuthGuard — ApiKeyGuard still enforces auth
   @UseGuards(ApiKeyGuard)
   @Auditable({ action: 'mis.payment.updated', resource: 'Appointment' })
   @ApiSecurity('api-key')
@@ -283,6 +287,7 @@ export class MisController {
   }
 
   @Get(':tenantId/appointments/:appointmentId/recording')
+  @Public() // @Public only skips the global JwtAuthGuard — ApiKeyGuard still enforces auth
   @UseGuards(ApiKeyGuard)
   @Auditable({ action: 'mis.recording.requested', resource: 'SessionRecording' })
   @ApiSecurity('api-key')
@@ -303,6 +308,7 @@ export class MisController {
   }
 
   @Get(':tenantId/appointments/by-external/:externalAppointmentId/recording')
+  @Public() // @Public only skips the global JwtAuthGuard — ApiKeyGuard still enforces auth
   @UseGuards(ApiKeyGuard)
   @Auditable({ action: 'mis.recording.requested', resource: 'SessionRecording' })
   @ApiSecurity('api-key')
@@ -325,6 +331,7 @@ export class MisController {
 
   @Post(':tenantId/appointments/:appointmentId/cancel')
   @HttpCode(HttpStatus.OK)
+  @Public() // @Public only skips the global JwtAuthGuard — ApiKeyGuard still enforces auth
   @UseGuards(ApiKeyGuard)
   @Auditable({ action: 'mis.appointment.cancelled', resource: 'Appointment' })
   @ApiSecurity('api-key')
@@ -348,6 +355,7 @@ export class MisController {
 
   @Post(':tenantId/appointments/by-external/:externalAppointmentId/cancel')
   @HttpCode(HttpStatus.OK)
+  @Public() // @Public only skips the global JwtAuthGuard — ApiKeyGuard still enforces auth
   @UseGuards(ApiKeyGuard)
   @Auditable({ action: 'mis.appointment.cancelled', resource: 'Appointment' })
   @ApiSecurity('api-key')
@@ -376,6 +384,7 @@ export class MisController {
 
   @Post(':tenantId/appointments/:appointmentId/reschedule')
   @HttpCode(HttpStatus.OK)
+  @Public() // @Public only skips the global JwtAuthGuard — ApiKeyGuard still enforces auth
   @UseGuards(ApiKeyGuard)
   @Auditable({ action: 'mis.appointment.rescheduled', resource: 'Appointment' })
   @ApiSecurity('api-key')
@@ -409,6 +418,7 @@ export class MisController {
 
   @Post(':tenantId/appointments/by-external/:externalAppointmentId/reschedule')
   @HttpCode(HttpStatus.OK)
+  @Public() // @Public only skips the global JwtAuthGuard — ApiKeyGuard still enforces auth
   @UseGuards(ApiKeyGuard)
   @Auditable({ action: 'mis.appointment.rescheduled', resource: 'Appointment' })
   @ApiSecurity('api-key')
@@ -440,6 +450,7 @@ export class MisController {
 
   @Post(':tenantId/appointments/:appointmentId/invites/revoke')
   @HttpCode(HttpStatus.OK)
+  @Public() // @Public only skips the global JwtAuthGuard — ApiKeyGuard still enforces auth
   @UseGuards(ApiKeyGuard)
   @Auditable({ action: 'mis.invites.revoked', resource: 'ConsultationInvite' })
   @ApiSecurity('api-key')
@@ -468,6 +479,7 @@ export class MisController {
 
   @Post(':tenantId/appointments/by-external/:externalAppointmentId/invites/revoke')
   @HttpCode(HttpStatus.OK)
+  @Public() // @Public only skips the global JwtAuthGuard — ApiKeyGuard still enforces auth
   @UseGuards(ApiKeyGuard)
   @Auditable({ action: 'mis.invites.revoked', resource: 'ConsultationInvite' })
   @ApiSecurity('api-key')

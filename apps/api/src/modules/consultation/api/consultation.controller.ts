@@ -7,7 +7,6 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -18,7 +17,6 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthUser, CurrentUser, InviteAccessible } from '../../../common/auth/decorators';
-import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { Auditable, AuditViewAccess } from '../../../common/audit/decorators';
 import { OkResponseDto } from '../../../common/dto/ok-response.dto';
 import { ApiAuth, ApiStandardErrors } from '../../../common/swagger';
@@ -33,7 +31,6 @@ import { toConsultationSessionResponse } from './mappers/consultation.mapper';
 
 @ApiTags('sessions')
 @Controller('sessions')
-@UseGuards(JwtAuthGuard)
 @ApiAuth()
 export class ConsultationController {
   constructor(private readonly service: ConsultationService) {}

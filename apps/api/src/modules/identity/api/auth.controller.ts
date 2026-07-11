@@ -7,7 +7,6 @@ import {
   HttpStatus,
   Post,
   Req,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBody,
@@ -19,7 +18,6 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { AuthUser, CurrentUser, Public } from '../../../common/auth/decorators';
-import { JwtAuthGuard } from '../../../common/auth/jwt-auth.guard';
 import { Auditable } from '../../../common/audit/decorators';
 import { OkResponseDto } from '../../../common/dto/ok-response.dto';
 import {
@@ -244,7 +242,6 @@ export class AuthController {
   }
 
   @Post('mfa/enroll')
-  @UseGuards(JwtAuthGuard)
   @Auditable({ action: 'auth.mfa.enroll', resource: 'User' })
   @ApiAuth()
   @ApiOperation({
@@ -259,7 +256,6 @@ export class AuthController {
   }
 
   @Post('mfa/verify')
-  @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @Auditable({ action: 'auth.mfa.verified', resource: 'User' })
   @ApiAuth()
@@ -280,7 +276,6 @@ export class AuthController {
   }
 
   @Get('me')
-  @UseGuards(JwtAuthGuard)
   @ApiAuth()
   @ApiOperation({
     summary: 'Return the current authenticated user',
