@@ -30,7 +30,9 @@
       "@telemed/ui": ["packages/ui/src/index.ts"],
       "@telemed/ui/*": ["packages/ui/src/*"],
       "@telemed/utils": ["packages/utils/src/index.ts"],
-      "@telemed/utils/*": ["packages/utils/src/*"]
+      "@telemed/utils/*": ["packages/utils/src/*"],
+      "@telemed/web-shared": ["packages/web-shared/src/index.ts"],
+      "@telemed/web-shared/*": ["packages/web-shared/src/*"]
     }
   },
   "exclude": ["node_modules", "dist", "build", ".next", "coverage"]

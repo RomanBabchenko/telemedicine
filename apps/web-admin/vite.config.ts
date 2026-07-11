@@ -6,6 +6,7 @@ const sharedTypesRoot = path.resolve(__dirname, '../../packages/shared-types/src
 const apiClientRoot = path.resolve(__dirname, '../../packages/api-client/src');
 const uiRoot = path.resolve(__dirname, '../../packages/ui/src');
 const utilsRoot = path.resolve(__dirname, '../../packages/utils/src');
+const webSharedRoot = path.resolve(__dirname, '../../packages/web-shared/src');
 
 export default defineConfig({
   plugins: [react()],
@@ -29,10 +30,12 @@ export default defineConfig({
       { find: /^@telemed\/ui\/(.*)$/, replacement: path.join(uiRoot, '$1') },
       { find: /^@telemed\/utils$/, replacement: path.join(utilsRoot, 'index.ts') },
       { find: /^@telemed\/utils\/(.*)$/, replacement: path.join(utilsRoot, '$1') },
+      { find: /^@telemed\/web-shared$/, replacement: path.join(webSharedRoot, 'index.ts') },
+      { find: /^@telemed\/web-shared\/(.*)$/, replacement: path.join(webSharedRoot, '$1') },
     ],
   },
   optimizeDeps: {
-    exclude: ['@telemed/shared-types', '@telemed/api-client', '@telemed/ui', '@telemed/utils'],
+    exclude: ['@telemed/shared-types', '@telemed/api-client', '@telemed/ui', '@telemed/utils', '@telemed/web-shared'],
   },
   server: {
     port: 5175,
