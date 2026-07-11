@@ -34,7 +34,6 @@ import { RecordingModule } from './modules/recording/recording.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { MisIntegrationModule } from './modules/mis-integration/mis-integration.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
-import { AdminModule } from './modules/admin/admin.module';
 import { HealthModule } from './modules/health/health.module';
 
 @Module({
@@ -74,7 +73,6 @@ import { HealthModule } from './modules/health/health.module';
     NotificationModule,
     MisIntegrationModule,
     AnalyticsModule,
-    AdminModule,
     HealthModule,
   ],
   providers: [
