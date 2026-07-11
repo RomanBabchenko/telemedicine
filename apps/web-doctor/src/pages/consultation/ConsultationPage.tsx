@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   ControlBar,
@@ -9,13 +9,14 @@ import {
   ParticipantTile,
   RoomAudioRenderer,
   usePinnedTracks,
+  useRoomContext,
   useTracks,
 } from '@livekit/components-react';
 import { DisconnectReason, Track, VideoPreset } from 'livekit-client';
 import dayjs from 'dayjs';
 import { bookingApi, consultationApi } from '@telemed/api-client';
 import { AppointmentStatus } from '@telemed/shared-types';
-import { Alert, Button, Card, PageHeader, Spinner } from '@telemed/ui';
+import { Alert, Button, Card, Modal, PageHeader, Spinner } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth.store';
 import { LobbyDeviceState, LobbyPreview } from './LobbyPreview';
@@ -239,6 +240,91 @@ const resolveLiveKitUrl = (apiProvidedUrl: string): string => {
   if (host === 'localhost' || host === '127.0.0.1') return apiProvidedUrl;
   const isHttps = window.location.protocol === 'https:';
   return `${isHttps ? 'wss' : 'ws'}://${host}:7880`;
+};
+
+// Replaces LiveKit's built-in DisconnectButton (hidden via controls={{leave:false}}).
+// The red button used to silently drop the doctor back to the lobby with the
+// session, recording and appointment all still active — now it opens a modal
+// with an explicit choice: end the consultation for everyone, step away
+// (plain disconnect, rejoinable), or stay.
+const LeaveButton = ({
+  onEnd,
+  endPending,
+  finishFlowPath,
+}: {
+  onEnd: () => void;
+  endPending: boolean;
+  // Set for regular appointments — the "end & document" flow. Null for
+  // invite-scoped/anonymous consultations where the MIS owns documentation.
+  finishFlowPath: string | null;
+}) => {
+  const room = useRoomContext();
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="lk-button lk-disconnect-button"
+        aria-label="Вийти"
+      >
+        Вийти
+      </button>
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Вийти з консультації?"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              Залишитись
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setOpen(false);
+                void room.disconnect();
+              }}
+            >
+              Відлучитися
+            </Button>
+            {finishFlowPath ? (
+              <Button
+                variant="danger"
+                onClick={() => {
+                  setOpen(false);
+                  navigate(finishFlowPath);
+                }}
+              >
+                Завершити та оформити
+              </Button>
+            ) : (
+              <Button
+                variant="danger"
+                isLoading={endPending}
+                onClick={() => {
+                  setOpen(false);
+                  onEnd();
+                }}
+              >
+                Завершити консультацію
+              </Button>
+            )}
+          </>
+        }
+      >
+        <p className="text-sm text-slate-600">
+          <strong>«Завершити»</strong> — закінчує прийом для всіх учасників, зупиняє запис і
+          закриває кімнату.
+        </p>
+        <p className="mt-2 text-sm text-slate-600">
+          <strong>«Відлучитися»</strong> — ви тимчасово виходите; прийом і запис тривають,
+          пацієнт залишається в кімнаті, ви зможете повернутися.
+        </p>
+      </Modal>
+    </>
+  );
 };
 
 export const ConsultationPage = () => {
@@ -717,7 +803,18 @@ export const ConsultationPage = () => {
               className="lk-control-bar"
               style={{ flexWrap: 'wrap', maxHeight: 'none' }}
             >
-              <ControlBar style={{ display: 'contents' }} />
+              {/* leave:false hides LiveKit's raw DisconnectButton — our
+               * LeaveButton opens the end/step-away modal instead. */}
+              <ControlBar style={{ display: 'contents' }} controls={{ leave: false }} />
+              <LeaveButton
+                onEnd={() => endM.mutate()}
+                endPending={endM.isPending}
+                finishFlowPath={
+                  isInviteScope || apptQ.data?.isAnonymousPatient
+                    ? null
+                    : `/consultation/${sessionId}/finish`
+                }
+              />
               <button
                 type="button"
                 onClick={toggleFullscreen}
