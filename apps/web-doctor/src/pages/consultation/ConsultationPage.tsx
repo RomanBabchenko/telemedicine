@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   ControlBar,
@@ -680,30 +680,9 @@ export const ConsultationPage = () => {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="Консультація"
-        actions={
-          // Anonymous appointments have no Patient row, so the finish/
-          // documentation flow (prescriptions/referrals) has nowhere to
-          // attach — offer only the plain "end session" action even for a
-          // doctor who opened the consultation from their dashboard.
-          isInviteScope || apptQ.data?.isAnonymousPatient ? (
-            <Button
-              variant="outline"
-              onClick={() => {
-                if (window.confirm('Завершити консультацію?')) endM.mutate();
-              }}
-              isLoading={endM.isPending}
-            >
-              Завершити консультацію
-            </Button>
-          ) : (
-            <Link to={`/consultation/${sessionId}/finish`}>
-              <Button variant="outline">Завершити та оформити</Button>
-            </Link>
-          )
-        }
-      />
+      {/* Ending the consultation lives in the leave modal (red Вийти button
+        * in the control bar) — no duplicate action in the header. */}
+      <PageHeader title="Консультація" />
       {disconnectReason ? (
         <Alert variant="danger" title="З'єднання розірвано">
           {disconnectReason}. Перевірте мережу та натисніть «Розпочати консультацію» знову.
