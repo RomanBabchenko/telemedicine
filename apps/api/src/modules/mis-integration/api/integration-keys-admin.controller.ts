@@ -91,7 +91,10 @@ const toCreatedDto = (k: CreatedIntegrationApiKey): CreatedIntegrationKeyRespons
 @UseGuards(RolesGuard)
 @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
 @ApiAuth()
-@RequireFeature('misSync')
+// Gated by apiAccess (not misSync): managing integration keys is the
+// machine-access module — the admin nav hides «API ключі» by the same flag,
+// and a tenant may issue keys without the MIS sync module.
+@RequireFeature('apiAccess')
 export class IntegrationKeysAdminController {
   constructor(
     private readonly keys: IntegrationApiKeyService,
