@@ -369,6 +369,14 @@ export class WebhookEventHandler {
     payload: OnlineAppointmentPayload,
   ): Promise<string> {
     if (doctor.userId !== PLACEHOLDER_USER_ID) {
+      // Keep the linked user's name in sync with the webhook, same as the
+      // doctor row above. Without this a once-mangled name (e.g. a client
+      // console without UTF-8 sent "????") sticks on the Користувачі page
+      // forever while the doctor card self-heals on the next webhook.
+      await this.users.update(
+        { id: doctor.userId },
+        { firstName: payload.doctorFirstName, lastName: payload.doctorLastName },
+      );
       await this.ensureMembership(doctor.userId, tenantId, Role.DOCTOR);
       return doctor.userId;
     }
