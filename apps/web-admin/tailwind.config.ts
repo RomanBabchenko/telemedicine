@@ -7,6 +7,7 @@ const config: Config = {
     './index.html',
     './src/**/*.{ts,tsx}',
     '../../packages/ui/src/**/*.{ts,tsx}',
+    '../../packages/web-shared/src/**/*.{ts,tsx}',
   ],
 };
 
