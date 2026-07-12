@@ -79,6 +79,12 @@ export class AppointmentResponseDto implements AppointmentDto {
   @ApiProperty({ type: String, nullable: true, format: 'uuid' })
   consultationSessionId!: string | null;
 
+  @ApiPropertyOptional({
+    description:
+      'True when a merged consultation recording is STORED and downloadable. Set only by the list endpoint (admin table indicator).',
+  })
+  hasRecording?: boolean;
+
   @ApiProperty({ format: 'date-time' })
   createdAt!: string;
 

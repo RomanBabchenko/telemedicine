@@ -27,8 +27,8 @@
 
 set -euo pipefail
 
-API="${API:-https://api.demo.testing-core.link/api/v1}"
-TENANT="${TENANT:-5506f474-6218-476f-9afe-83947f682fbd}"
+API="${API:-http://localhost:3000/api/v1}"
+TENANT="${TENANT:-22222222-2222-4222-8222-222222222222}"
 API_KEY="${API_KEY:-}"
 
 cmd="${1:-help}"

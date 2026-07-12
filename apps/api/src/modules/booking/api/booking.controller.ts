@@ -32,6 +32,9 @@ import { Auditable } from '../../../common/audit/decorators';
 import { RequireFeature } from '../../../common/tenant/decorators';
 import { Idempotent } from '../../../common/decorators/idempotent.decorator';
 import { ApiAuth, ApiStandardErrors } from '../../../common/swagger';
+import { InjectRepository } from '@nestjs/typeorm';
+import { In, Repository } from 'typeorm';
+import { SessionRecording } from '../../recording/domain/entities/session-recording.entity';
 import { AvailabilityService } from '../application/availability.service';
 import { AppointmentService } from '../application/appointment.service';
 import { PatientService } from '../../patient/application/patient.service';
@@ -54,7 +57,30 @@ export class BookingController {
     private readonly appointments: AppointmentService,
     private readonly patients: PatientService,
     private readonly providers: ProviderService,
+    @InjectRepository(SessionRecording)
+    private readonly recordings: Repository<SessionRecording>,
   ) {}
+
+  // Mark rows whose merged recording is actually STORED — the table's
+  // indicator must not light up for sessions that were never recorded or are
+  // still being merged. One batched query per list call.
+  private async withRecordingFlags(
+    rows: AppointmentResponseDto[],
+  ): Promise<AppointmentResponseDto[]> {
+    const sessionIds = rows
+      .map((r) => r.consultationSessionId)
+      .filter((id): id is string => !!id);
+    if (sessionIds.length === 0) return rows;
+    const stored = await this.recordings.find({
+      select: ['sessionId'],
+      where: { sessionId: In(sessionIds), status: 'STORED' },
+    });
+    const storedSet = new Set(stored.map((r) => r.sessionId));
+    return rows.map((r) => ({
+      ...r,
+      hasRecording: !!r.consultationSessionId && storedSet.has(r.consultationSessionId),
+    }));
+  }
 
   @Get('availability')
   @Public()
@@ -176,14 +202,18 @@ export class BookingController {
     }
     if (user.roles.includes(Role.PATIENT)) {
       const patient = await this.patients.getByUserId(user.id);
-      return this.appointments.listForRole({ patientId: patient.id });
+      return this.withRecordingFlags(
+        await this.appointments.listForRole({ patientId: patient.id }),
+      );
     }
     if (user.roles.includes(Role.DOCTOR)) {
       const doctor = await this.providers.getDoctorByUserId(user.id);
       if (!doctor) throw new BadRequestException('Doctor profile missing');
-      return this.appointments.listForRole({ doctorId: doctor.id });
+      return this.withRecordingFlags(
+        await this.appointments.listForRole({ doctorId: doctor.id }),
+      );
     }
-    return this.appointments.listForRole({});
+    return this.withRecordingFlags(await this.appointments.listForRole({}));
   }
 
   @Get('appointments/:id')

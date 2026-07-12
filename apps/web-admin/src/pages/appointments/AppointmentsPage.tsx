@@ -133,8 +133,9 @@ export const AppointmentsPage = () => {
                 <TD>
                   <Badge>{a.status}</Badge>
                 </TD>
-                {/* Full player lives in the details modal now. */}
-                <TD>{a.consultationSessionId ? '🎧' : '—'}</TD>
+                {/* Full player lives in the details modal; the icon means a
+                 * merged recording is actually stored and downloadable. */}
+                <TD>{a.hasRecording ? '🎧' : '—'}</TD>
               </TR>
             ))}
           </TBody>

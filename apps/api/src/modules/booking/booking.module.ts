@@ -8,6 +8,7 @@ import { AvailabilityRule } from './domain/entities/availability-rule.entity';
 import { AppointmentParticipant } from './domain/entities/appointment-participant.entity';
 import { Patient } from '../patient/domain/entities/patient.entity';
 import { AvailabilityService } from './application/availability.service';
+import { SessionRecording } from '../recording/domain/entities/session-recording.entity';
 import { AppointmentService } from './application/appointment.service';
 import { SlotHoldService } from './application/slot-hold.service';
 import { APPOINTMENT_EVENT_HANDLERS } from './events/appointment.listeners';
@@ -25,6 +26,8 @@ import { BookingController } from './api/booking.controller';
       AvailabilityRule,
       AppointmentParticipant,
       Patient,
+      // Read-only: the list endpoint marks rows whose recording is STORED.
+      SessionRecording,
     ]),
   ],
   providers: [

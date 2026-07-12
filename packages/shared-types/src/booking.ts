@@ -64,6 +64,9 @@ export interface AppointmentDto {
   endAt: string;
   paymentId: string | null;
   consultationSessionId: string | null;
+  // True when a merged recording is STORED and downloadable — set by the
+  // list endpoint so tables can show a reliable indicator.
+  hasRecording?: boolean;
   createdAt: string;
   // MIS-originated payment fields. Set only when the appointment was created
   // via an MIS webhook (e.g. DocDream) with explicit payment instructions.
