@@ -9,6 +9,7 @@ import {
   ParticipantTile,
   RoomAudioRenderer,
   usePinnedTracks,
+  useRoomContext,
   useTracks,
 } from '@livekit/components-react';
 import { DisconnectReason, Track, VideoPreset } from 'livekit-client';
@@ -18,6 +19,24 @@ import { AppointmentStatus } from '@telemed/shared-types';
 import { Alert, Button, Card, PageHeader, Spinner } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
 import { LobbyDeviceState, LobbyPreview } from './LobbyPreview';
+
+// Replaces LiveKit's built-in DisconnectButton (hidden via controls={{leave:false}})
+// so the label is Ukrainian like the rest of the UI — the library's default
+// "Leave" is hardcoded English, not tied to any locale. A patient leaving is
+// just a disconnect; ending the session for everyone is the doctor's action.
+const LeaveButton = () => {
+  const room = useRoomContext();
+  return (
+    <button
+      type="button"
+      onClick={() => void room.disconnect()}
+      className="lk-button lk-disconnect-button"
+      aria-label="Вийти"
+    >
+      Вийти
+    </button>
+  );
+};
 
 const booking = bookingApi(apiClient);
 const consultation = consultationApi(apiClient);
@@ -707,7 +726,8 @@ export const AppointmentJoinPage = () => {
               className="lk-control-bar"
               style={{ flexWrap: 'wrap', maxHeight: 'none' }}
             >
-              <ControlBar style={{ display: 'contents' }} />
+              <ControlBar style={{ display: 'contents' }} controls={{ leave: false }} />
+              <LeaveButton />
               <button
                 type="button"
                 onClick={toggleFullscreen}
