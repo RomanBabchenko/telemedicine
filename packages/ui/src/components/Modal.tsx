@@ -43,7 +43,9 @@ export const Modal = ({ open, onClose, title, children, footer, size = 'md' }: P
         ) : null}
         <div className="max-h-[70vh] overflow-y-auto px-5 py-4">{children}</div>
         {footer ? (
-          <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-3">
+          // flex-wrap: long button labels must wrap to extra rows on narrow
+          // screens instead of overflowing past the modal edge.
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 px-5 py-3">
             {footer}
           </div>
         ) : (
