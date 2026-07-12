@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
-  ControlBar,
   GridLayout,
   LayoutContextProvider,
   LiveKitRoom,
@@ -19,6 +18,7 @@ import { AppointmentStatus } from '@telemed/shared-types';
 import { Alert, Button, Card, Modal, PageHeader, Spinner } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth.store';
+import { CallControls } from '@telemed/web-shared';
 import { LobbyDeviceState, LobbyPreview } from './LobbyPreview';
 
 const consultation = consultationApi(apiClient);
@@ -782,9 +782,9 @@ export const ConsultationPage = () => {
               className="lk-control-bar"
               style={{ flexWrap: 'wrap', maxHeight: 'none' }}
             >
-              {/* leave:false hides LiveKit's raw DisconnectButton — our
-               * LeaveButton opens the end/step-away modal instead. */}
-              <ControlBar style={{ display: 'contents' }} controls={{ leave: false }} />
+              {/* CallControls = LiveKit primitives with Ukrainian labels;
+               * our LeaveButton opens the end/step-away modal. */}
+              <CallControls />
               <LeaveButton
                 onEnd={() => endM.mutate()}
                 endPending={endM.isPending}

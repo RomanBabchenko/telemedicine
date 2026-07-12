@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
-  ControlBar,
   GridLayout,
   LayoutContextProvider,
   LiveKitRoom,
@@ -18,6 +17,7 @@ import { bookingApi, consultationApi } from '@telemed/api-client';
 import { AppointmentStatus } from '@telemed/shared-types';
 import { Alert, Button, Card, PageHeader, Spinner } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
+import { CallControls } from '@telemed/web-shared';
 import { LobbyDeviceState, LobbyPreview } from './LobbyPreview';
 
 // Replaces LiveKit's built-in DisconnectButton (hidden via controls={{leave:false}})
@@ -726,7 +726,7 @@ export const AppointmentJoinPage = () => {
               className="lk-control-bar"
               style={{ flexWrap: 'wrap', maxHeight: 'none' }}
             >
-              <ControlBar style={{ display: 'contents' }} controls={{ leave: false }} />
+              <CallControls />
               <LeaveButton />
               <button
                 type="button"

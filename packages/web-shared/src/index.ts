@@ -3,6 +3,7 @@ export type { AuthState, AuthStore } from './auth-store';
 export { createAppApiClient } from './api';
 export { createUseTenant } from './use-tenant';
 export { createUseAuthConfig } from './use-auth-config';
+export { CallControls } from './CallControls';
 export { LobbyPreview } from './LobbyPreview';
 export type { LobbyDeviceState } from './LobbyPreview';
 export { useTableControls } from './use-table-controls';
