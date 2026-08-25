@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -19,7 +20,7 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
-import { Role } from '@telemed/shared-types';
+import { AppointmentSource, Role, isMisScopedActor } from '@telemed/shared-types';
 import {
   AuthUser,
   CurrentUser,
@@ -159,12 +160,21 @@ export class BookingController {
 
   @Post('appointments/:id/cancel')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(RolesGuard)
+  @Roles(
+    Role.PATIENT,
+    Role.DOCTOR,
+    Role.CLINIC_OPERATOR,
+    Role.CLINIC_ADMIN,
+    Role.PLATFORM_SUPER_ADMIN,
+    Role.INTEGRATION_ADMIN,
+  )
   @Auditable({ action: 'appointment.cancelled', resource: 'Appointment' })
   @ApiAuth()
   @ApiOperation({
     summary: 'Cancel an appointment',
     description:
-      'Cancellation attribution follows the caller role: PATIENT → CANCELLED_BY_PATIENT, everyone else → CANCELLED_BY_PROVIDER. The slot is released back to OPEN.',
+      'Cancellation attribution follows the caller role: PATIENT → CANCELLED_BY_PATIENT, everyone else → CANCELLED_BY_PROVIDER. The slot is released back to OPEN. CHIEF_MEDICAL_OFFICER is read-only and cannot cancel; INTEGRATION_ADMIN may only cancel MIS-originated appointments.',
     operationId: 'cancelAppointment',
   })
   @ApiParam({ name: 'id', format: 'uuid' })
@@ -176,6 +186,9 @@ export class BookingController {
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() body: CancelBodyDto,
   ): Promise<AppointmentResponseDto> {
+    if (isMisScopedActor(user.roles)) {
+      this.assertMisSource(await this.appointments.getById(id));
+    }
     const byPatient = user.roles.includes(Role.PATIENT);
     const appointment = await this.appointments.cancel(id, byPatient, body.reason);
     return toAppointmentResponse(appointment);
@@ -186,7 +199,7 @@ export class BookingController {
   @ApiOperation({
     summary: "List the caller's appointments",
     description:
-      "Role-aware: patients see their own appointments, doctors see theirs, operators/admins see every appointment in the tenant. Invite-scoped callers always receive [].",
+      "Role-aware: patients see their own appointments, doctors see theirs, INTEGRATION_ADMIN sees only MIS-originated appointments, other operators/admins see every appointment in the tenant. Invite-scoped callers always receive [].",
     operationId: 'listAppointments',
   })
   @ApiOkResponse({ type: [AppointmentResponseDto] })
@@ -213,6 +226,11 @@ export class BookingController {
         await this.appointments.listForRole({ doctorId: doctor.id }),
       );
     }
+    if (isMisScopedActor(user.roles)) {
+      return this.withRecordingFlags(
+        await this.appointments.listForRole({ source: AppointmentSource.MIS }),
+      );
+    }
     return this.withRecordingFlags(await this.appointments.listForRole({}));
   }
 
@@ -230,7 +248,18 @@ export class BookingController {
   @ApiStandardErrors()
   async getById(
     @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: AuthUser,
   ): Promise<AppointmentResponseDto> {
-    return this.appointments.getByIdWithSummaries(id);
+    const dto = await this.appointments.getByIdWithSummaries(id);
+    // Invite-scoped callers carry no admin roles, so this only bites
+    // INTEGRATION_ADMIN sessions.
+    if (isMisScopedActor(user.roles)) this.assertMisSource(dto);
+    return dto;
+  }
+
+  private assertMisSource(appt: { source: AppointmentSource }): void {
+    if (appt.source !== AppointmentSource.MIS) {
+      throw new ForbiddenException('INTEGRATION_ADMIN may only access MIS-originated appointments');
+    }
   }
 }

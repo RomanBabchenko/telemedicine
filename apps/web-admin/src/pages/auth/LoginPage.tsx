@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { authApi } from '@telemed/api-client';
+import { ADMIN_CONSOLE_ROLES, hasAnyRole } from '@telemed/shared-types';
 import { Alert, Button, Card, FormField, Input, PageHeader } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth.store';
@@ -18,6 +19,12 @@ export const LoginPage = () => {
   const loginM = useMutation({
     mutationFn: () => auth.login({ email, password }),
     onSuccess: (res) => {
+      // Patients / doctors authenticate fine but have nothing here — tell
+      // them instead of dropping them on an empty console.
+      if (!hasAnyRole(res.user.roles, ADMIN_CONSOLE_ROLES)) {
+        setError('Цей обліковий запис не має доступу до адмін-консолі');
+        return;
+      }
       setSession(res);
       navigate('/');
     },

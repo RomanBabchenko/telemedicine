@@ -2,7 +2,12 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { bookingApi } from '@telemed/api-client';
-import { AppointmentStatus } from '@telemed/shared-types';
+import {
+  APPOINTMENT_SOURCE_LABELS,
+  AppointmentSource,
+  AppointmentStatus,
+  isMisScopedActor,
+} from '@telemed/shared-types';
 import {
   Badge,
   EmptyState,
@@ -21,6 +26,7 @@ import {
 } from '@telemed/ui';
 import { useTableControls } from '@telemed/web-shared';
 import { apiClient } from '../../lib/api';
+import { useAuthStore } from '../../stores/auth.store';
 import { AppointmentDetailsModal } from './AppointmentDetailsModal';
 
 const booking = bookingApi(apiClient);
@@ -28,6 +34,14 @@ const booking = bookingApi(apiClient);
 const STATUS_OPTIONS: Array<{ value: '' | AppointmentStatus; label: string }> = [
   { value: '', label: 'Усі статуси' },
   ...Object.values(AppointmentStatus).map((s) => ({ value: s, label: s })),
+];
+
+const SOURCE_OPTIONS: Array<{ value: '' | AppointmentSource; label: string }> = [
+  { value: '', label: 'Усі джерела' },
+  ...Object.values(AppointmentSource).map((s) => ({
+    value: s,
+    label: APPOINTMENT_SOURCE_LABELS[s],
+  })),
 ];
 
 const fullName = (first?: string, last?: string): string => {
@@ -44,6 +58,10 @@ export const AppointmentsPage = () => {
 
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<'' | AppointmentStatus>('');
+  const [source, setSource] = useState<'' | AppointmentSource>('');
+  // INTEGRATION_ADMIN only ever receives MIS rows from the API — the source
+  // filter would be a no-op, so hide it.
+  const misScoped = isMisScopedActor(useAuthStore((s) => s.user?.roles));
 
   const needle = search.trim().toLowerCase();
   const { rows, toggleSort, sortActive } = useTableControls(data, {
@@ -52,9 +70,11 @@ export const AppointmentsPage = () => {
       patient: (a) => fullName(a.patient?.firstName, a.patient?.lastName),
       doctor: (a) => fullName(a.doctor?.firstName, a.doctor?.lastName),
       status: (a) => a.status,
+      source: (a) => a.source,
     },
     filter: (a) => {
       if (status && a.status !== status) return false;
+      if (source && a.source !== source) return false;
       if (!needle) return true;
       const haystack = `${fullName(a.patient?.firstName, a.patient?.lastName)} ${fullName(
         a.doctor?.firstName,
@@ -69,7 +89,7 @@ export const AppointmentsPage = () => {
     <div className="space-y-6">
       <PageHeader title="Прийоми клініки" />
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         <FormField label="Пошук">
           <Input
             value={search}
@@ -77,6 +97,20 @@ export const AppointmentsPage = () => {
             placeholder="Пацієнт або лікар"
           />
         </FormField>
+        {misScoped ? null : (
+          <FormField label="Джерело">
+            <Select
+              value={source}
+              onChange={(e) => setSource(e.target.value as '' | AppointmentSource)}
+            >
+              {SOURCE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+        )}
         <FormField label="Статус">
           <Select
             value={status}
@@ -115,6 +149,9 @@ export const AppointmentsPage = () => {
               <SortableTH active={sortActive('status')} onSort={() => toggleSort('status')}>
                 Статус
               </SortableTH>
+              <SortableTH active={sortActive('source')} onSort={() => toggleSort('source')}>
+                Джерело
+              </SortableTH>
               <TH>Запис</TH>
             </TR>
           </THead>
@@ -132,6 +169,11 @@ export const AppointmentsPage = () => {
                 <TD>{a.doctor?.specializations?.join(', ') || '—'}</TD>
                 <TD>
                   <Badge>{a.status}</Badge>
+                </TD>
+                <TD>
+                  <Badge variant={a.source === 'MIS' ? 'warning' : 'default'}>
+                    {APPOINTMENT_SOURCE_LABELS[a.source] ?? a.source}
+                  </Badge>
                 </TD>
                 {/* Full player lives in the details modal; the icon means a
                  * merged recording is actually stored and downloadable. */}

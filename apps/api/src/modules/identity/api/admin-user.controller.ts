@@ -20,7 +20,12 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
-import { Role } from '@telemed/shared-types';
+import {
+  Role,
+  canManageRole,
+  isPlatformActor,
+  manageableRolesFor,
+} from '@telemed/shared-types';
 import { AuthUser, CurrentUser, Roles } from '../../../common/auth/decorators';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { Auditable } from '../../../common/audit/decorators';
@@ -46,20 +51,18 @@ import {
   toUserLookupResponse,
 } from './mappers/user.mapper';
 
-const ROLES_CLINIC_ADMIN_CAN_MANAGE: Role[] = [
-  Role.DOCTOR,
-  Role.CLINIC_OPERATOR,
-  Role.CLINIC_ADMIN,
-  Role.PATIENT,
-];
-
-const isPlatformActor = (roles: Role[]): boolean =>
-  roles.includes(Role.PLATFORM_SUPER_ADMIN);
+// Who may manage which roles lives in MANAGEABLE_ROLES (shared-types/rbac):
+//   PLATFORM_SUPER_ADMIN → everyone
+//   CLINIC_ADMIN         → DOCTOR, CLINIC_OPERATOR, CLINIC_ADMIN, PATIENT,
+//                          INTEGRATION_ADMIN, CHIEF_MEDICAL_OFFICER
+//   INTEGRATION_ADMIN    → INTEGRATION_ADMIN, CHIEF_MEDICAL_OFFICER only
+// Non-platform actors are additionally confined to their own tenant and
+// never see / touch users holding a role outside their manageable set.
 
 @ApiTags('admin-users')
 @Controller('admin/users')
 @UseGuards(RolesGuard)
-@Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
+@Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN, Role.INTEGRATION_ADMIN)
 @ApiAuth()
 export class AdminUserController {
   constructor(
@@ -73,7 +76,7 @@ export class AdminUserController {
   @ApiOperation({
     summary: 'List users in the current tenant',
     description:
-      "Tenant-scoped by default. PLATFORM_SUPER_ADMIN can pass scope='all' to see every user across every tenant.",
+      "Tenant-scoped by default. PLATFORM_SUPER_ADMIN can pass scope='all' to see every user across every tenant. Clinic-level actors only see users whose roles they are allowed to manage (INTEGRATION_ADMIN → INTEGRATION_ADMIN / CHIEF_MEDICAL_OFFICER).",
     operationId: 'listUsers',
   })
   @ApiOkResponse({ type: UsersPageResponseDto })
@@ -86,6 +89,7 @@ export class AdminUserController {
     const result = await this.users.list({
       tenantId: tenantScope ?? undefined,
       role: query.role,
+      roles: isPlatformActor(actor.roles) ? undefined : manageableRolesFor(actor.roles),
       status: query.status,
       search: query.search,
       page: query.page,
@@ -230,6 +234,7 @@ export class AdminUserController {
   ): Promise<UserDetailResponseDto> {
     this.assertCanCreateRole(actor.roles, body.role);
     this.assertCanTouchTenant(actor, body.tenantId);
+    await this.assertCanTouchUser(actor, userId);
     await this.users.addMembership(
       userId,
       body.tenantId,
@@ -268,11 +273,13 @@ export class AdminUserController {
     const scope = isPlatformActor(actor.roles)
       ? undefined
       : this.tenantContext.getTenantId();
+    await this.assertCanTouchUser(actor, userId);
 
     // Capture the membership BEFORE deletion so we know if we need to tear
     // down doctor-side catalog entries afterwards.
     const detailBefore = await this.users.getDetail(userId);
     const target = detailBefore.memberships.find((m) => m.id === membershipId);
+    if (target) this.assertCanCreateRole(actor.roles, target.role);
 
     await this.users.revokeMembership(membershipId, scope);
 
@@ -302,6 +309,7 @@ export class AdminUserController {
     const scope = isPlatformActor(actor.roles)
       ? undefined
       : this.tenantContext.getTenantId();
+    await this.assertCanTouchUser(actor, userId);
     await this.users.setDefaultMembership(userId, membershipId, scope);
     const detail = await this.users.getDetail(userId);
     return toUserDetailResponse(detail);
@@ -311,7 +319,7 @@ export class AdminUserController {
   @Auditable({ action: 'admin.user.status', resource: 'User', captureBody: true })
   @ApiOperation({
     summary: "Change a user's status",
-    description: 'CLINIC_ADMIN may only change status for users with at least one membership in their tenant.',
+    description: 'Clinic-level actors may only change status for users in their own tenant whose roles they are allowed to manage.',
     operationId: 'setUserStatus',
   })
   @ApiParam({ name: 'id', format: 'uuid' })
@@ -322,9 +330,7 @@ export class AdminUserController {
     @Body() body: SetUserStatusBodyDto,
     @CurrentUser() actor: AuthUser,
   ): Promise<UserDetailResponseDto> {
-    if (!isPlatformActor(actor.roles)) {
-      await this.users.getDetail(id, this.tenantContext.getTenantId());
-    }
+    await this.assertCanTouchUser(actor, id);
     await this.users.setStatus(id, body.status);
     const detail = await this.users.getDetail(id);
     return toUserDetailResponse(detail);
@@ -345,9 +351,7 @@ export class AdminUserController {
     @Param('id', new ParseUUIDPipe()) id: string,
     @CurrentUser() actor: AuthUser,
   ): Promise<ResetPasswordResponseDto> {
-    if (!isPlatformActor(actor.roles)) {
-      await this.users.getDetail(id, this.tenantContext.getTenantId());
-    }
+    await this.assertCanTouchUser(actor, id);
     return this.users.resetPassword(id);
   }
 
@@ -357,10 +361,9 @@ export class AdminUserController {
   }
 
   private assertCanCreateRole(actorRoles: Role[], targetRole: Role): void {
-    if (isPlatformActor(actorRoles)) return;
-    if (!ROLES_CLINIC_ADMIN_CAN_MANAGE.includes(targetRole)) {
+    if (!canManageRole(actorRoles, targetRole)) {
       throw new ForbiddenException(
-        `CLINIC_ADMIN cannot manage role ${targetRole}`,
+        `Role ${actorRoles.join('/')} cannot manage role ${targetRole}`,
       );
     }
   }
@@ -369,7 +372,22 @@ export class AdminUserController {
     if (isPlatformActor(actor.roles)) return;
     const ctxTenant = this.tenantContext.getTenantId();
     if (targetTenantId !== ctxTenant) {
-      throw new ForbiddenException('CLINIC_ADMIN can only touch users in own tenant');
+      throw new ForbiddenException('You may only manage users in your own tenant');
+    }
+  }
+
+  // Non-platform actors may mutate a user only when (a) the user has a
+  // membership in the actor's tenant and (b) every role the user holds in
+  // that tenant is one the actor is allowed to manage. This is what stops an
+  // INTEGRATION_ADMIN from blocking / resetting a CLINIC_ADMIN.
+  private async assertCanTouchUser(actor: AuthUser, userId: string): Promise<void> {
+    if (isPlatformActor(actor.roles)) return;
+    const tenantId = this.tenantContext.getTenantId();
+    await this.users.getDetail(userId, tenantId); // 404 when outside the tenant
+    const targetRoles = await this.users.getMembershipRolesInTenant(userId, tenantId);
+    const allowed = manageableRolesFor(actor.roles);
+    if (targetRoles.some((r) => !allowed.includes(r))) {
+      throw new ForbiddenException('You are not allowed to manage this user');
     }
   }
 }

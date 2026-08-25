@@ -1,13 +1,23 @@
-import { Controller, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  ForbiddenException,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
-import { Role } from '@telemed/shared-types';
-import { Roles } from '../../../common/auth/decorators';
+import { AppointmentSource, Role, isMisScopedActor } from '@telemed/shared-types';
+import { AuthUser, CurrentUser, Roles } from '../../../common/auth/decorators';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { Auditable } from '../../../common/audit/decorators';
 import { ApiAuth, ApiStandardErrors } from '../../../common/swagger';
 import { TenantContextService } from '../../../common/tenant/tenant-context.service';
 import { ConsultationInviteService } from '../application/consultation-invite.service';
 import { WebhookEventHandler } from '../application/webhook-event.handler';
+import { AppointmentService } from '../../booking/application/appointment.service';
 import { ReissueInvitesResponseDto } from './dto';
 import { RequireFeature } from '../../../common/tenant/decorators';
 
@@ -21,11 +31,12 @@ export class AdminInviteController {
     private readonly webhookHandler: WebhookEventHandler,
     private readonly invites: ConsultationInviteService,
     private readonly tenantContext: TenantContextService,
+    private readonly appointments: AppointmentService,
   ) {}
 
   @Post(':appointmentId/invites')
   @UseGuards(RolesGuard)
-  @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
+  @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN, Role.INTEGRATION_ADMIN)
   @HttpCode(HttpStatus.OK)
   @Auditable({ action: 'appointment.invites.reissued', resource: 'Appointment' })
   @ApiAuth()
@@ -40,8 +51,15 @@ export class AdminInviteController {
   @ApiStandardErrors()
   async reissue(
     @Param('appointmentId', new ParseUUIDPipe()) appointmentId: string,
+    @CurrentUser() user: AuthUser,
   ): Promise<ReissueInvitesResponseDto> {
     const tenantId = this.tenantContext.getTenantId();
+    if (isMisScopedActor(user.roles)) {
+      const appt = await this.appointments.getById(appointmentId);
+      if (appt.source !== AppointmentSource.MIS) {
+        throw new ForbiddenException('INTEGRATION_ADMIN may only reissue invites for MIS-originated appointments');
+      }
+    }
     // "New links" semantics: old links stop working the moment new ones exist.
     await this.invites.revokeForAppointment(tenantId, appointmentId);
     const result = await this.webhookHandler.reissueInvites(tenantId, appointmentId);

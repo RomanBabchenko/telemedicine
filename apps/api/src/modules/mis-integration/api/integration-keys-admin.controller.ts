@@ -89,7 +89,7 @@ const toCreatedDto = (k: CreatedIntegrationApiKey): CreatedIntegrationKeyRespons
 @ApiTags('admin-integration-keys')
 @Controller('admin/integrations')
 @UseGuards(RolesGuard)
-@Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
+@Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN, Role.INTEGRATION_ADMIN)
 @ApiAuth()
 // Gated by apiAccess (not misSync): managing integration keys is the
 // machine-access module — the admin nav hides «API ключі» by the same flag,
@@ -106,7 +106,7 @@ export class IntegrationKeysAdminController {
     if (isPlatformActor(actor.roles)) return;
     const ctxTenant = this.tenantContext.getTenantId();
     if (targetTenantId !== ctxTenant) {
-      throw new ForbiddenException('CLINIC_ADMIN can only manage keys in own tenant');
+      throw new ForbiddenException('You may only manage keys in your own tenant');
     }
   }
 

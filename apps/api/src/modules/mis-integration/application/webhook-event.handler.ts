@@ -4,6 +4,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { DataSource, Repository } from 'typeorm';
 import {
+  AppointmentSource,
   AppointmentStatus,
   Role,
   ServiceMode,
@@ -163,7 +164,15 @@ export class WebhookEventHandler {
       const existingAppt = await apptRepo.findOne({
         where: { slotId: slot.id },
       });
-      if (existingAppt) return existingAppt;
+      if (existingAppt) {
+        // A MIS webhook landing on a platform-booked slot adopts the row —
+        // flag it so MIS-scoped admins can see it.
+        if (existingAppt.source !== AppointmentSource.MIS) {
+          existingAppt.source = AppointmentSource.MIS;
+          return apptRepo.save(existingAppt);
+        }
+        return existingAppt;
+      }
 
       // paymentType/paymentStatus default to postpaid+unpaid when the MIS
       // doesn't send them — that's the "patient pays at the clinic, just let
@@ -188,6 +197,7 @@ export class WebhookEventHandler {
         isAnonymousPatient: isAnonymous,
         doctorId,
         serviceTypeId,
+        source: AppointmentSource.MIS,
         status: initialStatus,
         startAt,
         endAt,

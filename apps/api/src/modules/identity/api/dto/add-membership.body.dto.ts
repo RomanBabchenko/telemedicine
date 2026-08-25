@@ -3,17 +3,8 @@ import { IsBoolean, IsIn, IsOptional, IsUUID } from 'class-validator';
 import { Role } from '@telemed/shared-types';
 import type { AddMembershipDto } from '@telemed/shared-types';
 
-const ROLE_VALUES: Role[] = [
-  Role.PATIENT,
-  Role.DOCTOR,
-  Role.CLINIC_ADMIN,
-  Role.CLINIC_OPERATOR,
-  Role.PLATFORM_SUPPORT,
-  Role.PLATFORM_FINANCE,
-  Role.PLATFORM_SUPER_ADMIN,
-  Role.MIS_SERVICE,
-  Role.AUDITOR,
-];
+// Derived from the enum so new roles cannot be forgotten here.
+const ROLE_VALUES: Role[] = Object.values(Role);
 
 export class AddMembershipBodyDto implements AddMembershipDto {
   @ApiProperty({ format: 'uuid' })

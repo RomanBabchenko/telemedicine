@@ -78,6 +78,8 @@ npm run db:seed
 | Пациент       | patient1@demo.local        | demo1234  |
 | Врач          | doctor1@demo.local         | demo1234  |
 | Админ клиники | admin@clinic-a.local       | demo1234  |
+| Интеграционный админ (МИС) | integration@clinic-a.local | demo1234 |
+| Начмед        | cmo@clinic-a.local         | demo1234  |
 | Платформа     | super@telemed.local        | demo1234  |
 
 ## Архитектура

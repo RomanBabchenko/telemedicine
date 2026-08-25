@@ -1,3 +1,4 @@
+import { AppointmentSource } from '@telemed/shared-types';
 import { Appointment } from '../../domain/entities/appointment.entity';
 import { Doctor } from '../../../provider/domain/entities/doctor.entity';
 import { Patient } from '../../../patient/domain/entities/patient.entity';
@@ -15,6 +16,7 @@ export const toAppointmentResponse = (a: Appointment): AppointmentResponseDto =>
   isAnonymousPatient: a.isAnonymousPatient ?? false,
   serviceTypeId: a.serviceTypeId,
   slotId: a.slotId,
+  source: a.source ?? AppointmentSource.PLATFORM,
   status: a.status,
   reasonText: a.reasonText,
   startAt: a.startAt.toISOString(),

@@ -1,24 +1,10 @@
 import { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@telemed/ui';
-import type { TenantFeatureKey } from '@telemed/shared-types';
+import { ADMIN_CONSOLE_ROLES, ROLE_LABELS, hasAnyRole } from '@telemed/shared-types';
 import { useAuthStore } from '../stores/auth.store';
 import { useTenant } from '../hooks/useTenant';
-
-// `feature` hides the item when the tenant module is off (see FeaturesPage).
-const CLINIC_NAV: Array<{ to: string; label: string; feature?: TenantFeatureKey }> = [
-  { to: '/', label: 'Дашборд' },
-  { to: '/doctors', label: 'Лікарі' },
-  { to: '/appointments', label: 'Прийоми' },
-  { to: '/users', label: 'Користувачі' },
-  { to: '/integrations', label: 'МІС', feature: 'misSync' },
-  { to: '/integration-keys', label: 'API ключі', feature: 'apiAccess' },
-  { to: '/billing', label: 'Білінг' },
-  { to: '/analytics', label: 'Аналітика', feature: 'analyticsPackage' },
-  { to: '/branding', label: 'Брендинг' },
-  { to: '/features', label: 'Модулі' },
-  { to: '/audit', label: 'Аудит' },
-];
+import { CLINIC_SECTIONS } from '../lib/access';
 
 const PLATFORM_NAV: Array<{ to: string; label: string }> = [
   { to: '/platform/tenants', label: 'Клініки' },
@@ -32,11 +18,16 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
   const loc = useLocation();
   const tenant = useTenant();
   const isPlatformAdmin = user?.roles?.includes('PLATFORM_SUPER_ADMIN') ?? false;
-  // Until the tenant loads, show everything — hiding is cosmetic; the API
-  // enforces the modules server-side.
-  const nav = CLINIC_NAV.filter(
-    (item) => !item.feature || !tenant || tenant.features?.[item.feature] !== false,
+  // Role gating first (see lib/access.ts), then module gating. Until the
+  // tenant loads, show every module — hiding is cosmetic; the API enforces
+  // both roles and modules server-side.
+  const nav = CLINIC_SECTIONS.filter(
+    (item) =>
+      hasAnyRole(user?.roles, item.roles) &&
+      (!item.feature || !tenant || tenant.features?.[item.feature] !== false),
   );
+  const consoleRole = user?.roles?.find((r) => ADMIN_CONSOLE_ROLES.includes(r));
+  const roleTitle = consoleRole ? ROLE_LABELS[consoleRole] : 'Адміністратор клініки';
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
@@ -45,7 +36,7 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
             <span className="rounded bg-[color:var(--color-primary)] px-2 py-1 text-sm font-bold text-white">
               Telemed
             </span>
-            <span className="text-sm font-semibold text-slate-700">Адміністратор клініки</span>
+            <span className="text-sm font-semibold text-slate-700">{roleTitle}</span>
           </div>
           <div className="text-sm text-slate-500">
             {user?.firstName} {user?.lastName}

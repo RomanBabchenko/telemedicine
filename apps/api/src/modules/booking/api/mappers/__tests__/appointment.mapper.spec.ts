@@ -1,4 +1,4 @@
-import { AppointmentStatus } from '@telemed/shared-types';
+import { AppointmentSource, AppointmentStatus } from '@telemed/shared-types';
 import {
   toAppointmentDoctorSummary,
   toAppointmentPatientSummary,
@@ -15,6 +15,7 @@ const buildAppointment = () =>
     isAnonymousPatient: false,
     serviceTypeId: 's-1',
     slotId: 'sl-1',
+    source: AppointmentSource.MIS,
     status: AppointmentStatus.CONFIRMED,
     reasonText: 'headache',
     startAt: new Date('2026-05-01T10:00:00.000Z'),
@@ -32,6 +33,13 @@ describe('appointment mapper', () => {
     expect(dto.startAt).toBe('2026-05-01T10:00:00.000Z');
     expect(dto.endAt).toBe('2026-05-01T10:30:00.000Z');
     expect(dto.createdAt).toBe('2026-04-20T08:00:00.000Z');
+  });
+
+  it('maps source and defaults it to PLATFORM when missing (pre-migration rows)', () => {
+    expect(toAppointmentResponse(buildAppointment()).source).toBe(AppointmentSource.MIS);
+    const appt = buildAppointment();
+    delete (appt as unknown as { source?: string }).source;
+    expect(toAppointmentResponse(appt).source).toBe(AppointmentSource.PLATFORM);
   });
 
   it('defaults isAnonymousPatient to false when missing', () => {

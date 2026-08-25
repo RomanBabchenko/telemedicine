@@ -96,6 +96,26 @@ async function seed(ds: DataSource): Promise<void> {
       [clinicAdminId, CLINIC_TENANT_ID],
     );
 
+    // ---------- integration admin (MIS-scoped) + chief medical officer ----------
+    const clinicStaff: Array<[string, string, string, string, string]> = [
+      ['aaaaaaa2-0000-4000-8000-000000000000', 'integration@clinic-a.local', 'Ігор', 'Інтеграційний', 'INTEGRATION_ADMIN'],
+      ['aaaaaaa3-0000-4000-8000-000000000000', 'cmo@clinic-a.local', 'Марія', 'Начмед', 'CHIEF_MEDICAL_OFFICER'],
+    ];
+    for (const [id, email, firstName, lastName, role] of clinicStaff) {
+      await em.query(
+        `INSERT INTO users (id, email, password_hash, first_name, last_name, mfa_enabled, email_verified_at)
+         VALUES ($1, $2, $3, $4, $5, false, now())
+         ON CONFLICT (id) DO UPDATE SET password_hash = EXCLUDED.password_hash`,
+        [id, email, passwordHash, firstName, lastName],
+      );
+      await em.query(
+        `INSERT INTO user_tenant_memberships (user_id, tenant_id, role, is_default)
+         VALUES ($1, $2, $3, true)
+         ON CONFLICT ON CONSTRAINT uq_user_tenant_role DO NOTHING`,
+        [id, CLINIC_TENANT_ID, role],
+      );
+    }
+
     // ---------- doctors ----------
     const doctors = [
       {

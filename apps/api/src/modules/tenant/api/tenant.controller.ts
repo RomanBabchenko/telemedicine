@@ -20,7 +20,7 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
-import { Role } from '@telemed/shared-types';
+import { Role, isFullTenantAdmin } from '@telemed/shared-types';
 import { AuthUser, CurrentUser, Public, Roles } from '../../../common/auth/decorators';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { Auditable } from '../../../common/audit/decorators';
@@ -93,12 +93,13 @@ export class TenantController {
 
   @Patch('admin/tenants/:id')
   @UseGuards(RolesGuard)
-  @Roles(Role.PLATFORM_SUPER_ADMIN, Role.CLINIC_ADMIN)
+  @Roles(Role.PLATFORM_SUPER_ADMIN, Role.CLINIC_ADMIN, Role.INTEGRATION_ADMIN)
   @Auditable({ action: 'tenant.updated', resource: 'Tenant', captureBody: true })
   @ApiAuth()
   @ApiOperation({
     summary: 'Update tenant branding / features / policies',
-    description: 'CLINIC_ADMIN is allowed only for their own tenant; PLATFORM_SUPER_ADMIN may touch any.',
+    description:
+      'CLINIC_ADMIN is allowed only for their own tenant; PLATFORM_SUPER_ADMIN may touch any. INTEGRATION_ADMIN may update branding fields only — features and policies are rejected with 403.',
     operationId: 'updateTenant',
   })
   @ApiParam({ name: 'id', format: 'uuid' })
@@ -117,7 +118,23 @@ export class TenantController {
     if (!isPlatformAdmin && user.tenantId !== id) {
       throw new ForbiddenException('You may only update your own tenant');
     }
+    this.assertBrandingOnlyForScopedAdmins(user, body);
     const t = await this.service.update(id, body);
     return toTenantResponse(t);
   }
+
+  // Module toggles and policies are clinic-level decisions: only full tenant
+  // admins may change them. INTEGRATION_ADMIN shares this endpoint for
+  // branding, so reject the policy keys rather than the whole request.
+  private assertBrandingOnlyForScopedAdmins(user: AuthUser, body: UpdateTenantBodyDto): void {
+    if (isFullTenantAdmin(user.roles)) return;
+    const touched = TENANT_POLICY_FIELDS.filter((k) => body[k] !== undefined);
+    if (touched.length > 0) {
+      throw new ForbiddenException(
+        `Only CLINIC_ADMIN may change ${touched.join(', ')}`,
+      );
+    }
+  }
 }
+
+const TENANT_POLICY_FIELDS = ['features', 'audioPolicy', 'invitePolicy', 'loginPolicy'] as const;

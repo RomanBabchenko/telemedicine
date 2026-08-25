@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { adminUsersApi } from '@telemed/api-client';
+import { ROLE_LABELS, manageableRolesFor } from '@telemed/shared-types';
 import type { CreateUserDto, Role, UserSummaryDto } from '@telemed/shared-types';
 import {
   Alert,
@@ -11,6 +12,7 @@ import {
   Textarea,
 } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
+import { useAuthStore } from '../../stores/auth.store';
 
 const adminUsers = adminUsersApi(apiClient);
 
@@ -21,24 +23,7 @@ interface Props {
   isPending: boolean;
   error: unknown;
   generatedPassword: string | null;
-  /** True when the form is being shown by /platform/users (PLATFORM_SUPER_ADMIN). */
-  platformActor: boolean;
 }
-
-const ROLE_OPTIONS_CLINIC: Array<{ value: Role; label: string }> = [
-  { value: 'PATIENT', label: 'Пацієнт' },
-  { value: 'DOCTOR', label: 'Лікар' },
-  { value: 'CLINIC_OPERATOR', label: 'Оператор клініки' },
-  { value: 'CLINIC_ADMIN', label: 'Адмін клініки' },
-];
-
-const ROLE_OPTIONS_PLATFORM: Array<{ value: Role; label: string }> = [
-  ...ROLE_OPTIONS_CLINIC,
-  { value: 'PLATFORM_SUPER_ADMIN', label: 'Супер-адмін платформи' },
-  { value: 'PLATFORM_SUPPORT', label: 'Підтримка платформи' },
-  { value: 'PLATFORM_FINANCE', label: 'Фінансист платформи' },
-  { value: 'AUDITOR', label: 'Аудитор' },
-];
 
 const errorMessage = (e: unknown): string => {
   if (!e) return '';
@@ -57,14 +42,21 @@ export const UserFormModal = ({
   isPending,
   error,
   generatedPassword,
-  platformActor,
 }: Props) => {
+  // Role options derive from what the signed-in actor may manage (see
+  // MANAGEABLE_ROLES in shared-types) — the API rejects anything else.
+  const actorRoles = useAuthStore((s) => s.user?.roles);
+  const ROLE_OPTIONS = manageableRolesFor(actorRoles).map((value) => ({
+    value,
+    label: ROLE_LABELS[value],
+  }));
+  const defaultRole: Role = ROLE_OPTIONS[0]?.value ?? 'PATIENT';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
-  const [role, setRole] = useState<Role>('PATIENT');
+  const [role, setRole] = useState<Role>(defaultRole);
   // Doctor extras
   const [specializations, setSpecializations] = useState('');
   const [languages, setLanguages] = useState('');
@@ -87,7 +79,7 @@ export const UserFormModal = ({
       setFirstName('');
       setLastName('');
       setPhone('');
-      setRole('PATIENT');
+      setRole(defaultRole);
       setSpecializations('');
       setLanguages('');
       setLicenseNumber('');
@@ -99,9 +91,7 @@ export const UserFormModal = ({
       setLookupError(null);
       setTouched(false);
     }
-  }, [open]);
-
-  const ROLE_OPTIONS = platformActor ? ROLE_OPTIONS_PLATFORM : ROLE_OPTIONS_CLINIC;
+  }, [open, defaultRole]);
 
   const checkEmail = async () => {
     if (!email.trim()) return;

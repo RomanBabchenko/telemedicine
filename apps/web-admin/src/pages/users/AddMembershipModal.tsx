@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { adminApi, adminUsersApi } from '@telemed/api-client';
+import { ROLE_LABELS, isPlatformActor, manageableRolesFor } from '@telemed/shared-types';
 import type { AddMembershipDto, Role } from '@telemed/shared-types';
 import {
   Alert,
@@ -15,26 +16,10 @@ import { useAuthStore } from '../../stores/auth.store';
 const adminUsers = adminUsersApi(apiClient);
 const admin = adminApi(apiClient);
 
-const ROLE_OPTIONS_CLINIC: Array<{ value: Role; label: string }> = [
-  { value: 'PATIENT', label: 'Пацієнт' },
-  { value: 'DOCTOR', label: 'Лікар' },
-  { value: 'CLINIC_OPERATOR', label: 'Оператор клініки' },
-  { value: 'CLINIC_ADMIN', label: 'Адмін клініки' },
-];
-
-const ROLE_OPTIONS_PLATFORM: Array<{ value: Role; label: string }> = [
-  ...ROLE_OPTIONS_CLINIC,
-  { value: 'PLATFORM_SUPER_ADMIN', label: 'Супер-адмін платформи' },
-  { value: 'PLATFORM_SUPPORT', label: 'Підтримка платформи' },
-  { value: 'PLATFORM_FINANCE', label: 'Фінансист платформи' },
-  { value: 'AUDITOR', label: 'Аудитор' },
-];
-
 interface Props {
   open: boolean;
   onClose: () => void;
   userId: string;
-  platformActor: boolean;
   onSuccess: () => void;
 }
 
@@ -52,12 +37,20 @@ export const AddMembershipModal = ({
   open,
   onClose,
   userId,
-  platformActor,
   onSuccess,
 }: Props) => {
   const ownTenantId = useAuthStore((s) => s.tenantId);
+  const actorRoles = useAuthStore((s) => s.user?.roles);
+  const platformActor = isPlatformActor(actorRoles);
+  // Options derive from MANAGEABLE_ROLES (shared-types) — same matrix the
+  // API enforces, so INTEGRATION_ADMIN only ever sees IA / CMO here.
+  const ROLE_OPTIONS = manageableRolesFor(actorRoles).map((value) => ({
+    value,
+    label: ROLE_LABELS[value],
+  }));
+  const defaultRole: Role = ROLE_OPTIONS[0]?.value ?? 'PATIENT';
   const [tenantId, setTenantId] = useState<string>('');
-  const [role, setRole] = useState<Role>('PATIENT');
+  const [role, setRole] = useState<Role>(defaultRole);
   const [isDefault, setIsDefault] = useState(false);
 
   // PLATFORM_SUPER_ADMIN can pick any tenant.
@@ -70,21 +63,19 @@ export const AddMembershipModal = ({
   useEffect(() => {
     if (!open) {
       setTenantId('');
-      setRole('PATIENT');
+      setRole(defaultRole);
       setIsDefault(false);
       return;
     }
     if (!platformActor && ownTenantId) {
       setTenantId(ownTenantId);
     }
-  }, [open, platformActor, ownTenantId]);
+  }, [open, platformActor, ownTenantId, defaultRole]);
 
   const addM = useMutation({
     mutationFn: (dto: AddMembershipDto) => adminUsers.addMembership(userId, dto),
     onSuccess: () => onSuccess(),
   });
-
-  const ROLE_OPTIONS = platformActor ? ROLE_OPTIONS_PLATFORM : ROLE_OPTIONS_CLINIC;
 
   const submit = () => {
     if (!tenantId) return;
