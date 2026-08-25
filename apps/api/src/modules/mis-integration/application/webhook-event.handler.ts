@@ -243,8 +243,10 @@ export class WebhookEventHandler {
       }),
     ]);
 
-    const patientInviteUrl = `${this.config.patientAppUrl}/invite?token=${patientToken}`;
-    const doctorInviteUrl = `${this.config.doctorAppUrl}/invite?token=${doctorToken}`;
+    // Short /i/<code> form — SMS-friendly; the legacy /invite?token= route
+    // still resolves for links issued before the switch.
+    const patientInviteUrl = `${this.config.patientAppUrl}/i/${patientToken}`;
+    const doctorInviteUrl = `${this.config.doctorAppUrl}/i/${doctorToken}`;
 
     this.logger.log(
       `Online appointment created: ${appointment.id}, session: ${session.id}`,
@@ -331,8 +333,8 @@ export class WebhookEventHandler {
       received: true,
       appointmentId,
       consultationSessionId: session.id,
-      patientInviteUrl: `${this.config.patientAppUrl}/invite?token=${patientToken}`,
-      doctorInviteUrl: `${this.config.doctorAppUrl}/invite?token=${doctorToken}`,
+      patientInviteUrl: `${this.config.patientAppUrl}/i/${patientToken}`,
+      doctorInviteUrl: `${this.config.doctorAppUrl}/i/${doctorToken}`,
     };
   }
 

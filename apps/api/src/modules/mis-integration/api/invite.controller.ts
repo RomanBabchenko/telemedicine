@@ -1,5 +1,6 @@
 import { Body, Controller, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
 import { ApiBody, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
 import { Public } from '../../../common/auth/decorators';
 import { ApiAuthErrors } from '../../../common/swagger';
@@ -25,6 +26,10 @@ export class InviteController {
   @Post('consume')
   @Public()
   @HttpCode(HttpStatus.OK)
+  // Invite codes are short (12 base62 chars), so cap guessing attempts per IP.
+  // Legit multi-consume (re-click after tab close / session-mismatch recovery)
+  // stays well under this.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @ApiOperation({
     summary: 'Exchange a single-use invite token for an invite-scoped session',
     description:

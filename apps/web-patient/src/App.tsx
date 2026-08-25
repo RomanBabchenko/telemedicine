@@ -78,6 +78,7 @@ const InnerApp = () => {
         <Route path="/auth/login" element={<LoginPage />} />
         <Route path="/auth/otp" element={<OtpPage />} />
         <Route path="/invite" element={<InvitePage />} />
+        <Route path="/i/:code" element={<InvitePage />} />
         <Route path="/*" element={<ProtectedRoutes />} />
       </Routes>
     </ThemeProvider>
