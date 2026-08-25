@@ -107,12 +107,17 @@ MINIO_SECRET=$(openssl rand -hex 24)
 LK_KEY=LK$(openssl rand -hex 8)
 LK_SECRET=$(openssl rand -hex 24)
 
+# Dots escaped for the regex: CORS entry below allows any per-clinic subdomain
+# (harmony.patient.$DOMAIN etc.). NOTE: bash substitution is written as
+# $${...} so terraform's templatefile leaves it to the shell.
+DOMAIN_RE="$${DOMAIN//./\\.}"
+
 cat > "$APP_DIR/.env" <<EOF
 NODE_ENV=production
 API_PORT=3000
 # `v1` is appended by NestJS URI versioning — keep this free of version segments.
 API_GLOBAL_PREFIX=api
-CORS_ORIGINS=https://patient.$DOMAIN,https://doctor.$DOMAIN,https://admin.$DOMAIN
+CORS_ORIGINS=https://patient.$DOMAIN,https://doctor.$DOMAIN,https://admin.$DOMAIN,regex:^https://[a-z0-9-]+\.(patient|doctor|admin)\.$DOMAIN_RE\$
 
 # ---- Database (in docker compose) ----
 DB_HOST=localhost

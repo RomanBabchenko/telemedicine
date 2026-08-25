@@ -155,9 +155,11 @@ server {
     location / { return 404; }
 }
 
+# The *.app wildcards serve per-clinic subdomains (harmony.patient.$DOMAIN):
+# same SPA bundle, the app resolves the tenant from the hostname at runtime.
 server {
     listen 80;
-    server_name patient.$DOMAIN;
+    server_name patient.$DOMAIN *.patient.$DOMAIN;
     root /var/www/patient.$DOMAIN;
     index index.html;
     location / { try_files \$uri \$uri/ /index.html; }
@@ -165,7 +167,7 @@ server {
 
 server {
     listen 80;
-    server_name doctor.$DOMAIN;
+    server_name doctor.$DOMAIN *.doctor.$DOMAIN;
     root /var/www/doctor.$DOMAIN;
     index index.html;
     location / { try_files \$uri \$uri/ /index.html; }
@@ -173,7 +175,7 @@ server {
 
 server {
     listen 80;
-    server_name admin.$DOMAIN;
+    server_name admin.$DOMAIN *.admin.$DOMAIN;
     root /var/www/admin.$DOMAIN;
     index index.html;
     location / { try_files \$uri \$uri/ /index.html; }

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   ForbiddenException,
@@ -12,6 +13,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiBody,
   ApiCreatedResponse,
@@ -55,6 +57,30 @@ export class TenantController {
     const tenantId = this.tenantContext.getTenantId();
     const t = await this.service.findById(tenantId);
     if (!t) throw new NotFoundException();
+    return toTenantResponse(t);
+  }
+
+  @Get('tenants/by-subdomain/:subdomain')
+  @Public()
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Resolve a tenant by its clinic subdomain',
+    description:
+      'Public branding bootstrap for clinic subdomains — the SPA parses ' +
+      '<clinic>.<app>.<domain> from window.location and resolves the tenant ' +
+      'before login so branding and X-Tenant-Id are correct pre-auth.',
+    operationId: 'getTenantBySubdomain',
+  })
+  @ApiParam({ name: 'subdomain', example: 'harmony' })
+  @ApiOkResponse({ type: TenantResponseDto })
+  @ApiStandardErrors()
+  async bySubdomain(@Param('subdomain') subdomain: string): Promise<TenantResponseDto> {
+    // Same shape rule as CreateTenantBodyDto.subdomain.
+    if (!/^[a-z0-9-]{1,128}$/.test(subdomain)) {
+      throw new BadRequestException('Invalid subdomain');
+    }
+    const t = await this.service.findBySubdomain(subdomain);
+    if (!t) throw new NotFoundException('Clinic not found');
     return toTenantResponse(t);
   }
 

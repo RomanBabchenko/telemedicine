@@ -6,8 +6,8 @@ variable "region" {
 
 variable "domain" {
   type        = string
-  description = "Domain under which subdomains patient/doctor/admin/api/livekit are created. The Route 53 hosted zone for this domain must already exist (referenced via route53_zone_id)."
-  default     = "demo.testing-core.link"
+  description = "Domain under which subdomains patient/doctor/admin/api/livekit (plus per-clinic wildcards *.patient/*.doctor/*.admin) are created. The Route 53 hosted zone for this domain must already exist (referenced via route53_zone_id)."
+  default     = "medview.com.ua"
 }
 
 variable "route53_zone_id" {

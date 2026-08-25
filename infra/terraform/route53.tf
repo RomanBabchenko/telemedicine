@@ -6,13 +6,21 @@ data "aws_route53_zone" "main" {
 
 locals {
   # All public subdomains terminate on the ALB. The wildcard ACM cert
-  # (*.${var.domain}) covers every entry here automatically. Adding a new
-  # subdomain is a one-line change here + a matching nginx server block in
+  # (*.${var.domain} + *.patient/*.doctor/*.admin SANs, see acm.tf) covers
+  # every entry here automatically. Adding a new subdomain is a one-line
+  # change here + a matching nginx server block in
   # infra/scripts/setup-on-instance.sh.
+  #
+  # The `*.patient` / `*.doctor` / `*.admin` wildcards serve per-clinic
+  # subdomains (harmony.patient.<domain>) — the SPA resolves the tenant from
+  # the hostname, so a new clinic needs no DNS/terraform change at all.
   #
   # `minio` proxies to MinIO's S3 API on the box (localhost:9000) so the
   # API can hand out presigned URLs that browsers can actually reach.
-  subdomains = ["patient", "doctor", "admin", "api", "livekit", "minio"]
+  subdomains = [
+    "patient", "doctor", "admin", "api", "livekit", "minio",
+    "*.patient", "*.doctor", "*.admin",
+  ]
 }
 
 # All subdomains point at the ALB. The LiveKit subdomain is also on the ALB
