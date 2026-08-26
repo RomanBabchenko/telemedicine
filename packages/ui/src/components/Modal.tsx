@@ -1,4 +1,5 @@
 import { ReactNode, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '../lib/cn';
 
 interface Props {
@@ -27,9 +28,13 @@ export const Modal = ({ open, onClose, title, children, footer, size = 'md' }: P
   }, [open, onClose]);
 
   if (!open) return null;
-  return (
+  // Portal to <body>: rendered in place, the overlay is a sibling inside
+  // whatever layout container opened it, and utilities like `space-y-*`
+  // reach it (margins apply to position:fixed too — the backdrop showed up
+  // 24px short of the top edge). `m-0` guards against body-level margins.
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 m-0 flex items-center justify-center bg-black/40 p-4"
       onClick={onClose}
     >
       <div
@@ -60,6 +65,7 @@ export const Modal = ({ open, onClose, title, children, footer, size = 'md' }: P
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
