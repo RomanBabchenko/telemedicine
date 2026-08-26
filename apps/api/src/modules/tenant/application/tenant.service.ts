@@ -18,7 +18,11 @@ export interface UpdateTenantInput {
   features?: Record<string, boolean>;
   audioPolicy?: { enabled?: boolean; retentionDays?: number; consentRequired?: boolean };
   invitePolicy?: { bindIp?: boolean; bindUserAgent?: boolean };
-  loginPolicy?: { doctorEnabled?: boolean; patientEnabled?: boolean };
+  loginPolicy?: {
+    doctorEnabled?: boolean;
+    patientEnabled?: boolean;
+    requireSubdomain?: boolean;
+  };
 }
 
 // Roles that bypass loginPolicy gating — admin / internal accounts must

@@ -88,6 +88,13 @@ export interface TenantInvitePolicyDto {
 export interface TenantLoginPolicyDto {
   doctorEnabled?: boolean;
   patientEnabled?: boolean;
+  /**
+   * When true, password/OTP login into this tenant is accepted only from
+   * the clinic's own subdomain (<subdomain>.admin/doctor/patient.<apex>),
+   * not from the bare app hosts. Missing/false = either entry point works.
+   * Platform-level roles are exempt so operators can't lock themselves out.
+   */
+  requireSubdomain?: boolean;
 }
 
 export interface CreateTenantDto {

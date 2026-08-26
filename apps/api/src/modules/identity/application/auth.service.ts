@@ -26,7 +26,24 @@ const LOGIN_DISABLED_ERROR = {
 interface AuditMeta {
   ip?: string | null;
   userAgent?: string | null;
+  /** Origin (or Referer) header — which SPA host started this login. */
+  origin?: string | null;
 }
+
+// Platform staff work from the bare app hosts, so loginPolicy.requireSubdomain
+// never applies to them — and a platform operator can always flip the flag
+// back off for a clinic that misconfigured it.
+const SUBDOMAIN_EXEMPT_ROLES: ReadonlySet<Role> = new Set([
+  Role.PLATFORM_SUPER_ADMIN,
+  Role.PLATFORM_FINANCE,
+  Role.MIS_SERVICE,
+]);
+
+const SUBDOMAIN_REQUIRED_ERROR = {
+  code: 'auth.subdomain_required',
+  message:
+    'Вхід у цю клініку можливий лише через її власну адресу. Скористайтесь посиланням із піддоменом клініки.',
+} as const;
 
 @Injectable()
 export class AuthService {
@@ -134,6 +151,7 @@ export class AuthService {
     if (tenantId && !(await this.tenants.canLogin(tenantId, roles))) {
       throw new ForbiddenException(LOGIN_DISABLED_ERROR);
     }
+    await this.assertSubdomainPolicy(tenantId, roles, meta.origin);
 
     const ok = await this.passwords.verify(user.passwordHash, input.password);
     if (!ok) throw new UnauthorizedException('Invalid credentials');
@@ -199,6 +217,7 @@ export class AuthService {
 
     const tenantId = await this.userService.getDefaultTenantId(user.id);
     const roles = await this.userService.getRoles(user.id, tenantId);
+    await this.assertSubdomainPolicy(tenantId, roles, meta.origin);
     return this.buildAuthResponse(user, roles, tenantId, meta);
   }
 
@@ -238,7 +257,36 @@ export class AuthService {
     }
     const tenantId = await this.userService.getDefaultTenantId(user.id);
     const roles = await this.userService.getRoles(user.id, tenantId);
+    await this.assertSubdomainPolicy(tenantId, roles, meta.origin);
     return this.buildAuthResponse(user, roles, tenantId, meta);
+  }
+
+  // loginPolicy.requireSubdomain: the tenant only accepts logins started
+  // from its own subdomain (harmony.patient.<apex> etc.), judged by the
+  // Origin/Referer header. This is a UX/policy fence, not a hard security
+  // boundary — a scripted client can forge Origin; credentials and the
+  // other login gates still apply either way.
+  private async assertSubdomainPolicy(
+    tenantId: string | null,
+    roles: Role[],
+    origin: string | null | undefined,
+  ): Promise<void> {
+    if (!tenantId) return;
+    if (roles.some((r) => SUBDOMAIN_EXEMPT_ROLES.has(r))) return;
+    const tenant = await this.tenants.findById(tenantId);
+    if (!tenant || tenant.isPlatform) return;
+    if (tenant.loginPolicy?.requireSubdomain !== true) return;
+    if (origin) {
+      try {
+        const host = new URL(origin).hostname;
+        // <sub>.patient.<apex> / <sub>.doctor.<apex> / <sub>.admin.<apex> —
+        // the clinic label is the first hostname segment.
+        if (host.split('.')[0] === tenant.subdomain) return;
+      } catch {
+        // fall through — unparsable Origin is treated as "no subdomain"
+      }
+    }
+    throw new ForbiddenException(SUBDOMAIN_REQUIRED_ERROR);
   }
 
   async refresh(refreshToken: string, meta: AuditMeta = {}): Promise<AuthResponseDto> {

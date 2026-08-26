@@ -71,6 +71,14 @@ class TenantLoginPolicyInput {
   @IsOptional()
   @IsBoolean()
   patientEnabled?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Accept login only from the clinic subdomain (<sub>.admin/doctor/patient.<apex>); default false — bare app hosts also work',
+  })
+  @IsOptional()
+  @IsBoolean()
+  requireSubdomain?: boolean;
 }
 
 export class UpdateTenantBodyDto implements UpdateTenantDto {

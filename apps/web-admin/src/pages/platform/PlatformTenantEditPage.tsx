@@ -93,6 +93,8 @@ export const PlatformTenantEditPage = () => {
       setLoginPolicy({
         doctorEnabled: t.loginPolicy?.doctorEnabled !== false,
         patientEnabled: t.loginPolicy?.patientEnabled !== false,
+        // Inverse default to the two above: missing = NOT required.
+        requireSubdomain: t.loginPolicy?.requireSubdomain === true,
       });
     }
   }, [tenantQ.data]);
@@ -206,6 +208,23 @@ export const PlatformTenantEditPage = () => {
               }
             />
             Дозволити вхід для пацієнтів
+          </label>
+          <label className="flex items-center gap-2 rounded border border-slate-200 p-2 text-sm sm:col-span-2">
+            <input
+              type="checkbox"
+              checked={loginPolicy.requireSubdomain === true}
+              onChange={(e) =>
+                setLoginPolicy((prev) => ({ ...prev, requireSubdomain: e.target.checked }))
+              }
+            />
+            <span>
+              Вхід лише через піддомен клініки
+              <span className="block text-xs text-slate-500">
+                Логін із загальних адрес admin/doctor/patient без піддомена буде
+                відхилено — співробітники та пацієнти входять тільки через адресу
+                клініки. Адміністратори платформи не обмежуються.
+              </span>
+            </span>
           </label>
         </div>
       </Card>

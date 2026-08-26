@@ -48,7 +48,11 @@ export class Tenant extends BaseEntity {
   // that operate exclusively through MIS-issued invites and don't want
   // self-service login at all.
   @Column({ type: 'jsonb', name: 'login_policy', default: () => `'{}'::jsonb` })
-  loginPolicy!: { doctorEnabled?: boolean; patientEnabled?: boolean };
+  loginPolicy!: {
+    doctorEnabled?: boolean;
+    patientEnabled?: boolean;
+    requireSubdomain?: boolean;
+  };
 
   @Column({ name: 'billing_plan_id', type: 'uuid', nullable: true })
   billingPlanId!: string | null;

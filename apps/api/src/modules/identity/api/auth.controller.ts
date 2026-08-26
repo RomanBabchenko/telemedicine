@@ -54,7 +54,11 @@ export class AuthController {
   ) {}
 
   private metaFrom(req: Request) {
-    return { ip: req.ip ?? null, userAgent: req.header('user-agent') ?? null };
+    return {
+      ip: req.ip ?? null,
+      userAgent: req.header('user-agent') ?? null,
+      origin: req.header('origin') ?? req.header('referer') ?? null,
+    };
   }
 
   @Get('config')
