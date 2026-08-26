@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { authApi } from '@telemed/api-client';
 import { Alert, Card, PageHeader } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
@@ -9,11 +9,14 @@ const auth = authApi(apiClient);
 
 export const InvitePage = () => {
   const [searchParams] = useSearchParams();
+  const { code } = useParams();
   const navigate = useNavigate();
   const setSession = useAuthStore((s) => s.setSession);
   const [error, setError] = useState<string | null>(null);
 
-  const token = searchParams.get('token');
+  // Short /i/:code links carry the token in the path; the legacy /invite
+  // route passes it as ?token=.
+  const token = code ?? searchParams.get('token');
 
   useEffect(() => {
     if (!token) {

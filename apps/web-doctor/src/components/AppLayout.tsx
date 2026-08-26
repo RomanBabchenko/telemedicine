@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Button } from '@telemed/ui';
+import { Button, MedViewLogo } from '@telemed/ui';
 import { useAuthStore } from '../stores/auth.store';
 
 export const AppLayout = ({ children }: { children: ReactNode }) => {
@@ -14,9 +14,7 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <Link to={isInviteScope ? '#' : '/'} className="flex items-center gap-2">
-            <span className="rounded bg-[color:var(--color-primary)] px-2 py-1 text-sm font-bold text-white">
-              Telemed
-            </span>
+            <MedViewLogo size={26} withWordmark />
             <span className="text-sm font-semibold text-slate-700">Кабінет лікаря</span>
           </Link>
           <nav className="flex items-center gap-3 text-sm">

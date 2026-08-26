@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -18,13 +19,14 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
-import { Role } from '@telemed/shared-types';
-import { Roles } from '../../../common/auth/decorators';
+import { AppointmentSource, Role, isMisScopedActor } from '@telemed/shared-types';
+import { AuthUser, CurrentUser, Roles } from '../../../common/auth/decorators';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { Auditable } from '../../../common/audit/decorators';
 import { OkResponseDto } from '../../../common/dto/ok-response.dto';
 import { ApiAuth, ApiStandardErrors } from '../../../common/swagger';
 import { RecordingService } from '../application/recording.service';
+import { AppointmentService } from '../../booking/application/appointment.service';
 import {
   RecordingInfoResponseDto,
   StartRecordingBodyDto,
@@ -38,7 +40,11 @@ import { RequireFeature } from '../../../common/tenant/decorators';
 @ApiAuth()
 @RequireFeature('audioArchive')
 export class RecordingController {
-  constructor(private readonly service: RecordingService) {}
+  constructor(
+    private readonly service: RecordingService,
+    // BookingModule is @Global, so no module import is needed here.
+    private readonly appointments: AppointmentService,
+  ) {}
 
   @Post(':id/start-recording')
   @HttpCode(HttpStatus.CREATED)
@@ -82,10 +88,17 @@ export class RecordingController {
   }
 
   @Get(':id/recording')
-  @Roles(Role.DOCTOR, Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN)
+  @Roles(
+    Role.DOCTOR,
+    Role.CLINIC_ADMIN,
+    Role.PLATFORM_SUPER_ADMIN,
+    Role.INTEGRATION_ADMIN,
+    Role.CHIEF_MEDICAL_OFFICER,
+  )
   @ApiOperation({
     summary: 'Fetch recording metadata and a signed download URL',
-    description: 'downloadUrl is non-null only when the recording is STORED (egress has flushed the MP3 to MinIO).',
+    description:
+      'downloadUrl is non-null only when the recording is STORED (egress has flushed the MP3 to MinIO). INTEGRATION_ADMIN may only fetch recordings of MIS-originated appointments.',
     operationId: 'getSessionRecording',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Consultation session id' })
@@ -93,7 +106,14 @@ export class RecordingController {
   @ApiStandardErrors()
   async getRecording(
     @Param('id', new ParseUUIDPipe()) sessionId: string,
+    @CurrentUser() user: AuthUser,
   ): Promise<RecordingInfoResponseDto> {
+    if (isMisScopedActor(user.roles)) {
+      const appt = await this.appointments.findByConsultationSessionId(sessionId);
+      if (!appt || appt.source !== AppointmentSource.MIS) {
+        throw new ForbiddenException('INTEGRATION_ADMIN may only access MIS-originated recordings');
+      }
+    }
     const info = await this.service.getRecordingInfo(sessionId);
     if (!info) throw new NotFoundException('Recording not found');
     return info;

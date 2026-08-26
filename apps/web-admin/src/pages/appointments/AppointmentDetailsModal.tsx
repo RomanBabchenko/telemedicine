@@ -2,9 +2,20 @@ import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { bookingApi, consultationApi } from '@telemed/api-client';
-import { AppointmentStatus, type ReissueInvitesDto } from '@telemed/shared-types';
+import {
+  APPOINTMENT_SOURCE_LABELS,
+  AppointmentStatus,
+  hasAnyRole,
+  type ReissueInvitesDto,
+  type Role,
+} from '@telemed/shared-types';
 import { Alert, Badge, Button, Modal, Spinner } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
+import { useAuthStore } from '../../stores/auth.store';
+import { useTenant } from '../../hooks/useTenant';
+
+// Roles allowed on POST /appointments/:id/invites (admin-invite.controller).
+const INVITE_ROLES: readonly Role[] = ['CLINIC_ADMIN', 'PLATFORM_SUPER_ADMIN', 'INTEGRATION_ADMIN'];
 
 const booking = bookingApi(apiClient);
 const consultation = consultationApi(apiClient);
@@ -60,11 +71,19 @@ export const AppointmentDetailsModal = ({ appointmentId, onClose }: Props) => {
     queryFn: () => booking.getById(appointmentId),
   });
   const a = detailsQ.data;
+  const roles = useAuthStore((s) => s.user?.roles);
+  const tenant = useTenant();
+  // GET /sessions/:id/recording is gated by the audioArchive module — don't
+  // fire a request that will 403; show a clear "module off" note instead.
+  const audioArchiveOn = tenant?.features?.audioArchive !== false;
+  // Invite reissue is MIS-only in practice (the endpoint requires misSync)
+  // and CHIEF_MEDICAL_OFFICER is read-only — hide the control for them.
+  const canReissue = hasAnyRole(roles, INVITE_ROLES) && a?.source === 'MIS';
 
   const recordingQ = useQuery({
     queryKey: ['admin-appointment-recording', a?.consultationSessionId],
     queryFn: () => consultation.getRecording(a!.consultationSessionId!),
-    enabled: !!a?.consultationSessionId,
+    enabled: !!a?.consultationSessionId && audioArchiveOn,
     retry: false,
   });
 
@@ -109,6 +128,14 @@ export const AppointmentDetailsModal = ({ appointmentId, onClose }: Props) => {
                 <Row label="Кінець" value={dayjs(a.endAt).format('DD.MM.YYYY HH:mm')} />
                 <Row label="Створено" value={dayjs(a.createdAt).format('DD.MM.YYYY HH:mm')} />
                 <Row label="Статус" value={<Badge>{a.status}</Badge>} />
+                <Row
+                  label="Джерело"
+                  value={
+                    <Badge variant={a.source === 'MIS' ? 'warning' : 'default'}>
+                      {APPOINTMENT_SOURCE_LABELS[a.source] ?? a.source}
+                    </Badge>
+                  }
+                />
               </div>
               <div>
                 <Row
@@ -125,6 +152,7 @@ export const AppointmentDetailsModal = ({ appointmentId, onClose }: Props) => {
             </div>
           </section>
 
+          {canReissue ? (
           <section className="space-y-2">
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-semibold uppercase text-slate-400">Інвайт-посилання</h4>
@@ -156,10 +184,15 @@ export const AppointmentDetailsModal = ({ appointmentId, onClose }: Props) => {
               </div>
             ) : null}
           </section>
+          ) : null}
 
           <section className="space-y-2">
             <h4 className="text-xs font-semibold uppercase text-slate-400">Запис консультації</h4>
-            {!a.consultationSessionId ? (
+            {!audioArchiveOn ? (
+              <p className="text-sm text-slate-400">
+                Аудіоархів вимкнено в модулях клініки — записи недоступні.
+              </p>
+            ) : !a.consultationSessionId ? (
               <p className="text-sm text-slate-400">Консультація ще не створена — запису немає.</p>
             ) : recordingQ.isLoading ? (
               <Spinner />

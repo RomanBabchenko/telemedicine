@@ -4,6 +4,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { DataSource, Repository } from 'typeorm';
 import {
+  AppointmentSource,
   AppointmentStatus,
   Role,
   ServiceMode,
@@ -163,7 +164,15 @@ export class WebhookEventHandler {
       const existingAppt = await apptRepo.findOne({
         where: { slotId: slot.id },
       });
-      if (existingAppt) return existingAppt;
+      if (existingAppt) {
+        // A MIS webhook landing on a platform-booked slot adopts the row —
+        // flag it so MIS-scoped admins can see it.
+        if (existingAppt.source !== AppointmentSource.MIS) {
+          existingAppt.source = AppointmentSource.MIS;
+          return apptRepo.save(existingAppt);
+        }
+        return existingAppt;
+      }
 
       // paymentType/paymentStatus default to postpaid+unpaid when the MIS
       // doesn't send them — that's the "patient pays at the clinic, just let
@@ -188,6 +197,7 @@ export class WebhookEventHandler {
         isAnonymousPatient: isAnonymous,
         doctorId,
         serviceTypeId,
+        source: AppointmentSource.MIS,
         status: initialStatus,
         startAt,
         endAt,
@@ -233,8 +243,10 @@ export class WebhookEventHandler {
       }),
     ]);
 
-    const patientInviteUrl = `${this.config.patientAppUrl}/invite?token=${patientToken}`;
-    const doctorInviteUrl = `${this.config.doctorAppUrl}/invite?token=${doctorToken}`;
+    // Short /i/<code> form — SMS-friendly; the legacy /invite?token= route
+    // still resolves for links issued before the switch.
+    const patientInviteUrl = `${this.config.patientAppUrl}/i/${patientToken}`;
+    const doctorInviteUrl = `${this.config.doctorAppUrl}/i/${doctorToken}`;
 
     this.logger.log(
       `Online appointment created: ${appointment.id}, session: ${session.id}`,
@@ -321,8 +333,8 @@ export class WebhookEventHandler {
       received: true,
       appointmentId,
       consultationSessionId: session.id,
-      patientInviteUrl: `${this.config.patientAppUrl}/invite?token=${patientToken}`,
-      doctorInviteUrl: `${this.config.doctorAppUrl}/invite?token=${doctorToken}`,
+      patientInviteUrl: `${this.config.patientAppUrl}/i/${patientToken}`,
+      doctorInviteUrl: `${this.config.doctorAppUrl}/i/${doctorToken}`,
     };
   }
 

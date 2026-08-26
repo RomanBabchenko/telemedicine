@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { authApi } from '@telemed/api-client';
-import { Alert, Button, Card, FormField, Input, PageHeader } from '@telemed/ui';
+import { Alert, AuthCard, Button, FormField, Input } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
 import { useAuthConfig } from '../../hooks/useAuthConfig';
 import { useAuthStore } from '../../stores/auth.store';
@@ -37,47 +37,39 @@ export const OtpPage = () => {
   // flow, gated by AUTH_DISABLE_LOGIN_PATIENT.
   if (cfgQ.data && cfgQ.data.patientLoginEnabled === false) {
     return (
-      <div className="mx-auto max-w-md py-16">
-        <PageHeader title="Вхід за OTP" />
-        <Card>
-          <Alert variant="info" title="Самостійний вхід вимкнено">
-            Зараз ця клініка приймає пацієнтів лише за індивідуальним
-            запрошенням. Скористайтесь посиланням з листа або SMS від клініки,
-            щоб перейти до своєї консультації.
-          </Alert>
-        </Card>
-      </div>
+      <AuthCard title="Вхід за OTP">
+        <Alert variant="info" title="Самостійний вхід вимкнено">
+          Зараз ця клініка приймає пацієнтів лише за індивідуальним
+          запрошенням. Скористайтесь посиланням з листа або SMS від клініки,
+          щоб перейти до своєї консультації.
+        </Alert>
+      </AuthCard>
     );
   }
 
   return (
-    <div className="mx-auto max-w-md py-16">
-      <PageHeader title="Вхід за OTP" />
-      <Card>
-        <Alert variant="info">
-          В dev-режимі OTP відображається у логах API. Шукайте рядок «📱 OTP for ...».
-        </Alert>
-        <FormField label="Телефон">
-          <Input value={phone} onChange={(e) => setPhone(e.target.value)} disabled={stage === 'verify'} />
+    <AuthCard title="Вхід за OTP">
+      <Alert variant="info">
+        В dev-режимі OTP відображається у логах API. Шукайте рядок «📱 OTP for ...».
+      </Alert>
+      <FormField label="Телефон">
+        <Input value={phone} onChange={(e) => setPhone(e.target.value)} disabled={stage === 'verify'} />
+      </FormField>
+      {stage === 'verify' && (
+        <FormField label="Код">
+          <Input value={code} onChange={(e) => setCode(e.target.value)} />
         </FormField>
-        {stage === 'verify' && (
-          <FormField label="Код">
-            <Input value={code} onChange={(e) => setCode(e.target.value)} />
-          </FormField>
-        )}
-        {error ? <Alert variant="danger">{error}</Alert> : null}
-        <div className="mt-4 flex justify-end gap-2">
-          {stage === 'request' ? (
-            <Button onClick={() => requestM.mutate()} isLoading={requestM.isPending}>
-              Надіслати код
-            </Button>
-          ) : (
-            <Button onClick={() => verifyM.mutate()} isLoading={verifyM.isPending}>
-              Підтвердити
-            </Button>
-          )}
-        </div>
-      </Card>
-    </div>
+      )}
+      {error ? <Alert variant="danger">{error}</Alert> : null}
+      {stage === 'request' ? (
+        <Button className="mt-4" fullWidth onClick={() => requestM.mutate()} isLoading={requestM.isPending}>
+          Надіслати код
+        </Button>
+      ) : (
+        <Button className="mt-4" fullWidth onClick={() => verifyM.mutate()} isLoading={verifyM.isPending}>
+          Підтвердити
+        </Button>
+      )}
+    </AuthCard>
   );
 };

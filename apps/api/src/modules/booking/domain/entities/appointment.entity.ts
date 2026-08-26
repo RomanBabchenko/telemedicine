@@ -1,5 +1,5 @@
 import { Column, DeleteDateColumn, Entity, Index, Unique, VersionColumn } from 'typeorm';
-import { AppointmentStatus } from '@telemed/shared-types';
+import { AppointmentSource, AppointmentStatus } from '@telemed/shared-types';
 import { TenantOwnedEntity } from '../../../../common/entities/tenant-owned.entity';
 
 @Entity('appointments')
@@ -7,6 +7,7 @@ import { TenantOwnedEntity } from '../../../../common/entities/tenant-owned.enti
 @Index('idx_appointment_tenant_status', ['tenantId', 'status'])
 @Index('idx_appointment_patient', ['patientId'])
 @Index('idx_appointment_doctor', ['doctorId'])
+@Index('idx_appointment_tenant_source', ['tenantId', 'source'])
 export class Appointment extends TenantOwnedEntity {
   @Column({ name: 'slot_id', type: 'uuid' })
   slotId!: string;
@@ -22,6 +23,18 @@ export class Appointment extends TenantOwnedEntity {
 
   @Column({ name: 'service_type_id', type: 'uuid' })
   serviceTypeId!: string;
+
+  // PLATFORM — booked via marketplace / widget / admin console.
+  // MIS — created by an external MIS webhook. INTEGRATION_ADMIN is scoped to
+  // MIS rows only, so this must be set at creation time (see
+  // webhook-event.handler.ts) and is backfilled by migration 1700000013000.
+  @Column({
+    type: 'varchar',
+    length: 16,
+    enum: AppointmentSource,
+    default: AppointmentSource.PLATFORM,
+  })
+  source!: AppointmentSource;
 
   @Column({
     type: 'varchar',

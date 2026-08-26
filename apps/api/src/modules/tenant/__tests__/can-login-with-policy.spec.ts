@@ -6,6 +6,8 @@ describe('canLoginWithPolicy', () => {
     const adminRoles: Role[] = [
       Role.PLATFORM_SUPER_ADMIN,
       Role.CLINIC_ADMIN,
+      Role.INTEGRATION_ADMIN,
+      Role.CHIEF_MEDICAL_OFFICER,
       Role.MIS_SERVICE,
       Role.AUDITOR,
     ];

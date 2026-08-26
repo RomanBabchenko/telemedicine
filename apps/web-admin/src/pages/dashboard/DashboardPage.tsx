@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { analyticsApi, tenantsApi } from '@telemed/api-client';
-import { Card, PageHeader, Spinner, Stat } from '@telemed/ui';
+import { Alert, Card, PageHeader, Spinner, Stat } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth.store';
+import { useTenant } from '../../hooks/useTenant';
 
 const tenants = tenantsApi(apiClient);
 const analytics = analyticsApi(apiClient);
@@ -10,10 +11,15 @@ const analytics = analyticsApi(apiClient);
 export const DashboardPage = () => {
   const tenantId = useAuthStore((s) => s.tenantId);
   const tenantQ = useQuery({ queryKey: ['tenant', 'current'], queryFn: () => tenants.current() });
+  // GET /analytics/tenant/:id is gated by the analyticsPackage module. For a
+  // CHIEF_MEDICAL_OFFICER this page is most of their console, so render a
+  // clear notice instead of a failed request when the module is off.
+  const tenant = useTenant();
+  const analyticsOn = tenant?.features?.analyticsPackage !== false;
   const statsQ = useQuery({
     queryKey: ['tenant-stats', tenantId],
     queryFn: () => analytics.tenant(tenantId!),
-    enabled: !!tenantId,
+    enabled: !!tenantId && analyticsOn,
   });
 
   if (tenantQ.isLoading || statsQ.isLoading) return <Spinner />;
@@ -25,6 +31,9 @@ export const DashboardPage = () => {
         title={tenantQ.data?.brandName ?? 'Клініка'}
         description="Огляд по онлайн-направленню"
       />
+      {!analyticsOn ? (
+        <Alert variant="warning">Модуль аналітики вимкнено — статистика недоступна.</Alert>
+      ) : (
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Виручка онлайн" value={`${stats?.onlineRevenue ?? 0} ₴`} />
         <Stat label="Завантаженість" value={`${stats?.utilizationPct ?? 0}%`} />
@@ -34,6 +43,7 @@ export const DashboardPage = () => {
           value={`${stats?.paymentToShownConversion ?? 0}%`}
         />
       </div>
+      )}
       <Card>
         <h3 className="mb-2 font-semibold">White label статус</h3>
         <p className="text-sm text-slate-600">Бренд: {tenantQ.data?.brandName}</p>

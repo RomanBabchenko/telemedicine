@@ -28,6 +28,8 @@ export interface UpdateTenantInput {
 const ALWAYS_ALLOWED_ROLES: ReadonlySet<Role> = new Set([
   Role.PLATFORM_SUPER_ADMIN,
   Role.CLINIC_ADMIN,
+  Role.INTEGRATION_ADMIN,
+  Role.CHIEF_MEDICAL_OFFICER,
   Role.MIS_SERVICE,
   Role.AUDITOR,
 ]);
@@ -99,7 +101,7 @@ export class TenantService {
       slug: input.slug,
       subdomain: input.subdomain,
       brandName: input.brandName,
-      primaryColor: input.primaryColor ?? '#1f7ae0',
+      primaryColor: input.primaryColor ?? '#2563EB',
       locale: input.locale ?? 'uk',
       currency: input.currency ?? 'UAH',
       billingPlanId: input.billingPlanId ?? null,

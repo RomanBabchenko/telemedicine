@@ -1,6 +1,6 @@
 import { Link, Outlet, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/auth.store';
-import { Button } from '@telemed/ui';
+import { Button, MedViewLogo } from '@telemed/ui';
 import { useTenant } from '../hooks/useTenant';
 
 export const AppLayout = () => {
@@ -19,15 +19,11 @@ export const AppLayout = () => {
             {tenant?.logoUrl ? (
               <img src={tenant.logoUrl} alt={tenant.brandName} className="h-8" />
             ) : (
-              <span
-                className="rounded bg-[color:var(--color-primary)] px-2 py-1 text-sm font-bold text-white"
-              >
-                Telemed
-              </span>
+              <MedViewLogo size={28} withWordmark={!tenant?.brandName} />
             )}
-            <span className="text-sm font-semibold text-slate-700">
-              {tenant?.brandName ?? 'Telemed'}
-            </span>
+            {tenant?.brandName ? (
+              <span className="text-sm font-semibold text-slate-700">{tenant.brandName}</span>
+            ) : null}
           </Link>
           <nav className="flex items-center gap-3 text-sm">
             {/* Hidden when the b2cListing module is off (API enforces it too). */}

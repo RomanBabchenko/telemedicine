@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { authApi } from '@telemed/api-client';
-import { Alert, Button, Card, FormField, Input, PageHeader } from '@telemed/ui';
+import { ADMIN_CONSOLE_ROLES, hasAnyRole } from '@telemed/shared-types';
+import { Alert, AuthCard, Button, FormField, Input } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth.store';
 
@@ -18,6 +19,12 @@ export const LoginPage = () => {
   const loginM = useMutation({
     mutationFn: () => auth.login({ email, password }),
     onSuccess: (res) => {
+      // Patients / doctors authenticate fine but have nothing here — tell
+      // them instead of dropping them on an empty console.
+      if (!hasAnyRole(res.user.roles, ADMIN_CONSOLE_ROLES)) {
+        setError('Цей обліковий запис не має доступу до адмін-консолі');
+        return;
+      }
       setSession(res);
       navigate('/');
     },
@@ -26,22 +33,25 @@ export const LoginPage = () => {
   });
 
   return (
-    <div className="mx-auto max-w-md py-16">
-      <PageHeader title="Вхід для адміністратора" />
-      <Card>
-        <FormField label="Email">
-          <Input value={email} onChange={(e) => setEmail(e.target.value)} />
-        </FormField>
-        <FormField label="Пароль">
-          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        </FormField>
-        {error ? <Alert variant="danger">{error}</Alert> : null}
-        <div className="mt-4 flex justify-end">
-          <Button onClick={() => loginM.mutate()} isLoading={loginM.isPending}>
-            Увійти
-          </Button>
-        </div>
-      </Card>
-    </div>
+    <AuthCard
+      title="Вхід до консолі клініки"
+      footer="MedView Admin · доступ лише для персоналу клініки"
+    >
+      <FormField label="Email">
+        <Input value={email} onChange={(e) => setEmail(e.target.value)} />
+      </FormField>
+      <FormField label="Пароль">
+        <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+      </FormField>
+      {error ? <Alert variant="danger">{error}</Alert> : null}
+      <Button
+        className="mt-4"
+        fullWidth
+        onClick={() => loginM.mutate()}
+        isLoading={loginM.isPending}
+      >
+        Увійти
+      </Button>
+    </AuthCard>
   );
 };

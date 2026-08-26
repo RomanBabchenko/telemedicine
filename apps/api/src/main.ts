@@ -33,6 +33,13 @@ async function bootstrap() {
   });
   const config = app.get(AppConfig);
 
+  // In production the API sits behind nginx on the same instance, so the
+  // TCP peer is always loopback and req.ip logs as ::1 (audit trail, session
+  // metadata, API-key IP allowlists all read it). Trusting only loopback
+  // makes Express take the client address nginx appends to X-Forwarded-For
+  // while still ignoring a spoofed XFF sent directly to the API port.
+  app.set('trust proxy', 'loopback');
+
   // Redis-backed socket.io rooms — waiting-room chat/presence must reach
   // participants regardless of which API instance holds their socket.
   const ioAdapter = new RedisIoAdapter(app, config.redis.host, config.redis.port);

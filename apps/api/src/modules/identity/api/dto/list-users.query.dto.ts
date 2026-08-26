@@ -3,17 +3,8 @@ import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Role } from '@telemed/shared-types';
 
-const ROLE_VALUES: Role[] = [
-  Role.PATIENT,
-  Role.DOCTOR,
-  Role.CLINIC_ADMIN,
-  Role.CLINIC_OPERATOR,
-  Role.PLATFORM_SUPPORT,
-  Role.PLATFORM_FINANCE,
-  Role.PLATFORM_SUPER_ADMIN,
-  Role.MIS_SERVICE,
-  Role.AUDITOR,
-];
+// Derived from the enum so new roles cannot be forgotten here.
+const ROLE_VALUES: Role[] = Object.values(Role);
 
 export class ListUsersQueryDto {
   @ApiPropertyOptional({ enum: ROLE_VALUES })
@@ -48,7 +39,7 @@ export class ListUsersQueryDto {
 
   @ApiPropertyOptional({
     enum: ['mine', 'all'],
-    description: "'all' is PLATFORM_SUPER_ADMIN-only; CLINIC_ADMIN callers always receive own-tenant users.",
+    description: "'all' is PLATFORM_SUPER_ADMIN-only; clinic-level admins always receive own-tenant users.",
   })
   @IsOptional()
   @IsIn(['mine', 'all'])

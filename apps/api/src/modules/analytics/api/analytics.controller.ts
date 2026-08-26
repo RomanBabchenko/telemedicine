@@ -1,5 +1,6 @@
 import {
   Controller,
+  ForbiddenException,
   Get,
   Param,
   ParseUUIDPipe,
@@ -12,7 +13,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Role } from '@telemed/shared-types';
-import { Roles } from '../../../common/auth/decorators';
+import { AuthUser, CurrentUser, Roles } from '../../../common/auth/decorators';
 import { RolesGuard } from '../../../common/auth/roles.guard';
 import { ApiAuth, ApiStandardErrors } from '../../../common/swagger';
 import { AnalyticsService } from '../application/analytics.service';
@@ -22,6 +23,16 @@ import {
   TenantStatsResponseDto,
 } from './dto';
 import { RequireFeature } from '../../../common/tenant/decorators';
+
+// Clinic-level roles take :id from the URL — without this check any clinic
+// admin could read a foreign tenant's stats by swapping the UUID.
+const PLATFORM_WIDE_ROLES: readonly Role[] = [Role.PLATFORM_SUPER_ADMIN, Role.PLATFORM_FINANCE];
+const assertOwnTenant = (user: AuthUser, tenantId: string): void => {
+  if (user.roles.some((r) => PLATFORM_WIDE_ROLES.includes(r))) return;
+  if (user.tenantId !== tenantId) {
+    throw new ForbiddenException('You may only access your own tenant');
+  }
+};
 
 @ApiTags('analytics')
 @Controller('analytics')
@@ -47,9 +58,13 @@ export class AnalyticsController {
   }
 
   @Get('tenant/:id')
+  // INTEGRATION_ADMIN / CHIEF_MEDICAL_OFFICER are TEMPORARILY excluded —
+  // this endpoint feeds both the admin dashboard and the analytics page.
+  // Restore them here and in web-admin/src/lib/access.ts together.
   @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN, Role.PLATFORM_FINANCE)
   @ApiOperation({
     summary: "Fetch a tenant's aggregated stats",
+    description: 'Clinic-level roles may only read their own tenant; platform roles may read any.',
     operationId: 'getTenantStats',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Tenant id' })
@@ -57,7 +72,9 @@ export class AnalyticsController {
   @ApiStandardErrors()
   tenant(
     @Param('id', new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: AuthUser,
   ): Promise<TenantStatsResponseDto> {
+    assertOwnTenant(user, id);
     return this.service.tenantStats(id);
   }
 

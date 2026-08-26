@@ -107,12 +107,25 @@ MINIO_SECRET=$(openssl rand -hex 24)
 LK_KEY=LK$(openssl rand -hex 8)
 LK_SECRET=$(openssl rand -hex 24)
 
+# Dots escaped for the regex: CORS entry below allows any per-clinic subdomain
+# (harmony.patient.$DOMAIN etc.). NOTE: bash substitution is written as
+# $${...} so terraform's templatefile leaves it to the shell.
+DOMAIN_RE="$${DOMAIN//./\\.}"
+
+# Random platform tenant id + super admin credentials, generated per deploy
+# (no dictionary UUIDs / demo passwords in production). The seed reads all
+# three from .env; the API reads PLATFORM_TENANT_ID from the same file, so
+# they can never diverge. Credentials live only in $APP_DIR/.env (chmod 600).
+PLATFORM_TENANT_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+SUPER_ADMIN_EMAIL="super@$DOMAIN"
+SUPER_ADMIN_PASSWORD=$(openssl rand -base64 18 | tr -d '=+/' | cut -c1-20)
+
 cat > "$APP_DIR/.env" <<EOF
 NODE_ENV=production
 API_PORT=3000
 # `v1` is appended by NestJS URI versioning — keep this free of version segments.
 API_GLOBAL_PREFIX=api
-CORS_ORIGINS=https://patient.$DOMAIN,https://doctor.$DOMAIN,https://admin.$DOMAIN
+CORS_ORIGINS=https://patient.$DOMAIN,https://doctor.$DOMAIN,https://admin.$DOMAIN,regex:^https://[a-z0-9-]+\.(patient|doctor|admin)\.$DOMAIN_RE\$
 
 # ---- Database (in docker compose) ----
 DB_HOST=localhost
@@ -167,7 +180,11 @@ SMTP_PASSWORD=
 SMTP_FROM="Telemed Demo <noreply@$DOMAIN>"
 
 # ---- Tenant ----
-PLATFORM_TENANT_ID=11111111-1111-4111-8111-111111111111
+PLATFORM_TENANT_ID=$PLATFORM_TENANT_ID
+
+# ---- Seed (db:seed:minimal reads these; safe to delete after first boot) ----
+SUPER_ADMIN_EMAIL=$SUPER_ADMIN_EMAIL
+SUPER_ADMIN_PASSWORD=$SUPER_ADMIN_PASSWORD
 
 # ---- Adapters ----
 PAYMENT_PROVIDER=stub
@@ -243,7 +260,8 @@ done
 # `git pull`, after a debug session, etc.). Keep this thin so user_data
 # stays a deterministic one-shot bootstrap.
 chmod +x "$APP_DIR/infra/scripts/setup-on-instance.sh"
-DOMAIN="$DOMAIN" APP_DIR="$APP_DIR" APP_USER=ubuntu SKIP_PULL=1 \
+DOMAIN="$DOMAIN" APP_DIR="$APP_DIR" APP_USER=ubuntu SKIP_PULL=1 SEED_MODE="${seed_mode}" \
   bash "$APP_DIR/infra/scripts/setup-on-instance.sh"
 
 echo "✅ telemed bootstrap complete"
+echo "ℹ️  Super admin login: $SUPER_ADMIN_EMAIL — password in $APP_DIR/.env (SUPER_ADMIN_PASSWORD)"

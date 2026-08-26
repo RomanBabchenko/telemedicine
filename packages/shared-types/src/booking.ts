@@ -1,4 +1,11 @@
+import type { AppointmentSource } from './enums';
 import { AppointmentStatus, ServiceMode, SlotStatus } from './enums';
+
+// Admin-UI labels for AppointmentDto.source.
+export const APPOINTMENT_SOURCE_LABELS: Record<AppointmentSource, string> = {
+  PLATFORM: 'Платформа',
+  MIS: 'МІС',
+};
 
 export interface ServiceTypeDto {
   id: string;
@@ -58,6 +65,10 @@ export interface AppointmentDto {
   isAnonymousPatient?: boolean;
   serviceTypeId: string;
   slotId: string;
+  // PLATFORM — booked through the marketplace / widget / admin console;
+  // MIS — created by an external MIS webhook (DocDream). INTEGRATION_ADMIN
+  // only ever sees MIS rows.
+  source: AppointmentSource;
   status: AppointmentStatus;
   reasonText: string | null;
   startAt: string;

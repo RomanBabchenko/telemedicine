@@ -132,8 +132,8 @@ Content-Type: application/json
   "received": true,
   "appointmentId": "c6442524-c847-4d28-8d59-a1af5316c3a9",
   "consultationSessionId": "a1b2c3d4-...",
-  "patientInviteUrl": "https://patient.<domain>/invite?token=<32-hex>",
-  "doctorInviteUrl": "https://doctor.<domain>/invite?token=<32-hex>"
+  "patientInviteUrl": "https://patient.<domain>/i/<12-символьний код>",
+  "doctorInviteUrl": "https://doctor.<domain>/i/<12-символьний код>"
 }
 ```
 
@@ -141,6 +141,7 @@ DocDream має **зберегти `appointmentId`** — він знадобит
 
 ### Invite-посилання — UX
 
+- Посилання коротке (~40 символів, наприклад `https://patient.<domain>/i/Xk3mQz7RtBw9`) — зручно надсилати через SMS. Посилання старого формату `/invite?token=<64-hex>`, видані раніше, залишаються робочими до свого закінчення
 - Пацієнт клікає → потрапляє до зали очікування
 - Посилання живе від моменту створення до `endAt + 30min`
 - Можна клікати кілька разів (multi-consume) — зручно, якщо втратив вкладку

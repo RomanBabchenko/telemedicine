@@ -53,7 +53,7 @@ async function seed(ds: DataSource): Promise<void> {
     await em.query(
       `INSERT INTO tenants (id, slug, subdomain, brand_name, primary_color, locale, currency, feature_matrix, audio_policy, billing_plan_id, is_platform)
        VALUES
-         ($1, 'platform', 'app', 'Telemed Platform', '#1f7ae0', 'uk', 'UAH', $2::jsonb, $3::jsonb, $4, true),
+         ($1, 'platform', 'app', 'MedView', '#2563EB', 'uk', 'UAH', $2::jsonb, $3::jsonb, $4, true),
          ($5, 'clinic-a', 'clinic-a', 'Demo Clinic Plus', '#d97706', 'uk', 'UAH', $6::jsonb, $3::jsonb, $4, false)
        ON CONFLICT (id) DO NOTHING`,
       [
@@ -95,6 +95,26 @@ async function seed(ds: DataSource): Promise<void> {
        ON CONFLICT ON CONSTRAINT uq_user_tenant_role DO NOTHING`,
       [clinicAdminId, CLINIC_TENANT_ID],
     );
+
+    // ---------- integration admin (MIS-scoped) + chief medical officer ----------
+    const clinicStaff: Array<[string, string, string, string, string]> = [
+      ['aaaaaaa2-0000-4000-8000-000000000000', 'integration@clinic-a.local', 'Ігор', 'Інтеграційний', 'INTEGRATION_ADMIN'],
+      ['aaaaaaa3-0000-4000-8000-000000000000', 'cmo@clinic-a.local', 'Марія', 'Начмед', 'CHIEF_MEDICAL_OFFICER'],
+    ];
+    for (const [id, email, firstName, lastName, role] of clinicStaff) {
+      await em.query(
+        `INSERT INTO users (id, email, password_hash, first_name, last_name, mfa_enabled, email_verified_at)
+         VALUES ($1, $2, $3, $4, $5, false, now())
+         ON CONFLICT (id) DO UPDATE SET password_hash = EXCLUDED.password_hash`,
+        [id, email, passwordHash, firstName, lastName],
+      );
+      await em.query(
+        `INSERT INTO user_tenant_memberships (user_id, tenant_id, role, is_default)
+         VALUES ($1, $2, $3, true)
+         ON CONFLICT ON CONSTRAINT uq_user_tenant_role DO NOTHING`,
+        [id, CLINIC_TENANT_ID, role],
+      );
+    }
 
     // ---------- doctors ----------
     const doctors = [

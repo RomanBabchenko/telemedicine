@@ -97,7 +97,7 @@ resource "aws_lb_listener_rule" "admin_allow" {
 
   condition {
     host_header {
-      values = ["admin.${var.domain}"]
+      values = ["admin.${var.domain}", "*.admin.${var.domain}"]
     }
   }
 
@@ -124,7 +124,7 @@ resource "aws_lb_listener_rule" "admin_deny" {
 
   condition {
     host_header {
-      values = ["admin.${var.domain}"]
+      values = ["admin.${var.domain}", "*.admin.${var.domain}"]
     }
   }
 }

@@ -8,7 +8,7 @@ import {
 import { EventBus } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
-import { AppointmentStatus, SlotStatus } from '@telemed/shared-types';
+import { AppointmentSource, AppointmentStatus, SlotStatus } from '@telemed/shared-types';
 import { Slot } from '../domain/entities/slot.entity';
 import { Appointment } from '../domain/entities/appointment.entity';
 import { ServiceType } from '../domain/entities/service-type.entity';
@@ -92,11 +92,13 @@ export class AppointmentService {
   async listForRole(filters: {
     patientId?: string;
     doctorId?: string;
+    source?: AppointmentSource;
   }): Promise<AppointmentResponseDto[]> {
     const tenantId = this.tenantContext.getTenantId();
     const where: Record<string, unknown> = { tenantId };
     if (filters.patientId) where.patientId = filters.patientId;
     if (filters.doctorId) where.doctorId = filters.doctorId;
+    if (filters.source) where.source = filters.source;
     const rows = await this.appointments.find({ where, order: { startAt: 'DESC' } });
     if (rows.length === 0) return [];
 
@@ -122,6 +124,13 @@ export class AppointmentService {
         doctorMap.get(r.doctorId),
       ),
     );
+  }
+
+  // Tenant-scoped lookup by consultation session — used to scope recording
+  // access for MIS-only admins.
+  async findByConsultationSessionId(sessionId: string): Promise<Appointment | null> {
+    const tenantId = this.tenantContext.getTenantId();
+    return this.appointments.findOne({ where: { consultationSessionId: sessionId, tenantId } });
   }
 
   async getById(id: string): Promise<Appointment> {
@@ -191,6 +200,7 @@ export class AppointmentService {
           patientId: input.patientId,
           doctorId: slot.doctorId,
           serviceTypeId: slot.serviceTypeId,
+          source: AppointmentSource.PLATFORM,
           status: AppointmentStatus.RESERVED,
           reasonText: input.reasonText ?? null,
           startAt: slot.startAt,

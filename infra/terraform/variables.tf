@@ -6,8 +6,8 @@ variable "region" {
 
 variable "domain" {
   type        = string
-  description = "Domain under which subdomains patient/doctor/admin/api/livekit are created. The Route 53 hosted zone for this domain must already exist (referenced via route53_zone_id)."
-  default     = "demo.testing-core.link"
+  description = "Domain under which subdomains patient/doctor/admin/api/livekit (plus per-clinic wildcards *.patient/*.doctor/*.admin) are created. The Route 53 hosted zone for this domain must already exist (referenced via route53_zone_id)."
+  default     = "medview.com.ua"
 }
 
 variable "route53_zone_id" {
@@ -99,4 +99,15 @@ variable "auth_disable_login_patient" {
   type        = bool
   description = "Disable full patient login (invite links still work). See apps/api/.../env.schema.ts AUTH_DISABLE_LOGIN_PATIENT."
   default     = false
+}
+
+variable "seed_mode" {
+  type        = string
+  description = "Database seed on first boot: 'minimal' (platform tenant + super admin only — production) or 'demo' (full demo clinics/doctors/patients)."
+  default     = "minimal"
+
+  validation {
+    condition     = contains(["minimal", "demo"], var.seed_mode)
+    error_message = "seed_mode must be 'minimal' or 'demo'."
+  }
 }

@@ -15,7 +15,7 @@ export class AuditController {
   constructor(private readonly query: AuditQueryService) {}
 
   @Get('events')
-  @Roles(Role.PLATFORM_SUPER_ADMIN, Role.AUDITOR, Role.CLINIC_ADMIN)
+  @Roles(Role.PLATFORM_SUPER_ADMIN, Role.AUDITOR, Role.CLINIC_ADMIN, Role.INTEGRATION_ADMIN)
   @ApiOperation({
     summary: 'Query the audit event log',
     description:

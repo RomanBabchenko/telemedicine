@@ -16,6 +16,10 @@ import { PasswordService } from './password.service';
 interface ListUsersFilters {
   tenantId?: string;
   role?: Role;
+  // Restrict to users holding at least one membership with one of these
+  // roles (in `tenantId` when set). Used to hide accounts the actor is not
+  // allowed to manage (e.g. INTEGRATION_ADMIN never sees CLINIC_ADMIN).
+  roles?: Role[];
   status?: 'ACTIVE' | 'PENDING' | 'BLOCKED';
   search?: string;
   page?: number;
@@ -90,6 +94,12 @@ export class UserService {
     return memberships.map((m) => m.role);
   }
 
+  // Roles the user holds in one specific tenant (empty when no membership).
+  async getMembershipRolesInTenant(userId: string, tenantId: string): Promise<Role[]> {
+    const rows = await this.memberships.find({ where: { userId, tenantId } });
+    return rows.map((m) => m.role);
+  }
+
   async getDefaultTenantId(userId: string): Promise<string | null> {
     const m = await this.memberships.findOne({
       where: { userId, isDefault: true },
@@ -140,10 +150,18 @@ export class UserService {
     // Step 1: collect candidate user IDs from memberships if there's a
     // tenant or role filter.
     let userIdFilter: string[] | null = null;
-    if (filters.tenantId || filters.role) {
+    if (filters.tenantId || filters.role || filters.roles) {
       const where: Record<string, unknown> = {};
       if (filters.tenantId) where.tenantId = filters.tenantId;
-      if (filters.role) where.role = filters.role;
+      if (filters.roles) {
+        // `role` narrows further; a role outside the allowed set yields nothing.
+        if (filters.role && !filters.roles.includes(filters.role)) {
+          return { items: [], total: 0, page, pageSize };
+        }
+        where.role = filters.role ?? In(filters.roles);
+      } else if (filters.role) {
+        where.role = filters.role;
+      }
       const matched = await this.memberships.find({ where });
       userIdFilter = Array.from(new Set(matched.map((m) => m.userId)));
       if (userIdFilter.length === 0) {

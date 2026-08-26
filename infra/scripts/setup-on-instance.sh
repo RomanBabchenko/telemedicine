@@ -21,21 +21,24 @@
 #   DOMAIN     — apex domain for subdomains (required)
 #   APP_DIR    — repo path (default: /home/ubuntu/telemedicine)
 #   APP_USER   — local user that owns the repo (default: ubuntu)
-#   SKIP_SEED  — set to 1 to skip db:seed (e.g. on a re-run)
+#   SKIP_SEED  — set to 1 to skip seeding entirely (e.g. on a re-run)
+#   SEED_MODE  — demo (default: full demo data) | minimal (platform tenant +
+#                super admin only — production bootstrap)
 #   SKIP_PULL  — set to 1 to skip git pull
 #
 set -euo pipefail
 
-: "${DOMAIN:?DOMAIN env var is required (e.g. demo.testing-core.link)}"
+: "${DOMAIN:?DOMAIN env var is required (e.g. medview.com.ua)}"
 APP_DIR="${APP_DIR:-/home/ubuntu/telemedicine}"
 APP_USER="${APP_USER:-ubuntu}"
 SKIP_SEED="${SKIP_SEED:-0}"
+SEED_MODE="${SEED_MODE:-demo}"
 SKIP_PULL="${SKIP_PULL:-0}"
 
 if [[ $EUID -ne 0 ]]; then
   echo "Re-running with sudo..."
   exec sudo DOMAIN="$DOMAIN" APP_DIR="$APP_DIR" APP_USER="$APP_USER" \
-    SKIP_SEED="$SKIP_SEED" SKIP_PULL="$SKIP_PULL" bash "$0" "$@"
+    SKIP_SEED="$SKIP_SEED" SEED_MODE="$SEED_MODE" SKIP_PULL="$SKIP_PULL" bash "$0" "$@"
 fi
 
 cd "$APP_DIR"
@@ -92,24 +95,33 @@ echo "==> deploy static to /var/www"
 mkdir -p \
   "/var/www/patient.$DOMAIN" \
   "/var/www/doctor.$DOMAIN" \
-  "/var/www/admin.$DOMAIN"
+  "/var/www/admin.$DOMAIN" \
+  "/var/www/$DOMAIN"
 
 cp -r "$APP_DIR/apps/web-patient/dist/." "/var/www/patient.$DOMAIN/"
 cp -r "$APP_DIR/apps/web-doctor/dist/."  "/var/www/doctor.$DOMAIN/"
 cp -r "$APP_DIR/apps/web-admin/dist/."   "/var/www/admin.$DOMAIN/"
+# Static under-construction landing on the apex domain.
+cp -r "$APP_DIR/infra/landing/."         "/var/www/$DOMAIN/"
 
 chown -R www-data:www-data \
   "/var/www/patient.$DOMAIN" \
   "/var/www/doctor.$DOMAIN" \
-  "/var/www/admin.$DOMAIN"
+  "/var/www/admin.$DOMAIN" \
+  "/var/www/$DOMAIN"
 
 # ---------- 4. Migrations + seed ----------
 echo "==> migrations"
 sudo -u "$APP_USER" -- bash -lc "cd $APP_DIR && npm run db:migration:run"
 
 if [[ "$SKIP_SEED" != "1" ]]; then
-  echo "==> seed (skip with SKIP_SEED=1)"
-  sudo -u "$APP_USER" -- bash -lc "cd $APP_DIR && npm run db:seed"
+  if [[ "$SEED_MODE" == "minimal" ]]; then
+    echo "==> seed: minimal (platform tenant + super admin; skip with SKIP_SEED=1)"
+    sudo -u "$APP_USER" -- bash -lc "cd $APP_DIR && npm run db:seed:minimal"
+  else
+    echo "==> seed: demo data (skip with SKIP_SEED=1, production: SEED_MODE=minimal)"
+    sudo -u "$APP_USER" -- bash -lc "cd $APP_DIR && npm run db:seed"
+  fi
 fi
 
 # ---------- 5. systemd unit for the API ----------
@@ -155,9 +167,20 @@ server {
     location / { return 404; }
 }
 
+# Apex + www: static under-construction landing (infra/landing).
 server {
     listen 80;
-    server_name patient.$DOMAIN;
+    server_name $DOMAIN www.$DOMAIN;
+    root /var/www/$DOMAIN;
+    index index.html;
+    location / { try_files \$uri \$uri/ /index.html; }
+}
+
+# The *.app wildcards serve per-clinic subdomains (harmony.patient.$DOMAIN):
+# same SPA bundle, the app resolves the tenant from the hostname at runtime.
+server {
+    listen 80;
+    server_name patient.$DOMAIN *.patient.$DOMAIN;
     root /var/www/patient.$DOMAIN;
     index index.html;
     location / { try_files \$uri \$uri/ /index.html; }
@@ -165,7 +188,7 @@ server {
 
 server {
     listen 80;
-    server_name doctor.$DOMAIN;
+    server_name doctor.$DOMAIN *.doctor.$DOMAIN;
     root /var/www/doctor.$DOMAIN;
     index index.html;
     location / { try_files \$uri \$uri/ /index.html; }
@@ -173,7 +196,7 @@ server {
 
 server {
     listen 80;
-    server_name admin.$DOMAIN;
+    server_name admin.$DOMAIN *.admin.$DOMAIN;
     root /var/www/admin.$DOMAIN;
     index index.html;
     location / { try_files \$uri \$uri/ /index.html; }

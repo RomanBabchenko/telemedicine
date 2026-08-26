@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminUsersApi } from '@telemed/api-client';
+import { ALL_ROLES, ROLE_LABELS, isPlatformActor, manageableRolesFor } from '@telemed/shared-types';
 import type { CreateUserDto, ListUsersQuery, Role, UserDetailDto } from '@telemed/shared-types';
 import {
   Alert,
@@ -23,21 +24,10 @@ import {
 } from '@telemed/ui';
 import { useDebouncedValue } from '@telemed/web-shared';
 import { apiClient } from '../../lib/api';
+import { useAuthStore } from '../../stores/auth.store';
 import { UserFormModal } from './UserFormModal';
 
 const adminUsers = adminUsersApi(apiClient);
-
-const ROLE_OPTIONS: Array<{ value: '' | Role; label: string }> = [
-  { value: '', label: 'Усі ролі' },
-  { value: 'PATIENT', label: 'Пацієнт' },
-  { value: 'DOCTOR', label: 'Лікар' },
-  { value: 'CLINIC_OPERATOR', label: 'Оператор' },
-  { value: 'CLINIC_ADMIN', label: 'Адмін клініки' },
-  { value: 'PLATFORM_SUPER_ADMIN', label: 'Супер-адмін платформи' },
-  { value: 'PLATFORM_SUPPORT', label: 'Підтримка платформи' },
-  { value: 'PLATFORM_FINANCE', label: 'Фінансист платформи' },
-  { value: 'AUDITOR', label: 'Аудитор' },
-];
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Усі статуси' },
@@ -70,6 +60,14 @@ export const UsersPage = ({ scope }: Props) => {
   const [role, setRole] = useState<'' | Role>('');
   const [status, setStatus] = useState<'' | 'ACTIVE' | 'BLOCKED' | 'PENDING'>('');
   const [page, setPage] = useState(1);
+  const actorRoles = useAuthStore((s) => s.user?.roles);
+  // The API already filters the list to roles the actor may manage, so the
+  // dropdown mirrors that set (platform admins get everything).
+  const roleFilterValues = isPlatformActor(actorRoles) ? ALL_ROLES : manageableRolesFor(actorRoles);
+  const ROLE_OPTIONS: Array<{ value: '' | Role; label: string }> = [
+    { value: '', label: 'Усі ролі' },
+    ...roleFilterValues.map((r) => ({ value: r, label: ROLE_LABELS[r] })),
+  ];
 
   const debouncedSearch = useDebouncedValue(search);
 
@@ -188,7 +186,7 @@ export const UsersPage = ({ scope }: Props) => {
                         key={m.id}
                         variant={m.isDefault ? 'success' : 'default'}
                       >
-                        {m.role}
+                        {ROLE_LABELS[m.role] ?? m.role}
                         {scope === 'all' && m.tenantName ? ` · ${m.tenantName}` : ''}
                       </Badge>
                     ))}
@@ -259,7 +257,6 @@ export const UsersPage = ({ scope }: Props) => {
         isPending={createM.isPending}
         error={createM.error}
         generatedPassword={lastTempPassword}
-        platformActor={scope === 'all'}
       />
     </div>
   );

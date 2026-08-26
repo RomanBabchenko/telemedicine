@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
-import { randomBytes, createHash } from 'node:crypto';
+import { createHash } from 'node:crypto';
+import { generateInviteCode } from '../../../common/crypto/short-code.util';
 import { ConsultationInvite } from '../domain/entities/consultation-invite.entity';
 
 // Grace period after the appointment's scheduled end during which the invite
@@ -25,7 +26,10 @@ export class ConsultationInviteService {
     role: 'PATIENT' | 'DOCTOR';
     appointmentEndAt: Date;
   }): Promise<string> {
-    const rawToken = randomBytes(32).toString('hex');
+    // Short SMS-friendly code (base62, 12 chars). It doubles as the invite
+    // token: only its sha256 is stored, same as the legacy 64-hex tokens —
+    // consume() is format-agnostic, so previously issued links keep working.
+    const rawToken = generateInviteCode();
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     // Link life is tied to the appointment — once the meeting ends (+ grace),
     // the link is dead. No more "linger for 24h after the call".

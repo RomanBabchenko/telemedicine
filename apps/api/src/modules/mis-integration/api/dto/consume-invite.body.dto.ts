@@ -1,8 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString } from 'class-validator';
+import { IsString, Length } from 'class-validator';
 
 export class ConsumeInviteBodyDto {
-  @ApiProperty({ description: 'Single-use invite token from the emailed / SMSed link' })
+  // 12-char short codes today, 64-hex tokens from links issued earlier.
+  @ApiProperty({ description: 'Invite token from the emailed / SMSed link' })
   @IsString()
+  @Length(8, 128)
   token!: string;
 }

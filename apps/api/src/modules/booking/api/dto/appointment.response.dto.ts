@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { AppointmentStatus } from '@telemed/shared-types';
+import { AppointmentSource, AppointmentStatus } from '@telemed/shared-types';
 import type {
   AppointmentDoctorSummary,
   AppointmentDto,
@@ -60,6 +60,13 @@ export class AppointmentResponseDto implements AppointmentDto {
 
   @ApiProperty({ format: 'uuid' })
   slotId!: string;
+
+  @ApiProperty({
+    enum: Object.values(AppointmentSource),
+    description:
+      'PLATFORM — booked via marketplace / widget / admin console; MIS — created by an external MIS webhook.',
+  })
+  source!: AppointmentSource;
 
   @ApiProperty({ enum: Object.values(AppointmentStatus) })
   status!: AppointmentStatus;

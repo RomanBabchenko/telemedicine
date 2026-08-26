@@ -22,6 +22,7 @@
     "db:migration:run": "npm run db:migration:run -w @telemed/api",
     "db:migration:revert": "npm run db:migration:revert -w @telemed/api",
     "db:seed": "npm run db:seed -w @telemed/api",
+    "db:seed:minimal": "npm run db:seed:minimal -w @telemed/api",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\""
   },
   "devDependencies": {

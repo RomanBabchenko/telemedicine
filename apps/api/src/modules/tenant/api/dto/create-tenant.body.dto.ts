@@ -20,7 +20,7 @@ export class CreateTenantBodyDto implements CreateTenantDto {
   @Matches(/^[a-z0-9-]+$/, { message: 'subdomain must be lowercase letters, digits and hyphens' })
   subdomain!: string;
 
-  @ApiPropertyOptional({ description: 'Primary brand color (hex)', example: '#1f7ae0' })
+  @ApiPropertyOptional({ description: 'Primary brand color (hex)', example: '#2563EB' })
   @IsOptional()
   @IsHexColor()
   primaryColor?: string;

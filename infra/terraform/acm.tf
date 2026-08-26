@@ -2,8 +2,15 @@ resource "aws_acm_certificate" "wildcard" {
   domain_name       = "*.${var.domain}"
   validation_method = "DNS"
 
-  # SAN for the apex itself, in case anything ever uses it.
-  subject_alternative_names = [var.domain]
+  # Apex SAN in case anything ever uses it, plus second-level wildcards for
+  # per-clinic subdomains (harmony.patient.<domain> etc.) — a single-level
+  # wildcard does not cover two labels deep.
+  subject_alternative_names = [
+    var.domain,
+    "*.patient.${var.domain}",
+    "*.doctor.${var.domain}",
+    "*.admin.${var.domain}",
+  ]
 
   lifecycle {
     create_before_destroy = true

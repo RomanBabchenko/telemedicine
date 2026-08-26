@@ -19,6 +19,12 @@ export const Role = {
   DOCTOR: 'DOCTOR',
   CLINIC_ADMIN: 'CLINIC_ADMIN',
   CLINIC_OPERATOR: 'CLINIC_OPERATOR',
+  // Clinic-side admin scoped to appointments that originate from the external
+  // MIS (DocDream). Cannot toggle modules or create CLINIC_ADMIN accounts.
+  INTEGRATION_ADMIN: 'INTEGRATION_ADMIN',
+  // Chief medical officer («начмед») — read-only access to clinic appointments,
+  // statistics and consultation recordings.
+  CHIEF_MEDICAL_OFFICER: 'CHIEF_MEDICAL_OFFICER',
   PLATFORM_SUPPORT: 'PLATFORM_SUPPORT',
   PLATFORM_FINANCE: 'PLATFORM_FINANCE',
   PLATFORM_SUPER_ADMIN: 'PLATFORM_SUPER_ADMIN',
@@ -26,6 +32,14 @@ export const Role = {
   AUDITOR: 'AUDITOR',
 } as const;
 export type Role = (typeof Role)[keyof typeof Role];
+
+// Where an appointment was created: the platform itself (marketplace /
+// booking widget / admin console) or an external MIS webhook.
+export const AppointmentSource = {
+  PLATFORM: 'PLATFORM',
+  MIS: 'MIS',
+} as const;
+export type AppointmentSource = (typeof AppointmentSource)[keyof typeof AppointmentSource];
 
 export const AppointmentStatus = {
   DRAFT: 'DRAFT',
@@ -179,6 +193,7 @@ export type SyncJobStatus = (typeof SyncJobStatus)[keyof typeof SyncJobStatus];
 // Sub-domain DTO modules below — they only re-export type aliases (not runtime
 // values), so star re-exports are fine here.
 export * from './auth';
+export * from './rbac';
 export * from './tenant';
 export * from './doctor';
 export * from './patient';

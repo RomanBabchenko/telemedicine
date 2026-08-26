@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminUsersApi } from '@telemed/api-client';
+import { ROLE_LABELS, isPlatformActor, manageableRolesFor } from '@telemed/shared-types';
 import type { UserDetailDto } from '@telemed/shared-types';
 import {
   Alert,
@@ -40,9 +41,8 @@ const errorMessage = (e: unknown): string => {
 export const UserDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
-  const isPlatformAdmin = useAuthStore(
-    (s) => s.user?.roles?.includes('PLATFORM_SUPER_ADMIN') ?? false,
-  );
+  const actorRoles = useAuthStore((s) => s.user?.roles);
+  const ownTenantId = useAuthStore((s) => s.tenantId);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [addMembershipOpen, setAddMembershipOpen] = useState(false);
 
@@ -84,6 +84,16 @@ export const UserDetailPage = () => {
   const user = userQ.data;
   if (!user) return <Alert variant="warning">Користувача не знайдено</Alert>;
 
+  // Mirrors the API's assertCanTouchUser: a clinic-level actor may mutate
+  // this user only if every role they hold in the actor's tenant is one the
+  // actor may manage. Hides dead buttons (the API would answer 403).
+  const manageable = manageableRolesFor(actorRoles);
+  const canManage =
+    isPlatformActor(actorRoles) ||
+    user.memberships
+      .filter((m) => m.tenantId === ownTenantId)
+      .every((m) => manageable.includes(m.role));
+
   return (
     <div className="space-y-6">
       <Link to="/users" className="text-sm text-blue-700 hover:underline">
@@ -94,7 +104,7 @@ export const UserDetailPage = () => {
         title={fullName(user)}
         description={[user.email, user.phone].filter(Boolean).join(' · ')}
         actions={
-          user.status === 'ACTIVE' ? (
+          !canManage ? null : user.status === 'ACTIVE' ? (
             <Button
               variant="danger"
               isLoading={setStatusM.isPending}
@@ -159,6 +169,7 @@ export const UserDetailPage = () => {
             variant="outline"
             isLoading={resetPasswordM.isPending}
             onClick={() => resetPasswordM.mutate()}
+            disabled={!canManage}
           >
             Скинути пароль
           </Button>
@@ -168,7 +179,7 @@ export const UserDetailPage = () => {
       <Card>
         <div className="mb-3 flex items-center justify-between">
           <h3 className="font-semibold">Ролі та клініки</h3>
-          <Button size="sm" onClick={() => setAddMembershipOpen(true)}>
+          <Button size="sm" onClick={() => setAddMembershipOpen(true)} disabled={!canManage}>
             + Додати роль
           </Button>
         </div>
@@ -191,12 +202,12 @@ export const UserDetailPage = () => {
                 <TR key={m.id}>
                   <TD>{m.tenantName ?? m.tenantId.slice(0, 8) + '…'}</TD>
                   <TD>
-                    <Badge>{m.role}</Badge>
+                    <Badge>{ROLE_LABELS[m.role] ?? m.role}</Badge>
                   </TD>
                   <TD>
                     {m.isDefault ? (
                       <Badge variant="success">так</Badge>
-                    ) : (
+                    ) : !canManage ? null : (
                       <Button
                         size="sm"
                         variant="ghost"
@@ -208,14 +219,16 @@ export const UserDetailPage = () => {
                     )}
                   </TD>
                   <TD>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      isLoading={revokeM.isPending}
-                      onClick={() => revokeM.mutate(m.id)}
-                    >
-                      Видалити
-                    </Button>
+                    {canManage && manageable.includes(m.role) ? (
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        isLoading={revokeM.isPending}
+                        onClick={() => revokeM.mutate(m.id)}
+                      >
+                        Видалити
+                      </Button>
+                    ) : null}
                   </TD>
                 </TR>
               ))}
@@ -251,7 +264,6 @@ export const UserDetailPage = () => {
         open={addMembershipOpen}
         onClose={() => setAddMembershipOpen(false)}
         userId={id!}
-        platformActor={isPlatformAdmin}
         onSuccess={() => {
           invalidate();
           setAddMembershipOpen(false);
