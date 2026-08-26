@@ -20,7 +20,7 @@ import { PlatformTenantsPage } from './pages/platform/PlatformTenantsPage';
 import { PlatformTenantEditPage } from './pages/platform/PlatformTenantEditPage';
 import { useAuthStore } from './stores/auth.store';
 import { useTenant } from './hooks/useTenant';
-import { sectionRoles } from './lib/access';
+import { firstAccessiblePath, sectionRoles } from './lib/access';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
@@ -40,7 +40,8 @@ const PlatformGuard = ({ children }: { children: React.ReactNode }) => {
 const RequireRole = ({ roles, children }: { roles: readonly Role[]; children: React.ReactNode }) => {
   const user = useAuthStore((s) => s.user);
   if (!hasAnyRole(user?.roles, roles)) {
-    return <Navigate to="/" replace />;
+    // Not "/": roles without dashboard access (IA/CMO) would redirect-loop.
+    return <Navigate to={firstAccessiblePath(user?.roles)} replace />;
   }
   return <>{children}</>;
 };

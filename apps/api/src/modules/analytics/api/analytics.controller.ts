@@ -58,13 +58,10 @@ export class AnalyticsController {
   }
 
   @Get('tenant/:id')
-  @Roles(
-    Role.CLINIC_ADMIN,
-    Role.PLATFORM_SUPER_ADMIN,
-    Role.PLATFORM_FINANCE,
-    Role.INTEGRATION_ADMIN,
-    Role.CHIEF_MEDICAL_OFFICER,
-  )
+  // INTEGRATION_ADMIN / CHIEF_MEDICAL_OFFICER are TEMPORARILY excluded —
+  // this endpoint feeds both the admin dashboard and the analytics page.
+  // Restore them here and in web-admin/src/lib/access.ts together.
+  @Roles(Role.CLINIC_ADMIN, Role.PLATFORM_SUPER_ADMIN, Role.PLATFORM_FINANCE)
   @ApiOperation({
     summary: "Fetch a tenant's aggregated stats",
     description: 'Clinic-level roles may only read their own tenant; platform roles may read any.',

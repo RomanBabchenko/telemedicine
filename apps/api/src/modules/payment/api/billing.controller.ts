@@ -38,7 +38,9 @@ export class BillingController {
   constructor(private readonly service: BillingService) {}
 
   @Get('tenant/:id/invoices')
-  @Roles(Role.PLATFORM_SUPER_ADMIN, Role.PLATFORM_FINANCE, Role.CLINIC_ADMIN, Role.INTEGRATION_ADMIN)
+  // INTEGRATION_ADMIN is TEMPORARILY excluded — restore together with the
+  // billing row in web-admin/src/lib/access.ts.
+  @Roles(Role.PLATFORM_SUPER_ADMIN, Role.PLATFORM_FINANCE, Role.CLINIC_ADMIN)
   @Auditable({ action: 'billing.invoices.viewed', resource: 'Invoice' })
   @ApiOperation({
     summary: "List a tenant's invoices",
@@ -57,7 +59,9 @@ export class BillingController {
   }
 
   @Get('tenant/:id/ledger')
-  @Roles(Role.PLATFORM_SUPER_ADMIN, Role.PLATFORM_FINANCE, Role.CLINIC_ADMIN, Role.INTEGRATION_ADMIN)
+  // INTEGRATION_ADMIN is TEMPORARILY excluded — restore together with the
+  // billing row in web-admin/src/lib/access.ts.
+  @Roles(Role.PLATFORM_SUPER_ADMIN, Role.PLATFORM_FINANCE, Role.CLINIC_ADMIN)
   @Auditable({ action: 'billing.ledger.viewed', resource: 'LedgerEntry' })
   @ApiOperation({
     summary: "List a tenant's ledger entries (last 200, newest first)",
