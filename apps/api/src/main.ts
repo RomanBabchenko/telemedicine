@@ -33,12 +33,16 @@ async function bootstrap() {
   });
   const config = app.get(AppConfig);
 
-  // In production the API sits behind nginx on the same instance, so the
-  // TCP peer is always loopback and req.ip logs as ::1 (audit trail, session
-  // metadata, API-key IP allowlists all read it). Trusting only loopback
-  // makes Express take the client address nginx appends to X-Forwarded-For
-  // while still ignoring a spoofed XFF sent directly to the API port.
-  app.set('trust proxy', 'loopback');
+  // In production the request chain is client → ALB → nginx (same box) → API,
+  // and every hop appends to X-Forwarded-For. req.ip (audit trail, session
+  // metadata, API-key IP allowlists) must be the CLIENT address, so Express
+  // has to trust both proxy hops: loopback (nginx) and the ALB's private VPC
+  // address (uniquelocal = RFC1918 ranges). Anything beyond those — i.e. the
+  // rightmost public entry, which the ALB itself observed — is the client;
+  // a spoofed XFF sent from the internet is discarded because its sender's
+  // own address isn't trusted. Direct access to the API/nginx ports from
+  // outside is already blocked by the security groups.
+  app.set('trust proxy', ['loopback', 'uniquelocal']);
 
   // Redis-backed socket.io rooms — waiting-room chat/presence must reach
   // participants regardless of which API instance holds their socket.
