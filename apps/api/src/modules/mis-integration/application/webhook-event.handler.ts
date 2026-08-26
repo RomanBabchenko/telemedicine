@@ -22,6 +22,7 @@ import { ServiceType } from '../../booking/domain/entities/service-type.entity';
 import { Appointment } from '../../booking/domain/entities/appointment.entity';
 import { User } from '../../identity/domain/entities/user.entity';
 import { UserTenantMembership } from '../../identity/domain/entities/user-tenant-membership.entity';
+import { Tenant } from '../../tenant/domain/entities/tenant.entity';
 import { ConsultationService } from '../../consultation/application/consultation.service';
 import { ConsultationInviteService } from './consultation-invite.service';
 import { PasswordService } from '../../identity/application/password.service';
@@ -58,6 +59,7 @@ export class WebhookEventHandler {
     @InjectRepository(User) private readonly users: Repository<User>,
     @InjectRepository(UserTenantMembership)
     private readonly memberships: Repository<UserTenantMembership>,
+    @InjectRepository(Tenant) private readonly tenants: Repository<Tenant>,
     @InjectRepository(DoctorTenantProfile)
     private readonly doctorProfiles: Repository<DoctorTenantProfile>,
     private readonly consultations: ConsultationService,
@@ -245,8 +247,11 @@ export class WebhookEventHandler {
 
     // Short /i/<code> form — SMS-friendly; the legacy /invite?token= route
     // still resolves for links issued before the switch.
-    const patientInviteUrl = `${this.config.patientAppUrl}/i/${patientToken}`;
-    const doctorInviteUrl = `${this.config.doctorAppUrl}/i/${doctorToken}`;
+    const { patientInviteUrl, doctorInviteUrl } = await this.inviteUrls(
+      tenantId,
+      patientToken,
+      doctorToken,
+    );
 
     this.logger.log(
       `Online appointment created: ${appointment.id}, session: ${session.id}`,
@@ -333,9 +338,39 @@ export class WebhookEventHandler {
       received: true,
       appointmentId,
       consultationSessionId: session.id,
-      patientInviteUrl: `${this.config.patientAppUrl}/i/${patientToken}`,
-      doctorInviteUrl: `${this.config.doctorAppUrl}/i/${doctorToken}`,
+      ...(await this.inviteUrls(tenantId, patientToken, doctorToken)),
     };
+  }
+
+  // ─── Tenant-scoped invite URLs ────────────────────────────────────────────
+
+  // Invite links must open the CLINIC's branded portal, so the tenant's
+  // subdomain is prefixed onto the app hosts: patient.<domain> →
+  // <sub>.patient.<domain>. DNS/TLS already cover this (*.patient/*.doctor
+  // wildcards). Falls back to the bare host for the platform tenant, a
+  // missing subdomain, or dev URLs (localhost / raw IP), where a tenant
+  // label would break the Vite dev server's host check.
+  private async inviteUrls(
+    tenantId: string,
+    patientToken: string,
+    doctorToken: string,
+  ): Promise<{ patientInviteUrl: string; doctorInviteUrl: string }> {
+    const tenant = await this.tenants.findOne({ where: { id: tenantId } });
+    const subdomain = tenant && !tenant.isPlatform ? tenant.subdomain : null;
+    return {
+      patientInviteUrl: `${this.tenantScopedUrl(this.config.patientAppUrl, subdomain)}/i/${patientToken}`,
+      doctorInviteUrl: `${this.tenantScopedUrl(this.config.doctorAppUrl, subdomain)}/i/${doctorToken}`,
+    };
+  }
+
+  private tenantScopedUrl(baseUrl: string, subdomain: string | null): string {
+    if (!subdomain) return baseUrl;
+    const url = new URL(baseUrl);
+    if (url.hostname === 'localhost' || /^[\d.]+$/.test(url.hostname)) {
+      return baseUrl;
+    }
+    url.hostname = `${subdomain}.${url.hostname}`;
+    return url.toString().replace(/\/+$/, '');
   }
 
   // ─── Doctor find-or-create ────────────────────────────────────────────────

@@ -14,6 +14,7 @@ import { Appointment } from '../booking/domain/entities/appointment.entity';
 import { ConsultationSession } from '../consultation/domain/entities/consultation-session.entity';
 import { User } from '../identity/domain/entities/user.entity';
 import { UserTenantMembership } from '../identity/domain/entities/user-tenant-membership.entity';
+import { Tenant } from '../tenant/domain/entities/tenant.entity';
 import { ConsultationModule } from '../consultation/consultation.module';
 import { RecordingModule } from '../recording/recording.module';
 import { ConnectorRegistry } from './application/connector.registry';
@@ -47,6 +48,7 @@ import { IntegrationKeysAdminController } from './api/integration-keys-admin.con
       ConsultationSession,
       User,
       UserTenantMembership,
+      Tenant,
     ]),
     ConsultationModule,
     RecordingModule,
