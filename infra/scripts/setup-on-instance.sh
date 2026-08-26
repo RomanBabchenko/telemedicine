@@ -95,16 +95,20 @@ echo "==> deploy static to /var/www"
 mkdir -p \
   "/var/www/patient.$DOMAIN" \
   "/var/www/doctor.$DOMAIN" \
-  "/var/www/admin.$DOMAIN"
+  "/var/www/admin.$DOMAIN" \
+  "/var/www/$DOMAIN"
 
 cp -r "$APP_DIR/apps/web-patient/dist/." "/var/www/patient.$DOMAIN/"
 cp -r "$APP_DIR/apps/web-doctor/dist/."  "/var/www/doctor.$DOMAIN/"
 cp -r "$APP_DIR/apps/web-admin/dist/."   "/var/www/admin.$DOMAIN/"
+# Static under-construction landing on the apex domain.
+cp -r "$APP_DIR/infra/landing/."         "/var/www/$DOMAIN/"
 
 chown -R www-data:www-data \
   "/var/www/patient.$DOMAIN" \
   "/var/www/doctor.$DOMAIN" \
-  "/var/www/admin.$DOMAIN"
+  "/var/www/admin.$DOMAIN" \
+  "/var/www/$DOMAIN"
 
 # ---------- 4. Migrations + seed ----------
 echo "==> migrations"
@@ -161,6 +165,15 @@ server {
         add_header Content-Type text/plain;
     }
     location / { return 404; }
+}
+
+# Apex + www: static under-construction landing (infra/landing).
+server {
+    listen 80;
+    server_name $DOMAIN www.$DOMAIN;
+    root /var/www/$DOMAIN;
+    index index.html;
+    location / { try_files \$uri \$uri/ /index.html; }
 }
 
 # The *.app wildcards serve per-clinic subdomains (harmony.patient.$DOMAIN):

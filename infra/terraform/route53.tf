@@ -20,7 +20,25 @@ locals {
   subdomains = [
     "patient", "doctor", "admin", "api", "livekit", "minio",
     "*.patient", "*.doctor", "*.admin",
+    # www + apex (below) serve the static under-construction landing from
+    # infra/landing (nginx block in setup-on-instance.sh); the ACM cert
+    # already carries the apex SAN and *.${var.domain} covers www.
+    "www",
   ]
+}
+
+# Apex can't live in the for_each above (its record name is the bare domain,
+# not <key>.<domain>).
+resource "aws_route53_record" "apex" {
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = var.domain
+  type    = "A"
+
+  alias {
+    name                   = aws_lb.app.dns_name
+    zone_id                = aws_lb.app.zone_id
+    evaluate_target_health = true
+  }
 }
 
 # All subdomains point at the ALB. The LiveKit subdomain is also on the ALB
