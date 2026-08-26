@@ -25,6 +25,12 @@ repo_branch = "main"
 
 le_email = "you@example.com"
 
+# First-boot database seed: "minimal" = clean production bootstrap (platform
+# tenant + one super admin, random UUID and password — login is printed to
+# the bootstrap log hint and stored in /home/ubuntu/telemedicine/.env);
+# "demo" = full demo clinics/doctors/patients with demo1234 passwords.
+seed_mode = "minimal"
+
 # Private repo only — set via env var, NOT in this file:
 #   export TF_VAR_git_ssh_private_key="$(cat ~/.ssh/id_ed25519)"
 # Then `terraform apply` picks it up automatically. Leave commented here.

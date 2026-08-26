@@ -100,3 +100,14 @@ variable "auth_disable_login_patient" {
   description = "Disable full patient login (invite links still work). See apps/api/.../env.schema.ts AUTH_DISABLE_LOGIN_PATIENT."
   default     = false
 }
+
+variable "seed_mode" {
+  type        = string
+  description = "Database seed on first boot: 'minimal' (platform tenant + super admin only — production) or 'demo' (full demo clinics/doctors/patients)."
+  default     = "minimal"
+
+  validation {
+    condition     = contains(["minimal", "demo"], var.seed_mode)
+    error_message = "seed_mode must be 'minimal' or 'demo'."
+  }
+}

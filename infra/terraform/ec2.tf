@@ -60,6 +60,7 @@ resource "aws_instance" "app" {
     git_ssh_private_key        = var.git_ssh_private_key
     auth_disable_login_doctor  = var.auth_disable_login_doctor
     auth_disable_login_patient = var.auth_disable_login_patient
+    seed_mode                  = var.seed_mode
   })
 
   # Force re-bootstrap if the script changes (helpful while iterating).

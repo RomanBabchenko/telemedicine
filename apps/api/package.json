@@ -16,6 +16,7 @@
     "db:migration:run": "typeorm-ts-node-commonjs -d src/config/typeorm.config.ts migration:run",
     "db:migration:revert": "typeorm-ts-node-commonjs -d src/config/typeorm.config.ts migration:revert",
     "db:seed": "ts-node -r tsconfig-paths/register src/database/seeds/seed.ts",
+    "db:seed:minimal": "ts-node -r tsconfig-paths/register src/database/seeds/seed-minimal.ts",
     "openapi:dump": "ts-node -r tsconfig-paths/register scripts/dump-openapi.ts"
   },
   "dependencies": {

@@ -21,21 +21,24 @@
 #   DOMAIN     — apex domain for subdomains (required)
 #   APP_DIR    — repo path (default: /home/ubuntu/telemedicine)
 #   APP_USER   — local user that owns the repo (default: ubuntu)
-#   SKIP_SEED  — set to 1 to skip db:seed (e.g. on a re-run)
+#   SKIP_SEED  — set to 1 to skip seeding entirely (e.g. on a re-run)
+#   SEED_MODE  — demo (default: full demo data) | minimal (platform tenant +
+#                super admin only — production bootstrap)
 #   SKIP_PULL  — set to 1 to skip git pull
 #
 set -euo pipefail
 
-: "${DOMAIN:?DOMAIN env var is required (e.g. demo.testing-core.link)}"
+: "${DOMAIN:?DOMAIN env var is required (e.g. medview.com.ua)}"
 APP_DIR="${APP_DIR:-/home/ubuntu/telemedicine}"
 APP_USER="${APP_USER:-ubuntu}"
 SKIP_SEED="${SKIP_SEED:-0}"
+SEED_MODE="${SEED_MODE:-demo}"
 SKIP_PULL="${SKIP_PULL:-0}"
 
 if [[ $EUID -ne 0 ]]; then
   echo "Re-running with sudo..."
   exec sudo DOMAIN="$DOMAIN" APP_DIR="$APP_DIR" APP_USER="$APP_USER" \
-    SKIP_SEED="$SKIP_SEED" SKIP_PULL="$SKIP_PULL" bash "$0" "$@"
+    SKIP_SEED="$SKIP_SEED" SEED_MODE="$SEED_MODE" SKIP_PULL="$SKIP_PULL" bash "$0" "$@"
 fi
 
 cd "$APP_DIR"
@@ -108,8 +111,13 @@ echo "==> migrations"
 sudo -u "$APP_USER" -- bash -lc "cd $APP_DIR && npm run db:migration:run"
 
 if [[ "$SKIP_SEED" != "1" ]]; then
-  echo "==> seed (skip with SKIP_SEED=1)"
-  sudo -u "$APP_USER" -- bash -lc "cd $APP_DIR && npm run db:seed"
+  if [[ "$SEED_MODE" == "minimal" ]]; then
+    echo "==> seed: minimal (platform tenant + super admin; skip with SKIP_SEED=1)"
+    sudo -u "$APP_USER" -- bash -lc "cd $APP_DIR && npm run db:seed:minimal"
+  else
+    echo "==> seed: demo data (skip with SKIP_SEED=1, production: SEED_MODE=minimal)"
+    sudo -u "$APP_USER" -- bash -lc "cd $APP_DIR && npm run db:seed"
+  fi
 fi
 
 # ---------- 5. systemd unit for the API ----------
