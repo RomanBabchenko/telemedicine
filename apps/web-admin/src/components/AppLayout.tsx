@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Button } from '@telemed/ui';
+import { Button, MedViewLogo } from '@telemed/ui';
 import { ADMIN_CONSOLE_ROLES, ROLE_LABELS, hasAnyRole } from '@telemed/shared-types';
 import { useAuthStore } from '../stores/auth.store';
 import { useTenant } from '../hooks/useTenant';
@@ -32,10 +32,8 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
     <div className="min-h-screen bg-slate-50">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-2">
-            <span className="rounded bg-[color:var(--color-primary)] px-2 py-1 text-sm font-bold text-white">
-              Telemed
-            </span>
+          <div className="flex items-center gap-3">
+            <MedViewLogo size={26} withWordmark />
             <span className="text-sm font-semibold text-slate-700">{roleTitle}</span>
           </div>
           <div className="text-sm text-slate-500">

@@ -53,7 +53,7 @@ async function seed(ds: DataSource): Promise<void> {
     await em.query(
       `INSERT INTO tenants (id, slug, subdomain, brand_name, primary_color, locale, currency, feature_matrix, audio_policy, billing_plan_id, is_platform)
        VALUES
-         ($1, 'platform', 'app', 'Telemed Platform', '#1f7ae0', 'uk', 'UAH', $2::jsonb, $3::jsonb, $4, true),
+         ($1, 'platform', 'app', 'MedView', '#2563EB', 'uk', 'UAH', $2::jsonb, $3::jsonb, $4, true),
          ($5, 'clinic-a', 'clinic-a', 'Demo Clinic Plus', '#d97706', 'uk', 'UAH', $6::jsonb, $3::jsonb, $4, false)
        ON CONFLICT (id) DO NOTHING`,
       [

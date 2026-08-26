@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { authApi } from '@telemed/api-client';
-import { Alert, Button, Card, FormField, Input, PageHeader } from '@telemed/ui';
+import { Alert, AuthCard, Button, FormField, Input } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
 import { useAuthConfig } from '../../hooks/useAuthConfig';
 import { useAuthStore } from '../../stores/auth.store';
@@ -39,41 +39,38 @@ export const LoginPage = () => {
   // confirmed `false` so a fetch error doesn't briefly hide a working form.
   if (cfgQ.data && cfgQ.data.doctorLoginEnabled === false) {
     return (
-      <div className="mx-auto max-w-md py-16">
-        <PageHeader title="Вхід для лікаря" />
-        <Card>
-          <Alert variant="info" title="Самостійний вхід вимкнено">
-            Зараз доступ до кабінету лікаря відкривається лише за персональним
-            запрошенням з МІС клініки. Перейдіть за посиланням, надісланим на
-            ваш email — ви потрапите одразу до призначеної консультації.
-          </Alert>
-        </Card>
-      </div>
+      <AuthCard title="Вхід для лікаря">
+        <Alert variant="info" title="Самостійний вхід вимкнено">
+          Зараз доступ до кабінету лікаря відкривається лише за персональним
+          запрошенням з МІС клініки. Перейдіть за посиланням, надісланим на
+          ваш email — ви потрапите одразу до призначеної консультації.
+        </Alert>
+      </AuthCard>
     );
   }
 
   return (
-    <div className="mx-auto max-w-md py-16">
-      <PageHeader title="Вхід для лікаря" />
-      <Card>
-        <FormField label="Email">
-          <Input value={email} onChange={(e) => setEmail(e.target.value)} />
+    <AuthCard title="Вхід для лікаря">
+      <FormField label="Email">
+        <Input value={email} onChange={(e) => setEmail(e.target.value)} />
+      </FormField>
+      <FormField label="Пароль">
+        <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+      </FormField>
+      {needsMfa && (
+        <FormField label="MFA код (TOTP)">
+          <Input value={mfaCode} onChange={(e) => setMfaCode(e.target.value)} />
         </FormField>
-        <FormField label="Пароль">
-          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-        </FormField>
-        {needsMfa && (
-          <FormField label="MFA код (TOTP)">
-            <Input value={mfaCode} onChange={(e) => setMfaCode(e.target.value)} />
-          </FormField>
-        )}
-        {error ? <Alert variant="danger">{error}</Alert> : null}
-        <div className="mt-4 flex justify-end">
-          <Button onClick={() => loginM.mutate()} isLoading={loginM.isPending}>
-            Увійти
-          </Button>
-        </div>
-      </Card>
-    </div>
+      )}
+      {error ? <Alert variant="danger">{error}</Alert> : null}
+      <Button
+        className="mt-4"
+        fullWidth
+        onClick={() => loginM.mutate()}
+        isLoading={loginM.isPending}
+      >
+        Увійти
+      </Button>
+    </AuthCard>
   );
 };

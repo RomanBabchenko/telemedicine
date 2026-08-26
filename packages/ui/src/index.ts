@@ -13,6 +13,8 @@ export * from './components/Stat';
 export * from './components/Table';
 export * from './components/Pagination';
 export * from './components/PageHeader';
+export * from './components/MedViewLogo';
+export * from './components/AuthCard';
 export * from './components/FormField';
 export * from './theme/ThemeProvider';
 export * from './lib/cn';

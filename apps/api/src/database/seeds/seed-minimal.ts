@@ -28,7 +28,7 @@ async function seedMinimal(ds: DataSource, platformTenantId: string): Promise<vo
     // X-Tenant-Id / JWT / clinic subdomain, so the row must exist.
     await em.query(
       `INSERT INTO tenants (id, slug, subdomain, brand_name, primary_color, locale, currency, feature_matrix, is_platform)
-       VALUES ($1, 'platform', 'app', 'Telemed Platform', '#1f7ae0', 'uk', 'UAH', $2::jsonb, true)
+       VALUES ($1, 'platform', 'app', 'MedView', '#2563EB', 'uk', 'UAH', $2::jsonb, true)
        ON CONFLICT (id) DO NOTHING`,
       [platformTenantId, JSON.stringify(DEFAULT_FEATURE_MATRIX)],
     );

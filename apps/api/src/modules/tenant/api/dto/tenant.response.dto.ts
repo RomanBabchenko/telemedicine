@@ -51,7 +51,7 @@ export class TenantResponseDto {
   @ApiProperty()
   subdomain!: string;
 
-  @ApiProperty({ example: '#1f7ae0' })
+  @ApiProperty({ example: '#2563EB' })
   primaryColor!: string;
 
   @ApiProperty({ type: String, nullable: true })

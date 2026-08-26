@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { authApi } from '@telemed/api-client';
-import { Alert, Button, Card, FormField, Input, PageHeader } from '@telemed/ui';
+import { Alert, AuthCard, Button, FormField, Input } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
 import { useAuthConfig } from '../../hooks/useAuthConfig';
 import { useAuthStore } from '../../stores/auth.store';
@@ -33,43 +33,42 @@ export const LoginPage = () => {
   // briefly hide a working form.
   if (cfgQ.data && cfgQ.data.patientLoginEnabled === false) {
     return (
-      <div className="mx-auto max-w-md py-16">
-        <PageHeader title="Вхід для пацієнта" />
-        <Card>
-          <Alert variant="info" title="Самостійний вхід вимкнено">
-            Зараз ця клініка приймає пацієнтів лише за індивідуальним
-            запрошенням. Скористайтесь посиланням з листа або SMS від клініки,
-            щоб перейти до своєї консультації.
-          </Alert>
-        </Card>
-      </div>
+      <AuthCard title="Вхід для пацієнта">
+        <Alert variant="info" title="Самостійний вхід вимкнено">
+          Зараз ця клініка приймає пацієнтів лише за індивідуальним
+          запрошенням. Скористайтесь посиланням з листа або SMS від клініки,
+          щоб перейти до своєї консультації.
+        </Alert>
+      </AuthCard>
     );
   }
 
   return (
-    <div className="mx-auto max-w-md py-16">
-      <PageHeader title="Вхід для пацієнта" />
-      <Card>
-        <FormField label="Email">
-          <Input value={email} onChange={(e) => setEmail(e.target.value)} />
-        </FormField>
-        <FormField label="Пароль">
-          <Input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </FormField>
-        {error ? <Alert variant="danger">{error}</Alert> : null}
-        <div className="mt-4 flex items-center justify-between">
-          <Link to="/auth/otp" className="text-sm text-[color:var(--color-primary)]">
-            Увійти за OTP
-          </Link>
-          <Button onClick={() => loginM.mutate()} isLoading={loginM.isPending}>
-            Увійти
-          </Button>
-        </div>
-      </Card>
-    </div>
+    <AuthCard title="Вхід для пацієнта">
+      <FormField label="Email">
+        <Input value={email} onChange={(e) => setEmail(e.target.value)} />
+      </FormField>
+      <FormField label="Пароль">
+        <Input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+      </FormField>
+      {error ? <Alert variant="danger">{error}</Alert> : null}
+      <Button
+        className="mt-4"
+        fullWidth
+        onClick={() => loginM.mutate()}
+        isLoading={loginM.isPending}
+      >
+        Увійти
+      </Button>
+      <div className="mt-3 text-center">
+        <Link to="/auth/otp" className="text-sm text-[color:var(--color-primary)]">
+          Увійти за OTP
+        </Link>
+      </div>
+    </AuthCard>
   );
 };

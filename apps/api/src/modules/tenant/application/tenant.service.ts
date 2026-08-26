@@ -101,7 +101,7 @@ export class TenantService {
       slug: input.slug,
       subdomain: input.subdomain,
       brandName: input.brandName,
-      primaryColor: input.primaryColor ?? '#1f7ae0',
+      primaryColor: input.primaryColor ?? '#2563EB',
       locale: input.locale ?? 'uk',
       currency: input.currency ?? 'UAH',
       billingPlanId: input.billingPlanId ?? null,

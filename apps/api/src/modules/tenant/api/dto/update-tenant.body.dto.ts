@@ -79,7 +79,7 @@ export class UpdateTenantBodyDto implements UpdateTenantDto {
   @IsString()
   brandName?: string;
 
-  @ApiPropertyOptional({ example: '#1f7ae0' })
+  @ApiPropertyOptional({ example: '#2563EB' })
   @IsOptional()
   @IsHexColor()
   primaryColor?: string;

@@ -69,7 +69,7 @@ export const PlatformTenantEditPage = () => {
     ) ?? [];
 
   const [brandName, setBrandName] = useState('');
-  const [primaryColor, setPrimaryColor] = useState('#1f7ae0');
+  const [primaryColor, setPrimaryColor] = useState('#2563EB');
   const [logoUrl, setLogoUrl] = useState('');
   const [locale, setLocale] = useState('uk');
   const [features, setFeatures] = useState<TenantFeatureMatrix | null>(null);

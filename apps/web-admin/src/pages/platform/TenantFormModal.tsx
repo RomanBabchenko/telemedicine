@@ -30,7 +30,7 @@ export const TenantFormModal = ({
   const [slug, setSlug] = useState('');
   const [brandName, setBrandName] = useState('');
   const [subdomain, setSubdomain] = useState('');
-  const [primaryColor, setPrimaryColor] = useState('#1f7ae0');
+  const [primaryColor, setPrimaryColor] = useState('#2563EB');
   const [locale, setLocale] = useState('uk');
   const [currency, setCurrency] = useState('UAH');
   const [touched, setTouched] = useState(false);
@@ -40,7 +40,7 @@ export const TenantFormModal = ({
       setSlug('');
       setBrandName('');
       setSubdomain('');
-      setPrimaryColor('#1f7ae0');
+      setPrimaryColor('#2563EB');
       setLocale('uk');
       setCurrency('UAH');
       setTouched(false);
@@ -120,7 +120,7 @@ export const TenantFormModal = ({
           <Input
             value={primaryColor}
             onChange={(e) => setPrimaryColor(e.target.value)}
-            placeholder="#1f7ae0"
+            placeholder="#2563EB"
           />
         </FormField>
 

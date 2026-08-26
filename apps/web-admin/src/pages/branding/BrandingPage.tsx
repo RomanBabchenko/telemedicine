@@ -13,7 +13,7 @@ export const BrandingPage = () => {
   const tenantQ = useQuery({ queryKey: ['tenant', 'current'], queryFn: () => tenants.current() });
 
   const [brandName, setBrandName] = useState('');
-  const [primaryColor, setPrimaryColor] = useState('#1f7ae0');
+  const [primaryColor, setPrimaryColor] = useState('#2563EB');
   const [logoUrl, setLogoUrl] = useState('');
 
   useEffect(() => {
@@ -43,7 +43,7 @@ export const BrandingPage = () => {
           <Input
             value={primaryColor}
             onChange={(e) => setPrimaryColor(e.target.value)}
-            placeholder="#1f7ae0"
+            placeholder="#2563EB"
           />
         </FormField>
         <FormField label="URL логотипу">

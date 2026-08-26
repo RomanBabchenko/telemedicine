@@ -14,7 +14,7 @@ export class Tenant extends BaseEntity {
   @Column({ name: 'brand_name', type: 'varchar', length: 256 })
   brandName!: string;
 
-  @Column({ name: 'primary_color', type: 'varchar', length: 16, default: '#1f7ae0' })
+  @Column({ name: 'primary_color', type: 'varchar', length: 16, default: '#2563EB' })
   primaryColor!: string;
 
   @Column({ name: 'logo_url', type: 'text', nullable: true })
