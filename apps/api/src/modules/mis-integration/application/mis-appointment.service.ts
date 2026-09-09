@@ -281,8 +281,21 @@ export class MisAppointmentService {
       throw new NotFoundException('Consultation session not yet created');
     }
     const info = await this.recordings.getRecordingInfo(appt.consultationSessionId);
-    if (!info) throw new NotFoundException('Recording not found');
-    return info;
+    if (info) return info;
+    // No row yet. Tell the MIS whether that's "not started" or "this clinic
+    // has recording switched off" — polling for a file that will never
+    // exist is a waste of both sides' time. (The audioArchive module itself
+    // is enforced upstream by FeatureGuard with 403 FEATURE_DISABLED.)
+    if (await this.recordings.isRecordingDisabledForTenant(tenantId)) {
+      throw new NotFoundException({
+        message: 'Audio recording is disabled for this clinic',
+        code: 'recording.disabled',
+      });
+    }
+    throw new NotFoundException({
+      message: 'Recording not found',
+      code: 'recording.not_found',
+    });
   }
 
   async revokeInvites(

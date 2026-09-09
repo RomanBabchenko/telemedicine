@@ -16,11 +16,11 @@ export class FeatureGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const feature = this.reflector.getAllAndOverride<string | undefined>(REQUIRE_FEATURE_KEY, [
+    const features = this.reflector.getAllAndMerge<string[]>(REQUIRE_FEATURE_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
-    if (!feature) return true;
+    if (features.length === 0) return true;
 
     // Prefer the :tenantId route param (MIS ApiKey routes target a tenant in
     // the URL and run before ApiKeyGuard rewrites the context — the ambient
@@ -30,11 +30,13 @@ export class FeatureGuard implements CanActivate {
     const req = context.switchToHttp().getRequest<{ params?: Record<string, string> }>();
     const tenantId = req.params?.tenantId ?? this.tenantContext.getTenantId();
     const tenant = await this.tenants.getOrThrow(tenantId);
-    if (!this.tenants.hasFeature(tenant, feature)) {
-      throw new ForbiddenException({
-        message: `Module "${feature}" is disabled for this clinic`,
-        code: 'FEATURE_DISABLED',
-      });
+    for (const feature of features) {
+      if (!this.tenants.hasFeature(tenant, feature)) {
+        throw new ForbiddenException({
+          message: `Module "${feature}" is disabled for this clinic`,
+          code: 'FEATURE_DISABLED',
+        });
+      }
     }
     return true;
   }

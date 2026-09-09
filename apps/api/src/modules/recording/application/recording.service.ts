@@ -69,6 +69,13 @@ export class RecordingService {
     return null;
   }
 
+  /** True when the clinic's module or policy currently blocks new recordings. */
+  async isRecordingDisabledForTenant(tenantId: string): Promise<boolean> {
+    const tenant = await this.tenants.findOne({ where: { id: tenantId } });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+    return this.recordingDisabledReason(tenant) !== null;
+  }
+
   private retentionUntilFor(tenant: Tenant): Date {
     const retentionDays = tenant.audioPolicy?.retentionDays ?? 30;
     return new Date(Date.now() + retentionDays * 86400_000);

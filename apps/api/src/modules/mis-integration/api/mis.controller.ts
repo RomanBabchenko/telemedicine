@@ -313,6 +313,7 @@ export class MisController {
   @Get(':tenantId/appointments/:appointmentId/recording')
   @Public() // @Public only skips the global JwtAuthGuard — ApiKeyGuard still enforces auth
   @UseGuards(ApiKeyGuard)
+  @RequireFeature('audioArchive') // merged with the class-level misSync
   @Auditable({ action: 'mis.recording.requested', resource: 'SessionRecording' })
   @ApiSecurity('api-key')
   @ApiOperation({
@@ -334,6 +335,7 @@ export class MisController {
   @Get(':tenantId/appointments/by-external/:externalAppointmentId/recording')
   @Public() // @Public only skips the global JwtAuthGuard — ApiKeyGuard still enforces auth
   @UseGuards(ApiKeyGuard)
+  @RequireFeature('audioArchive') // merged with the class-level misSync
   @Auditable({ action: 'mis.recording.requested', resource: 'SessionRecording' })
   @ApiSecurity('api-key')
   @ApiOperation({
