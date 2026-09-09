@@ -27,6 +27,19 @@ export interface SlotDto {
   sourceIsMis: boolean;
 }
 
+export type AppointmentListSort = 'startAt' | 'patient' | 'doctor' | 'status' | 'source';
+
+// Admin list (GET /appointments/admin/list) — server-side paging + filters.
+export interface AppointmentListQuery {
+  search?: string;
+  status?: AppointmentStatus;
+  source?: AppointmentSource;
+  sort?: AppointmentListSort;
+  order?: 'asc' | 'desc';
+  page?: number;
+  pageSize?: number;
+}
+
 export interface AvailabilityQuery {
   doctorId: string;
   serviceTypeId?: string;

@@ -5,6 +5,7 @@ import {
   Card,
   EmptyState,
   PageHeader,
+  Pagination,
   SortableTH,
   Spinner,
   Table,
@@ -60,34 +61,51 @@ export const BillingPage = () => {
         {(ledgerQ.data?.length ?? 0) === 0 ? (
           <EmptyState title="Поки немає операцій" />
         ) : (
-          <Table>
-            <THead>
-              <TR>
-                <SortableTH active={ledger.sortActive('date')} onSort={() => ledger.toggleSort('date')}>
-                  Дата
-                </SortableTH>
-                <TH>Рахунок</TH>
-                <SortableTH active={ledger.sortActive('debit')} onSort={() => ledger.toggleSort('debit')}>
-                  Дебет
-                </SortableTH>
-                <SortableTH active={ledger.sortActive('credit')} onSort={() => ledger.toggleSort('credit')}>
-                  Кредит
-                </SortableTH>
-                <TH>Memo</TH>
-              </TR>
-            </THead>
-            <TBody>
-              {ledger.rows.map((e) => (
-                <TR key={e.id}>
-                  <TD>{dayjs(e.createdAt).format('DD.MM HH:mm')}</TD>
-                  <TD>{e.account}</TD>
-                  <TD>{Number(e.debit) || ''}</TD>
-                  <TD>{Number(e.credit) || ''}</TD>
-                  <TD>{e.memo}</TD>
+          <>
+            <Table>
+              <THead>
+                <TR>
+                  <SortableTH
+                    active={ledger.sortActive('date')}
+                    onSort={() => ledger.toggleSort('date')}
+                  >
+                    Дата
+                  </SortableTH>
+                  <TH>Рахунок</TH>
+                  <SortableTH
+                    active={ledger.sortActive('debit')}
+                    onSort={() => ledger.toggleSort('debit')}
+                  >
+                    Дебет
+                  </SortableTH>
+                  <SortableTH
+                    active={ledger.sortActive('credit')}
+                    onSort={() => ledger.toggleSort('credit')}
+                  >
+                    Кредит
+                  </SortableTH>
+                  <TH>Memo</TH>
                 </TR>
-              ))}
-            </TBody>
-          </Table>
+              </THead>
+              <TBody>
+                {ledger.rows.map((e) => (
+                  <TR key={e.id}>
+                    <TD>{dayjs(e.createdAt).format('DD.MM HH:mm')}</TD>
+                    <TD>{e.account}</TD>
+                    <TD>{Number(e.debit) || ''}</TD>
+                    <TD>{Number(e.credit) || ''}</TD>
+                    <TD>{e.memo}</TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+            <Pagination
+              page={ledger.page}
+              pageSize={ledger.pageSize}
+              total={ledger.total}
+              onPageChange={ledger.setPage}
+            />
+          </>
         )}
       </Card>
 
@@ -96,36 +114,45 @@ export const BillingPage = () => {
         {(invoicesQ.data?.length ?? 0) === 0 ? (
           <EmptyState title="Інвойсів ще немає" />
         ) : (
-          <Table>
-            <THead>
-              <TR>
-                <SortableTH
-                  active={invoices.sortActive('period')}
-                  onSort={() => invoices.toggleSort('period')}
-                >
-                  Період
-                </SortableTH>
-                <SortableTH
-                  active={invoices.sortActive('amount')}
-                  onSort={() => invoices.toggleSort('amount')}
-                >
-                  Сума
-                </SortableTH>
-                <TH>Статус</TH>
-              </TR>
-            </THead>
-            <TBody>
-              {invoices.rows.map((i) => (
-                <TR key={i.id}>
-                  <TD>
-                    {dayjs(i.periodStart).format('DD.MM')}—{dayjs(i.periodEnd).format('DD.MM.YYYY')}
-                  </TD>
-                  <TD>{i.totalAmount} ₴</TD>
-                  <TD>{i.status}</TD>
+          <>
+            <Table>
+              <THead>
+                <TR>
+                  <SortableTH
+                    active={invoices.sortActive('period')}
+                    onSort={() => invoices.toggleSort('period')}
+                  >
+                    Період
+                  </SortableTH>
+                  <SortableTH
+                    active={invoices.sortActive('amount')}
+                    onSort={() => invoices.toggleSort('amount')}
+                  >
+                    Сума
+                  </SortableTH>
+                  <TH>Статус</TH>
                 </TR>
-              ))}
-            </TBody>
-          </Table>
+              </THead>
+              <TBody>
+                {invoices.rows.map((i) => (
+                  <TR key={i.id}>
+                    <TD>
+                      {dayjs(i.periodStart).format('DD.MM')}—
+                      {dayjs(i.periodEnd).format('DD.MM.YYYY')}
+                    </TD>
+                    <TD>{i.totalAmount} ₴</TD>
+                    <TD>{i.status}</TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+            <Pagination
+              page={invoices.page}
+              pageSize={invoices.pageSize}
+              total={invoices.total}
+              onPageChange={invoices.setPage}
+            />
+          </>
         )}
       </Card>
     </div>

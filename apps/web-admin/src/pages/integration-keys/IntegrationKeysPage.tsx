@@ -15,6 +15,7 @@ import {
   Input,
   Modal,
   PageHeader,
+  Pagination,
   Select,
   SortableTH,
   Spinner,
@@ -34,8 +35,7 @@ const keysApi = integrationKeysApi(apiClient);
 
 const CONNECTORS = [{ value: 'docdream', label: 'DocDream' }];
 
-const formatDate = (iso: string | null): string =>
-  iso ? new Date(iso).toLocaleString() : '—';
+const formatDate = (iso: string | null): string => (iso ? new Date(iso).toLocaleString() : '—');
 
 const statusBadge = (k: IntegrationApiKeyDto) =>
   k.revokedAt ? (
@@ -56,7 +56,7 @@ export const IntegrationKeysPage = () => {
 
   const [statusFilter, setStatusFilter] = useState<'' | 'active' | 'revoked'>('');
 
-  const { rows, toggleSort, sortActive } = useTableControls(keysQ.data, {
+  const keys = useTableControls(keysQ.data, {
     sortValues: {
       createdAt: (k) => k.createdAt,
     },
@@ -67,15 +67,14 @@ export const IntegrationKeysPage = () => {
     },
     initialSort: { field: 'createdAt', dir: 'desc' },
   });
+  const { rows, total, toggleSort, sortActive } = keys;
 
   const [createOpen, setCreateOpen] = useState(false);
   const [connectorId, setConnectorId] = useState('docdream');
   const [name, setName] = useState('');
   const [ipAllowlistText, setIpAllowlistText] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
-  const [reveal, setReveal] = useState<CreateIntegrationApiKeyResponseDto | null>(
-    null,
-  );
+  const [reveal, setReveal] = useState<CreateIntegrationApiKeyResponseDto | null>(null);
   const [copied, setCopied] = useState(false);
 
   const resetCreateForm = () => {
@@ -127,18 +126,14 @@ export const IntegrationKeysPage = () => {
       <PageHeader
         title="Інтеграційні ключі"
         description="API-ключі для M2M інтеграції з зовнішніми МІС (наприклад DocDream). Ключ передаєтсья у заголовку Authorization: ApiKey ..."
-        actions={
-          <Button onClick={() => setCreateOpen(true)}>Створити ключ</Button>
-        }
+        actions={<Button onClick={() => setCreateOpen(true)}>Створити ключ</Button>}
       />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <FormField label="Статус">
           <Select
             value={statusFilter}
-            onChange={(e) =>
-              setStatusFilter(e.target.value as '' | 'active' | 'revoked')
-            }
+            onChange={(e) => setStatusFilter(e.target.value as '' | 'active' | 'revoked')}
           >
             <option value="">Усі статуси</option>
             <option value="active">Активний</option>
@@ -150,75 +145,77 @@ export const IntegrationKeysPage = () => {
       <Card>
         {keysQ.isLoading ? (
           <Spinner />
-        ) : keysQ.data && keysQ.data.length > 0 && rows.length === 0 ? (
+        ) : keysQ.data && keysQ.data.length > 0 && total === 0 ? (
           <EmptyState title="Нічого не знайдено за фільтром" />
         ) : keysQ.data && keysQ.data.length > 0 ? (
-          <Table>
-            <THead>
-              <TR>
-                <TH>Конектор</TH>
-                <TH>Назва</TH>
-                <TH>Ключ</TH>
-                <TH>IP allowlist</TH>
-                <TH>Останнє використання</TH>
-                <SortableTH
-                  active={sortActive('createdAt')}
-                  onSort={() => toggleSort('createdAt')}
-                >
-                  Створено
-                </SortableTH>
-                <TH>Статус</TH>
-                <TH>{' '}</TH>
-              </TR>
-            </THead>
-            <TBody>
-              {rows.map((k) => (
-                <TR key={k.id}>
-                  <TD>{k.connectorId}</TD>
-                  <TD>{k.name ?? <span className="text-slate-400">—</span>}</TD>
-                  <TD>
-                    <span className="font-mono text-xs">{k.keyMasked}</span>
-                  </TD>
-                  <TD>
-                    {k.ipAllowlist && k.ipAllowlist.length > 0 ? (
-                      <span className="text-xs">{k.ipAllowlist.join(', ')}</span>
-                    ) : (
-                      <span className="text-xs text-slate-400">будь-який IP</span>
-                    )}
-                  </TD>
-                  <TD>
-                    <span className="text-xs">{formatDate(k.lastUsedAt)}</span>
-                  </TD>
-                  <TD>
-                    <span className="text-xs">{formatDate(k.createdAt)}</span>
-                  </TD>
-                  <TD>{statusBadge(k)}</TD>
-                  <TD>
-                    {!k.revokedAt ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        isLoading={
-                          revokeM.isPending && revokeM.variables === k.id
-                        }
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              `Відкликати ключ ${k.keyMasked}?`,
-                            )
-                          ) {
-                            revokeM.mutate(k.id);
-                          }
-                        }}
-                      >
-                        Відкликати
-                      </Button>
-                    ) : null}
-                  </TD>
+          <>
+            <Table>
+              <THead>
+                <TR>
+                  <TH>Конектор</TH>
+                  <TH>Назва</TH>
+                  <TH>Ключ</TH>
+                  <TH>IP allowlist</TH>
+                  <TH>Останнє використання</TH>
+                  <SortableTH
+                    active={sortActive('createdAt')}
+                    onSort={() => toggleSort('createdAt')}
+                  >
+                    Створено
+                  </SortableTH>
+                  <TH>Статус</TH>
+                  <TH> </TH>
                 </TR>
-              ))}
-            </TBody>
-          </Table>
+              </THead>
+              <TBody>
+                {rows.map((k) => (
+                  <TR key={k.id}>
+                    <TD>{k.connectorId}</TD>
+                    <TD>{k.name ?? <span className="text-slate-400">—</span>}</TD>
+                    <TD>
+                      <span className="font-mono text-xs">{k.keyMasked}</span>
+                    </TD>
+                    <TD>
+                      {k.ipAllowlist && k.ipAllowlist.length > 0 ? (
+                        <span className="text-xs">{k.ipAllowlist.join(', ')}</span>
+                      ) : (
+                        <span className="text-xs text-slate-400">будь-який IP</span>
+                      )}
+                    </TD>
+                    <TD>
+                      <span className="text-xs">{formatDate(k.lastUsedAt)}</span>
+                    </TD>
+                    <TD>
+                      <span className="text-xs">{formatDate(k.createdAt)}</span>
+                    </TD>
+                    <TD>{statusBadge(k)}</TD>
+                    <TD>
+                      {!k.revokedAt ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          isLoading={revokeM.isPending && revokeM.variables === k.id}
+                          onClick={() => {
+                            if (window.confirm(`Відкликати ключ ${k.keyMasked}?`)) {
+                              revokeM.mutate(k.id);
+                            }
+                          }}
+                        >
+                          Відкликати
+                        </Button>
+                      ) : null}
+                    </TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+            <Pagination
+              page={keys.page}
+              pageSize={keys.pageSize}
+              total={keys.total}
+              onPageChange={keys.setPage}
+            />
+          </>
         ) : (
           <EmptyState
             title="Немає жодного ключа"
@@ -306,8 +303,8 @@ export const IntegrationKeysPage = () => {
         {reveal ? (
           <div className="space-y-3">
             <Alert variant="warning" title="Збережіть ключ зараз">
-              Ми показуємо сирий ключ тільки один раз. Якщо закриєте це вікно
-              без копіювання — доведеться створити новий.
+              Ми показуємо сирий ключ тільки один раз. Якщо закриєте це вікно без копіювання —
+              доведеться створити новий.
             </Alert>
             <div className="break-all rounded border border-slate-200 bg-slate-50 p-3 font-mono text-sm">
               {reveal.rawKey}

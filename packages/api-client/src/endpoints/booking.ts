@@ -1,13 +1,16 @@
 import type {
   AppointmentDto,
+  AppointmentListQuery,
   AvailabilityQuery,
   CancelAppointmentDto,
   ReissueInvitesDto,
   RescheduleAppointmentDto,
   ReserveAppointmentDto,
+  PaginatedResult,
   SlotDto,
 } from '@telemed/shared-types';
 import type { ApiClient } from '../http';
+import { toPaginated, type ApiPage } from '../pagination';
 
 export const bookingApi = (client: ApiClient) => ({
   availability: (query: AvailabilityQuery) =>
@@ -22,6 +25,11 @@ export const bookingApi = (client: ApiClient) => ({
   reschedule: (id: string, dto: RescheduleAppointmentDto) =>
     client.post<AppointmentDto>(`/appointments/${id}/reschedule`, dto),
   list: () => client.get<AppointmentDto[]>('/appointments'),
+  // Admin screen: server-side paging/filters/sort (see AppointmentListQuery).
+  adminList: async (query: AppointmentListQuery): Promise<PaginatedResult<AppointmentDto>> =>
+    toPaginated(
+      await client.get<ApiPage<AppointmentDto>>('/appointments/admin/list', { params: query }),
+    ),
   getById: (id: string) => client.get<AppointmentDto>(`/appointments/${id}`),
   // Admin-only: revoke old invite links and get a fresh patient/doctor pair.
   reissueInvites: (id: string) => client.post<ReissueInvitesDto>(`/appointments/${id}/invites`),

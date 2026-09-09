@@ -1,6 +1,7 @@
 // Request DTOs
 export * from './availability.query.dto';
 export * from './cancel.body.dto';
+export * from './list-appointments.query.dto';
 export * from './reschedule.body.dto';
 export * from './reserve.body.dto';
 

@@ -11,6 +11,7 @@ import {
   FormField,
   Input,
   PageHeader,
+  Pagination,
   SortableTH,
   Spinner,
   Table,
@@ -47,7 +48,7 @@ export const PlatformTenantsPage = () => {
   });
 
   const needle = search.trim().toLowerCase();
-  const { rows, toggleSort, sortActive } = useTableControls(tenantsQ.data, {
+  const tenants = useTableControls(tenantsQ.data, {
     sortValues: {
       name: (t) => t.brandName,
       slug: (t) => t.slug,
@@ -57,6 +58,7 @@ export const PlatformTenantsPage = () => {
       t.brandName.toLowerCase().includes(needle) ||
       t.slug.toLowerCase().includes(needle),
   });
+  const { rows, total, toggleSort, sortActive } = tenants;
 
   const createM = useMutation({
     mutationFn: (dto: CreateTenantDto) => admin.createTenant(dto),
@@ -90,56 +92,64 @@ export const PlatformTenantsPage = () => {
         <Alert variant="danger">{errorMessage(tenantsQ.error)}</Alert>
       ) : (tenantsQ.data?.length ?? 0) === 0 ? (
         <EmptyState title="Поки немає клінік" />
-      ) : rows.length === 0 ? (
+      ) : total === 0 ? (
         <EmptyState title="Нічого не знайдено за пошуком" />
       ) : (
-        <Table>
-          <THead>
-            <TR>
-              <SortableTH active={sortActive('name')} onSort={() => toggleSort('name')}>
-                Назва
-              </SortableTH>
-              <SortableTH active={sortActive('slug')} onSort={() => toggleSort('slug')}>
-                Slug
-              </SortableTH>
-              <TH>Поддомен</TH>
-              <TH>Локаль</TH>
-              <TH>Валюта</TH>
-              <TH>Дії</TH>
-            </TR>
-          </THead>
-          <TBody>
-            {rows.map((t) => (
-              <TR key={t.id}>
-                <TD>
-                  <Link
-                    to={`/platform/tenants/${t.id}`}
-                    className="text-blue-700 hover:underline"
-                  >
-                    {t.brandName}
-                  </Link>
-                </TD>
-                <TD>
-                  <code className="text-xs">{t.slug}</code>
-                </TD>
-                <TD>
-                  <code className="text-xs">{t.subdomain}</code>
-                </TD>
-                <TD>
-                  <Badge>{t.locale}</Badge>
-                </TD>
-                <TD>{t.currency}</TD>
-                <TD>
-                  <Link to={`/platform/tenants/${t.id}`}>
-                    <Button size="sm" variant="secondary">
-                      Редагувати
-                    </Button>
-                  </Link>
-                </TD>
+        <>
+          <Table>
+            <THead>
+              <TR>
+                <SortableTH active={sortActive('name')} onSort={() => toggleSort('name')}>
+                  Назва
+                </SortableTH>
+                <SortableTH active={sortActive('slug')} onSort={() => toggleSort('slug')}>
+                  Slug
+                </SortableTH>
+                <TH>Поддомен</TH>
+                <TH>Локаль</TH>
+                <TH>Валюта</TH>
+                <TH>Дії</TH>
               </TR>
-            ))}
-          </TBody>
-        </Table>
+            </THead>
+            <TBody>
+              {rows.map((t) => (
+                <TR key={t.id}>
+                  <TD>
+                    <Link
+                      to={`/platform/tenants/${t.id}`}
+                      className="text-blue-700 hover:underline"
+                    >
+                      {t.brandName}
+                    </Link>
+                  </TD>
+                  <TD>
+                    <code className="text-xs">{t.slug}</code>
+                  </TD>
+                  <TD>
+                    <code className="text-xs">{t.subdomain}</code>
+                  </TD>
+                  <TD>
+                    <Badge>{t.locale}</Badge>
+                  </TD>
+                  <TD>{t.currency}</TD>
+                  <TD>
+                    <Link to={`/platform/tenants/${t.id}`}>
+                      <Button size="sm" variant="secondary">
+                        Редагувати
+                      </Button>
+                    </Link>
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+          <Pagination
+            page={tenants.page}
+            pageSize={tenants.pageSize}
+            total={tenants.total}
+            onPageChange={tenants.setPage}
+          />
+        </>
       )}
 
       <TenantFormModal

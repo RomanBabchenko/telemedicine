@@ -9,6 +9,7 @@ import { EventBus } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { AppointmentSource, AppointmentStatus, SlotStatus } from '@telemed/shared-types';
+import type { AppointmentListSort } from '@telemed/shared-types';
 import { Slot } from '../domain/entities/slot.entity';
 import { Appointment } from '../domain/entities/appointment.entity';
 import { ServiceType } from '../domain/entities/service-type.entity';
@@ -19,6 +20,9 @@ import { TenantContextService } from '../../../common/tenant/tenant-context.serv
 import { AppointmentResponseDto } from '../api/dto/appointment.response.dto';
 import { toAppointmentResponseWithSummaries } from '../api/mappers/appointment.mapper';
 import { SlotHoldService } from './slot-hold.service';
+
+// Neutralise LIKE metacharacters in user input so "%" / "_" match literally.
+const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 import {
   AppointmentCancelledEvent,
   AppointmentCompletedEvent,
@@ -126,6 +130,90 @@ export class AppointmentService {
     );
   }
 
+  /**
+   * Admin list: server-side paging, filters and sorting. Joins patient/doctor
+   * so search and name sorts happen in SQL rather than over the whole tenant
+   * history in the browser.
+   */
+  async listPaged(filters: {
+    source?: AppointmentSource;
+    status?: AppointmentStatus;
+    search?: string;
+    sort?: AppointmentListSort;
+    order?: 'asc' | 'desc';
+    page?: number;
+    pageSize?: number;
+  }): Promise<{ items: AppointmentResponseDto[]; total: number }> {
+    const tenantId = this.tenantContext.getTenantId();
+    const page = filters.page ?? 1;
+    const pageSize = filters.pageSize ?? 20;
+
+    const qb = this.appointments
+      .createQueryBuilder('a')
+      .leftJoin(Patient, 'p', 'p.id = a.patientId')
+      .leftJoin(Doctor, 'd', 'd.id = a.doctorId')
+      .where('a.tenantId = :tenantId', { tenantId });
+    if (filters.source) qb.andWhere('a.source = :source', { source: filters.source });
+    if (filters.status) qb.andWhere('a.status = :status', { status: filters.status });
+    const needle = filters.search?.trim();
+    if (needle) {
+      qb.andWhere(
+        `(p.firstName || ' ' || p.lastName ILIKE :q
+          OR p.lastName || ' ' || p.firstName ILIKE :q
+          OR p.phone ILIKE :q
+          OR d.firstName || ' ' || d.lastName ILIKE :q
+          OR d.lastName || ' ' || d.firstName ILIKE :q)`,
+        { q: `%${escapeLike(needle)}%` },
+      );
+    }
+
+    const order: 'ASC' | 'DESC' = filters.order === 'asc' ? 'ASC' : 'DESC';
+    // Entity property paths only — TypeORM cannot parse raw SQL expressions
+    // in ORDER BY. Name sorts go surname-first, the way the UI shows them.
+    const sortKeys: Record<AppointmentListSort, string[]> = {
+      startAt: ['a.startAt'],
+      patient: ['p.lastName', 'p.firstName'],
+      doctor: ['d.lastName', 'd.firstName'],
+      status: ['a.status'],
+      source: ['a.source'],
+    };
+    for (const key of sortKeys[filters.sort ?? 'startAt']) {
+      qb.addOrderBy(key, order, 'NULLS LAST');
+    }
+    // Stable secondary keys so paging never repeats/skips rows on ties.
+    qb.addOrderBy('a.startAt', 'DESC').addOrderBy('a.id', 'ASC');
+
+    // offset/limit rather than skip/take: no relations are selected, so rows
+    // are already 1:1 and the skip/take "distinct id" subquery is pure cost.
+    const [rows, total] = await qb
+      .offset((page - 1) * pageSize)
+      .limit(pageSize)
+      .getManyAndCount();
+    if (rows.length === 0) return { items: [], total };
+
+    const patientIds = Array.from(
+      new Set(rows.map((r) => r.patientId).filter((id): id is string => !!id)),
+    );
+    const doctorIds = Array.from(new Set(rows.map((r) => r.doctorId)));
+    const [patientRows, doctorMap]: [Patient[], Map<string, Doctor>] = await Promise.all([
+      patientIds.length > 0
+        ? this.patients.find({ where: { id: In(patientIds) } })
+        : Promise.resolve([] as Patient[]),
+      this.providerService.getDoctorsByIds(doctorIds),
+    ]);
+    const patientMap = new Map(patientRows.map((p) => [p.id, p]));
+    return {
+      items: rows.map((r) =>
+        toAppointmentResponseWithSummaries(
+          r,
+          r.patientId ? patientMap.get(r.patientId) : undefined,
+          doctorMap.get(r.doctorId),
+        ),
+      ),
+      total,
+    };
+  }
+
   // Tenant-scoped lookup by consultation session — used to scope recording
   // access for MIS-only admins.
   async findByConsultationSessionId(sessionId: string): Promise<Appointment | null> {
@@ -158,7 +246,11 @@ export class AppointmentService {
     );
   }
 
-  async reserve(input: { slotId: string; patientId: string; reasonText?: string }): Promise<Appointment> {
+  async reserve(input: {
+    slotId: string;
+    patientId: string;
+    reasonText?: string;
+  }): Promise<Appointment> {
     const tenantId = this.tenantContext.getTenantId();
 
     const slot = await this.slots.findOne({ where: { id: input.slotId, tenantId } });
@@ -249,11 +341,7 @@ export class AppointmentService {
    * (slotId is UNIQUE on appointment, so a race would surface as a DB error
    * — the lock turns it into a clean 409 instead).
    */
-  async reschedule(
-    id: string,
-    newSlotId: string,
-    reason?: string,
-  ): Promise<Appointment> {
+  async reschedule(id: string, newSlotId: string, reason?: string): Promise<Appointment> {
     const ALLOWED_FROM = new Set<AppointmentStatus>([
       AppointmentStatus.RESERVED,
       AppointmentStatus.AWAITING_PAYMENT,
@@ -271,9 +359,7 @@ export class AppointmentService {
         .getOne();
       if (!appt) throw new NotFoundException('Appointment not found');
       if (!ALLOWED_FROM.has(appt.status)) {
-        throw new BadRequestException(
-          `Cannot reschedule appointment in status ${appt.status}`,
-        );
+        throw new BadRequestException(`Cannot reschedule appointment in status ${appt.status}`);
       }
 
       if (appt.slotId === newSlotId) {

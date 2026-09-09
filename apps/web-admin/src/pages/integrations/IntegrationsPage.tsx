@@ -1,7 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { integrationsApi } from '@telemed/api-client';
-import { Alert, Badge, Button, Card, EmptyState, PageHeader, Spinner } from '@telemed/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  PageHeader,
+  Pagination,
+  Spinner,
+} from '@telemed/ui';
+import { useTableControls } from '@telemed/web-shared';
 import { apiClient } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth.store';
 
@@ -20,6 +30,13 @@ export const IntegrationsPage = () => {
     queryKey: ['mis-errors', tenantId],
     queryFn: () => integrations.errors(tenantId!),
     enabled: !!tenantId,
+  });
+
+  // Newest first, 10 per page — the error feed is a log, not a table.
+  const errors = useTableControls(errorsQ.data, {
+    sortValues: { createdAt: (e) => e.createdAt },
+    initialSort: { field: 'createdAt', dir: 'desc' },
+    pageSize: 10,
   });
 
   const fullSyncM = useMutation({
@@ -45,9 +62,19 @@ export const IntegrationsPage = () => {
         }
       />
       <Card>
-        <p>Конектор: <Badge>{status?.connector}</Badge></p>
-        <p>Статус: <Badge variant={status?.enabled ? 'success' : 'default'}>{status?.enabled ? 'увімкнено' : 'вимкнено'}</Badge></p>
-        <p>Остання повна синхронізація: {status?.lastFullSyncAt ? dayjs(status.lastFullSyncAt).format('DD.MM.YYYY HH:mm') : '—'}</p>
+        <p>
+          Конектор: <Badge>{status?.connector}</Badge>
+        </p>
+        <p>
+          Статус:{' '}
+          <Badge variant={status?.enabled ? 'success' : 'default'}>
+            {status?.enabled ? 'увімкнено' : 'вимкнено'}
+          </Badge>
+        </p>
+        <p>
+          Остання повна синхронізація:{' '}
+          {status?.lastFullSyncAt ? dayjs(status.lastFullSyncAt).format('DD.MM.YYYY HH:mm') : '—'}
+        </p>
         <p>Помилок: {status?.pendingErrors ?? 0}</p>
         {fullSyncM.isSuccess ? <Alert variant="success">Синхронізація завершена</Alert> : null}
       </Card>
@@ -57,13 +84,21 @@ export const IntegrationsPage = () => {
           <EmptyState title="Немає помилок" />
         ) : (
           <div className="space-y-2 text-sm">
-            {errorsQ.data?.map((e) => (
+            {errors.rows.map((e) => (
               <div key={e.id} className="rounded border border-red-200 bg-red-50 p-2">
                 <div className="font-mono text-xs text-red-800">{e.id}</div>
                 <div className="text-red-900">{e.message}</div>
-                <div className="text-xs text-red-700">{dayjs(e.createdAt).format('DD.MM HH:mm')}</div>
+                <div className="text-xs text-red-700">
+                  {dayjs(e.createdAt).format('DD.MM HH:mm')}
+                </div>
               </div>
             ))}
+            <Pagination
+              page={errors.page}
+              pageSize={errors.pageSize}
+              total={errors.total}
+              onPageChange={errors.setPage}
+            />
           </div>
         )}
       </Card>

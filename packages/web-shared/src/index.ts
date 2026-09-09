@@ -9,6 +9,6 @@ export { createUseAuthConfig } from './use-auth-config';
 export { CallControls } from './CallControls';
 export { LobbyPreview } from './LobbyPreview';
 export type { LobbyDeviceState } from './LobbyPreview';
-export { useTableControls } from './use-table-controls';
+export { useTableControls, DEFAULT_PAGE_SIZE } from './use-table-controls';
 export type { TableControls } from './use-table-controls';
 export { useDebouncedValue } from './use-debounced-value';

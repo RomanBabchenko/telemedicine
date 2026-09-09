@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AppointmentSource, AppointmentStatus } from '@telemed/shared-types';
+import { PaginatedResponseDto, PaginationMetaDto } from '../../../../common/dto/pagination.dto';
 import type {
   AppointmentDoctorSummary,
   AppointmentDto,
@@ -118,4 +119,12 @@ export class AppointmentResponseDto implements AppointmentDto {
 
   @ApiPropertyOptional({ type: AppointmentDoctorSummaryDto })
   doctor?: AppointmentDoctorSummaryDto;
+}
+
+export class AppointmentsPageResponseDto extends PaginatedResponseDto<AppointmentResponseDto> {
+  @ApiProperty({ type: [AppointmentResponseDto] })
+  declare items: AppointmentResponseDto[];
+
+  @ApiProperty({ type: PaginationMetaDto })
+  declare meta: PaginationMetaDto;
 }

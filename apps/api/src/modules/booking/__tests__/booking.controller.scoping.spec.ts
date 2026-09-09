@@ -9,6 +9,7 @@ const actor = (roles: Role[]): AuthUser =>
 const build = () => {
   const appointments = {
     listForRole: jest.fn().mockResolvedValue([]),
+    listPaged: jest.fn().mockResolvedValue({ items: [], total: 0 }),
     getByIdWithSummaries: jest.fn(),
     getById: jest.fn(),
     cancel: jest.fn(),
@@ -42,6 +43,26 @@ describe('BookingController — MIS scoping for INTEGRATION_ADMIN', () => {
       const { ctrl, appointments } = build();
       await ctrl.list(actor([Role.INTEGRATION_ADMIN, Role.CLINIC_ADMIN]));
       expect(appointments.listForRole).toHaveBeenCalledWith({});
+    });
+  });
+
+  describe('GET /appointments/admin/list', () => {
+    it('INTEGRATION_ADMIN is pinned to MIS rows even when asking for PLATFORM', async () => {
+      const { ctrl, appointments } = build();
+      await ctrl.adminList({ source: AppointmentSource.PLATFORM }, actor([Role.INTEGRATION_ADMIN]));
+      expect(appointments.listPaged).toHaveBeenCalledWith(
+        expect.objectContaining({ source: AppointmentSource.MIS }),
+      );
+    });
+
+    it('CLINIC_ADMIN keeps the requested source filter and gets a page envelope', async () => {
+      const { ctrl, appointments } = build();
+      appointments.listPaged.mockResolvedValueOnce({ items: [], total: 41 });
+      const res = await ctrl.adminList({ page: 3, pageSize: 20 }, actor([Role.CLINIC_ADMIN]));
+      expect(appointments.listPaged).toHaveBeenCalledWith(
+        expect.objectContaining({ source: undefined, page: 3, pageSize: 20 }),
+      );
+      expect(res.meta).toEqual({ total: 41, page: 3, limit: 20, pageCount: 3 });
     });
   });
 

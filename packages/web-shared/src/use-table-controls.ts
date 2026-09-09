@@ -2,7 +2,13 @@ import { useMemo, useState } from 'react';
 import type { SortDirection } from '@telemed/ui';
 
 export interface TableControls<T> {
+  /** Rows of the current page (after filter + sort). */
   rows: T[];
+  /** Rows matching the filter across all pages — for "nothing found" checks. */
+  total: number;
+  page: number;
+  pageSize: number;
+  setPage: (page: number) => void;
   /** Current sort field (key passed to toggleSort), or null. */
   sortField: string | null;
   sortDir: SortDirection;
@@ -18,13 +24,21 @@ interface Options<T> {
   /** Optional predicate applied before sorting (status filters, search, …). */
   filter?: (row: T) => boolean;
   initialSort?: { field: string; dir: SortDirection };
+  /** Client-side page size. Defaults to DEFAULT_PAGE_SIZE. */
+  pageSize?: number;
 }
 
-// Client-side sorting + filtering over an already-loaded array. POC datasets
-// are small and bounded, so this deliberately avoids new server query DTOs.
+export const DEFAULT_PAGE_SIZE = 20;
+
+// Client-side sorting + filtering + paging over an already-loaded array.
+// Endpoints that return everything (billing, keys, tenants) stay as they
+// are; the page just stops rendering hundreds of rows at once. Lists with
+// real server paging (appointments, users, doctors, audit) don't use this.
 export function useTableControls<T>(data: T[] | undefined, options: Options<T>): TableControls<T> {
   const [sortField, setSortField] = useState<string | null>(options.initialSort?.field ?? null);
   const [sortDir, setSortDir] = useState<SortDirection>(options.initialSort?.dir ?? 'asc');
+  const [page, setPage] = useState(1);
+  const pageSize = options.pageSize ?? DEFAULT_PAGE_SIZE;
 
   const toggleSort = (field: string) => {
     if (sortField === field) {
@@ -35,7 +49,7 @@ export function useTableControls<T>(data: T[] | undefined, options: Options<T>):
     }
   };
 
-  const rows = useMemo(() => {
+  const filtered = useMemo(() => {
     let out = data ?? [];
     if (options.filter) out = out.filter(options.filter);
     if (sortField && options.sortValues[sortField]) {
@@ -59,8 +73,21 @@ export function useTableControls<T>(data: T[] | undefined, options: Options<T>):
     // recomputation (together with data and the sort keys).
   }, [data, options.filter, sortField, sortDir]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Filter/sort changes (or a shrinking dataset) can leave `page` past the
+  // end — clamp instead of showing an empty page.
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const rows = useMemo(
+    () => filtered.slice((safePage - 1) * pageSize, safePage * pageSize),
+    [filtered, safePage, pageSize],
+  );
+
   return {
     rows,
+    total: filtered.length,
+    page: safePage,
+    pageSize,
+    setPage,
     sortField,
     sortDir,
     toggleSort,

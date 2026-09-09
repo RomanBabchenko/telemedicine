@@ -33,6 +33,7 @@ import { Auditable } from '../../../common/audit/decorators';
 import { RequireFeature } from '../../../common/tenant/decorators';
 import { Idempotent } from '../../../common/decorators/idempotent.decorator';
 import { ApiAuth, ApiStandardErrors } from '../../../common/swagger';
+import { buildPaginationMeta } from '../../../common/dto/pagination.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { SessionRecording } from '../../recording/domain/entities/session-recording.entity';
@@ -42,8 +43,10 @@ import { PatientService } from '../../patient/application/patient.service';
 import { ProviderService } from '../../provider/application/provider.service';
 import {
   AppointmentResponseDto,
+  AppointmentsPageResponseDto,
   AvailabilityQueryDto,
   CancelBodyDto,
+  ListAppointmentsQueryDto,
   ReserveBodyDto,
   SlotResponseDto,
 } from './dto';
@@ -68,9 +71,7 @@ export class BookingController {
   private async withRecordingFlags(
     rows: AppointmentResponseDto[],
   ): Promise<AppointmentResponseDto[]> {
-    const sessionIds = rows
-      .map((r) => r.consultationSessionId)
-      .filter((id): id is string => !!id);
+    const sessionIds = rows.map((r) => r.consultationSessionId).filter((id): id is string => !!id);
     if (sessionIds.length === 0) return rows;
     const stored = await this.recordings.find({
       select: ['sessionId'],
@@ -88,7 +89,8 @@ export class BookingController {
   @RequireFeature('bookingWidget')
   @ApiOperation({
     summary: "List a doctor's open slots within a time window",
-    description: 'Returns only slots with status OPEN in the current tenant. Public endpoint — no authentication required.',
+    description:
+      'Returns only slots with status OPEN in the current tenant. Public endpoint — no authentication required.',
     operationId: 'listAvailability',
   })
   @ApiOkResponse({ type: [SlotResponseDto] })
@@ -151,9 +153,7 @@ export class BookingController {
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiOkResponse({ type: AppointmentResponseDto })
   @ApiStandardErrors()
-  async confirm(
-    @Param('id', new ParseUUIDPipe()) id: string,
-  ): Promise<AppointmentResponseDto> {
+  async confirm(@Param('id', new ParseUUIDPipe()) id: string): Promise<AppointmentResponseDto> {
     const appointment = await this.appointments.confirm(id);
     return toAppointmentResponse(appointment);
   }
@@ -199,7 +199,7 @@ export class BookingController {
   @ApiOperation({
     summary: "List the caller's appointments",
     description:
-      "Role-aware: patients see their own appointments, doctors see theirs, INTEGRATION_ADMIN sees only MIS-originated appointments, other operators/admins see every appointment in the tenant. Invite-scoped callers always receive [].",
+      'Role-aware: patients see their own appointments, doctors see theirs, INTEGRATION_ADMIN sees only MIS-originated appointments, other operators/admins see every appointment in the tenant. Invite-scoped callers always receive [].',
     operationId: 'listAppointments',
   })
   @ApiOkResponse({ type: [AppointmentResponseDto] })
@@ -222,9 +222,7 @@ export class BookingController {
     if (user.roles.includes(Role.DOCTOR)) {
       const doctor = await this.providers.getDoctorByUserId(user.id);
       if (!doctor) throw new BadRequestException('Doctor profile missing');
-      return this.withRecordingFlags(
-        await this.appointments.listForRole({ doctorId: doctor.id }),
-      );
+      return this.withRecordingFlags(await this.appointments.listForRole({ doctorId: doctor.id }));
     }
     if (isMisScopedActor(user.roles)) {
       return this.withRecordingFlags(
@@ -232,6 +230,42 @@ export class BookingController {
       );
     }
     return this.withRecordingFlags(await this.appointments.listForRole({}));
+  }
+
+  // NOTE: declared before `appointments/:id` so the static segment wins.
+  @Get('appointments/admin/list')
+  @UseGuards(RolesGuard)
+  @Roles(
+    Role.CLINIC_ADMIN,
+    Role.PLATFORM_SUPER_ADMIN,
+    Role.INTEGRATION_ADMIN,
+    Role.CHIEF_MEDICAL_OFFICER,
+  )
+  @ApiAuth()
+  @ApiOperation({
+    summary: 'Admin list of tenant appointments — paged, filtered, sorted',
+    description:
+      'Server-side paging for the clinic admin screen. INTEGRATION_ADMIN is pinned to MIS-originated rows regardless of the `source` filter.',
+    operationId: 'listAppointmentsAdmin',
+  })
+  @ApiOkResponse({ type: AppointmentsPageResponseDto })
+  @ApiStandardErrors()
+  async adminList(
+    @Query() query: ListAppointmentsQueryDto,
+    @CurrentUser() user: AuthUser,
+  ): Promise<AppointmentsPageResponseDto> {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const { items, total } = await this.appointments.listPaged({
+      ...query,
+      source: isMisScopedActor(user.roles) ? AppointmentSource.MIS : query.source,
+      page,
+      pageSize,
+    });
+    return {
+      items: await this.withRecordingFlags(items),
+      meta: buildPaginationMeta(total, page, pageSize),
+    };
   }
 
   @Get('appointments/:id')
