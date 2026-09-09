@@ -8,16 +8,16 @@ import type {
   UpdateDoctorDto,
 } from '@telemed/shared-types';
 import type { ApiClient } from '../http';
+import { toPaginated, type ApiPage } from '../pagination';
 
 export const doctorsApi = (client: ApiClient) => ({
-  search: (query: DoctorSearchQuery) =>
-    client.get<PaginatedResult<DoctorDto>>('/doctors', { params: query }),
-  searchAdmin: (query: DoctorSearchQuery) =>
-    client.get<PaginatedResult<DoctorDto>>('/doctors/admin/list', { params: query }),
+  search: async (query: DoctorSearchQuery): Promise<PaginatedResult<DoctorDto>> =>
+    toPaginated(await client.get<ApiPage<DoctorDto>>('/doctors', { params: query })),
+  searchAdmin: async (query: DoctorSearchQuery): Promise<PaginatedResult<DoctorDto>> =>
+    toPaginated(await client.get<ApiPage<DoctorDto>>('/doctors/admin/list', { params: query })),
   getById: (id: string) => client.get<DoctorDto>(`/doctors/${id}`),
   create: (dto: CreateDoctorDto) => client.post<DoctorDto>('/doctors', dto),
-  update: (id: string, dto: UpdateDoctorDto) =>
-    client.patch<DoctorDto>(`/doctors/${id}`, dto),
+  update: (id: string, dto: UpdateDoctorDto) => client.patch<DoctorDto>(`/doctors/${id}`, dto),
   delete: (id: string) => client.delete<{ ok: true }>(`/doctors/${id}`),
   activate: (id: string) => client.post<{ ok: true }>(`/doctors/${id}/activate`),
   listAvailabilityRules: (id: string) =>

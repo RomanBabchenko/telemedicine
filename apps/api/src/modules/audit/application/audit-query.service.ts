@@ -2,10 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TenantContextService } from '../../../common/tenant/tenant-context.service';
-import {
-  PaginatedResponseDto,
-  buildPaginationMeta,
-} from '../../../common/dto/pagination.dto';
+import { PaginatedResponseDto, buildPaginationMeta } from '../../../common/dto/pagination.dto';
 import { AuditEvent } from '../domain/entities/audit-event.entity';
 import { AuditEventResponseDto } from '../api/dto/audit-event.response.dto';
 import { toAuditEventResponse } from '../api/mappers/audit.mapper';
@@ -26,6 +23,9 @@ export interface AuditQueryFilters {
  * the logger is write-only and runs on every request — mixing a read path in
  * would grow its surface for no gain.
  */
+// Neutralise LIKE metacharacters in user input so "%" / "_" match literally.
+const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`);
+
 @Injectable()
 export class AuditQueryService {
   constructor(
@@ -34,18 +34,25 @@ export class AuditQueryService {
     private readonly tenantContext: TenantContextService,
   ) {}
 
-  async list(
-    filters: AuditQueryFilters,
-  ): Promise<PaginatedResponseDto<AuditEventResponseDto>> {
+  async list(filters: AuditQueryFilters): Promise<PaginatedResponseDto<AuditEventResponseDto>> {
     const tenantId = this.tenantContext.getTenantId();
     const qb = this.events
       .createQueryBuilder('e')
-      .where('e.tenant_id = :tenantId OR e.tenant_id IS NULL', { tenantId })
+      // Parenthesised on purpose: TypeORM concatenates andWhere() with a bare
+      // AND, so without the brackets every filter below would bind only to
+      // the IS NULL branch and tenant-scoped rows would come back unfiltered.
+      .where('(e.tenant_id = :tenantId OR e.tenant_id IS NULL)', { tenantId })
       .orderBy('e.created_at', 'DESC');
-    if (filters.resourceType) qb.andWhere('e.resource_type = :rt', { rt: filters.resourceType });
+    // Free-text inputs from the admin UI: case-insensitive, and `action` is a
+    // prefix so "auth" finds auth.login / auth.logout / ...
+    if (filters.resourceType) {
+      qb.andWhere('e.resource_type ILIKE :rt', { rt: filters.resourceType });
+    }
     if (filters.resourceId) qb.andWhere('e.resource_id = :rid', { rid: filters.resourceId });
     if (filters.actorUserId) qb.andWhere('e.actor_user_id = :aid', { aid: filters.actorUserId });
-    if (filters.action) qb.andWhere('e.action = :action', { action: filters.action });
+    if (filters.action) {
+      qb.andWhere('e.action ILIKE :action', { action: `${escapeLike(filters.action)}%` });
+    }
     if (filters.from) qb.andWhere('e.created_at >= :from', { from: filters.from });
     if (filters.to) qb.andWhere('e.created_at <= :to', { to: filters.to });
 
