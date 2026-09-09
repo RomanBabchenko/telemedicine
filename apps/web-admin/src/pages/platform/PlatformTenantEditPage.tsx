@@ -81,6 +81,11 @@ export const PlatformTenantEditPage = () => {
     doctorEnabled: true,
     patientEnabled: true,
   });
+  // audioPolicy: missing `enabled` = OFF (auto-recording is opt-in).
+  const [audioPolicy, setAudioPolicy] = useState<{ enabled: boolean; retentionDays: number }>({
+    enabled: false,
+    retentionDays: 30,
+  });
 
   useEffect(() => {
     const t = tenantQ.data;
@@ -95,6 +100,10 @@ export const PlatformTenantEditPage = () => {
         patientEnabled: t.loginPolicy?.patientEnabled !== false,
         // Inverse default to the two above: missing = NOT required.
         requireSubdomain: t.loginPolicy?.requireSubdomain === true,
+      });
+      setAudioPolicy({
+        enabled: t.audioPolicy?.enabled === true,
+        retentionDays: t.audioPolicy?.retentionDays ?? 30,
       });
     }
   }, [tenantQ.data]);
@@ -126,8 +135,11 @@ export const PlatformTenantEditPage = () => {
       locale,
       features: features ?? undefined,
       loginPolicy,
+      audioPolicy,
     });
   };
+
+  const audioArchiveOn = features?.audioArchive === true;
 
   return (
     <div className="space-y-6">
@@ -226,6 +238,49 @@ export const PlatformTenantEditPage = () => {
               </span>
             </span>
           </label>
+        </div>
+      </Card>
+
+      <Card>
+        <h3 className="mb-1 font-semibold">Аудіозапис консультацій</h3>
+        <p className="mb-3 text-sm text-slate-500">
+          Запис стартує автоматично, коли лікар і пацієнт обидва в кімнаті. Працює лише
+          разом із модулем «Аудіоархів консультацій». Клініка може змінювати ці
+          налаштування самостійно.
+        </p>
+        <div className="space-y-3">
+          <label className="flex w-fit items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={audioPolicy.enabled}
+              onChange={(e) =>
+                setAudioPolicy((prev) => ({ ...prev, enabled: e.target.checked }))
+              }
+            />
+            <span>
+              Записувати аудіо консультацій
+              {!audioArchiveOn ? (
+                <span className="block text-xs text-amber-700">
+                  Модуль «Аудіоархів консультацій» вимкнено — запис не стартуватиме.
+                </span>
+              ) : null}
+            </span>
+          </label>
+          <FormField label="Зберігати записи, днів" htmlFor="audio-retention">
+            <Input
+              id="audio-retention"
+              type="number"
+              min={1}
+              className="max-w-[10rem]"
+              value={audioPolicy.retentionDays}
+              onChange={(e) =>
+                setAudioPolicy((prev) => ({
+                  ...prev,
+                  retentionDays: Math.max(1, Number(e.target.value) || 1),
+                }))
+              }
+            />
+          </FormField>
         </div>
       </Card>
 

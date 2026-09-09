@@ -15,6 +15,7 @@ import { RecordingEgress } from '../domain/entities/recording-egress.entity';
 import { ConsultationSession } from '../../consultation/domain/entities/consultation-session.entity';
 import { Consent } from '../../patient/domain/entities/consent.entity';
 import { Tenant } from '../../tenant/domain/entities/tenant.entity';
+import { TenantService } from '../../tenant/application/tenant.service';
 import { LiveKitClientService } from '../../../infrastructure/livekit/livekit-client.service';
 import { MinioService } from '../../../infrastructure/minio/minio.service';
 import { TenantContextService } from '../../../common/tenant/tenant-context.service';
@@ -50,14 +51,35 @@ export class RecordingService {
     private readonly minio: MinioService,
     private readonly tenantContext: TenantContextService,
     @InjectQueue(RECORDING_MERGE_QUEUE) private readonly mergeQueue: Queue<MergeJobData>,
+    private readonly tenantService: TenantService,
   ) {}
+
+  /**
+   * Recording is a two-key switch: the platform enables the `audioArchive`
+   * module for the clinic, and the clinic itself opts in via
+   * `audioPolicy.enabled`. Returns the reason when either key is off.
+   */
+  private recordingDisabledReason(tenant: Tenant): string | null {
+    if (!this.tenantService.hasFeature(tenant, 'audioArchive')) {
+      return 'audioArchive module is disabled';
+    }
+    if (tenant.audioPolicy?.enabled !== true) {
+      return 'audioPolicy.enabled is off';
+    }
+    return null;
+  }
+
+  private retentionUntilFor(tenant: Tenant): Date {
+    const retentionDays = tenant.audioPolicy?.retentionDays ?? 30;
+    return new Date(Date.now() + retentionDays * 86400_000);
+  }
 
   async start(sessionId: string, consentId: string): Promise<SessionRecording> {
     const tenantId = this.tenantContext.getTenantId();
 
     const tenant = await this.tenants.findOne({ where: { id: tenantId } });
     if (!tenant) throw new NotFoundException('Tenant not found');
-    if (!tenant.audioPolicy?.enabled) {
+    if (this.recordingDisabledReason(tenant)) {
       throw new ForbiddenException('Audio recording is disabled for this tenant');
     }
 
@@ -73,14 +95,11 @@ export class RecordingService {
     const session = await this.sessions.findOne({ where: { id: sessionId, tenantId } });
     if (!session) throw new NotFoundException('Session not found');
 
-    const retentionDays = tenant.audioPolicy?.retentionDays ?? 30;
-    const retentionUntil = new Date(Date.now() + retentionDays * 86400_000);
-
     const saved = await this.createRecordingRow(
       tenantId,
       session,
       consent.id,
-      retentionUntil,
+      this.retentionUntilFor(tenant),
     );
     await this.startTrackEgressesForRecording(saved, session.livekitRoomName);
     return saved;
@@ -88,10 +107,20 @@ export class RecordingService {
 
   /**
    * Auto-start recording when a session becomes ACTIVE.
-   * Skips consent and audioPolicy checks — used for automatic recording.
+   * Skips the consent check (that's the manual `start` path), but respects
+   * the tenant's `audioArchive` module and `audioPolicy.enabled` — returns
+   * null without side effects when recording is switched off for the clinic.
    */
-  async startAuto(sessionId: string): Promise<SessionRecording> {
+  async startAuto(sessionId: string): Promise<SessionRecording | null> {
     const tenantId = this.tenantContext.getTenantId();
+
+    const tenant = await this.tenants.findOne({ where: { id: tenantId } });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+    const disabledReason = this.recordingDisabledReason(tenant);
+    if (disabledReason) {
+      this.logger.log(`Auto-recording skipped for session ${sessionId}: ${disabledReason}`);
+      return null;
+    }
 
     const session = await this.sessions.findOne({ where: { id: sessionId, tenantId } });
     if (!session) throw new NotFoundException('Session not found');
@@ -107,8 +136,12 @@ export class RecordingService {
       return existing;
     }
 
-    const retentionUntil = new Date(Date.now() + 30 * 86400_000);
-    const saved = await this.createRecordingRow(tenantId, session, null, retentionUntil);
+    const saved = await this.createRecordingRow(
+      tenantId,
+      session,
+      null,
+      this.retentionUntilFor(tenant),
+    );
     await this.startTrackEgressesForRecording(saved, session.livekitRoomName);
     this.logger.log(`Auto-recording started for session ${sessionId}`);
     return saved;

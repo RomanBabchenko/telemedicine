@@ -1,3 +1,4 @@
+import { ForbiddenException } from '@nestjs/common';
 import { QueryFailedError } from 'typeorm';
 import { RecordingService } from '../application/recording.service';
 import type { RecordingEgress } from '../domain/entities/recording-egress.entity';
@@ -77,6 +78,8 @@ function makeEgressesRepo(state: FakeEgressesState) {
 function makeService(opts?: {
   listAudioTracks?: () => Promise<Array<{ identity: string; trackSid: string }>>;
   startEgress?: jest.Mock;
+  audioArchive?: boolean;
+  audioPolicy?: { enabled?: boolean; retentionDays?: number };
 }) {
   const recordingsState: FakeRecordingsState = { rows: new Map() };
   const egressesState: FakeEgressesState = { rows: new Map() };
@@ -94,7 +97,19 @@ function makeService(opts?: {
     save: jest.fn(async (s: typeof session) => s),
   };
   const consents = { findOne: jest.fn() };
-  const tenants = { findOne: jest.fn() };
+  const tenant = {
+    id: 't-1',
+    featureMatrix: { audioArchive: opts?.audioArchive ?? true },
+    audioPolicy: opts?.audioPolicy ?? { enabled: true, retentionDays: 30 },
+  };
+  const tenants = { findOne: jest.fn(async () => tenant) };
+  // Mirrors TenantService.hasFeature without the DEFAULT_FEATURE_MATRIX
+  // fallback — the fake matrix always carries an explicit audioArchive.
+  const tenantService = {
+    hasFeature: jest.fn(
+      (t: typeof tenant, f: string) => t.featureMatrix[f as 'audioArchive'] === true,
+    ),
+  };
   const livekit = {
     listAudioTracks: jest.fn(opts?.listAudioTracks ?? (async () => [])),
     startAudioTrackEgress:
@@ -115,6 +130,7 @@ function makeService(opts?: {
     minio as never,
     tenantContext as never,
     queue as never,
+    tenantService as never,
   );
 
   return {
@@ -132,6 +148,51 @@ function makeService(opts?: {
 }
 
 describe('RecordingService', () => {
+  describe('startAuto gating (audioArchive module x audioPolicy.enabled)', () => {
+    it.each([
+      [false, false],
+      [false, true],
+      [true, false],
+    ])('audioArchive=%s, enabled=%s -> skips without side effects', async (archive, enabled) => {
+      const ctx = makeService({ audioArchive: archive, audioPolicy: { enabled } });
+      const r = await ctx.svc.startAuto('sess-1');
+      expect(r).toBeNull();
+      expect(ctx.recordingsState.rows.size).toBe(0);
+      expect(ctx.livekit.startAudioTrackEgress).not.toHaveBeenCalled();
+      expect(ctx.livekit.listAudioTracks).not.toHaveBeenCalled();
+    });
+
+    it('audioArchive=true, enabled=true -> records', async () => {
+      const ctx = makeService({ audioArchive: true, audioPolicy: { enabled: true } });
+      const r = await ctx.svc.startAuto('sess-1');
+      expect(r).not.toBeNull();
+      expect(ctx.recordingsState.rows.size).toBe(1);
+    });
+
+    it('a missing audioPolicy.enabled key means off', async () => {
+      const ctx = makeService({ audioPolicy: {} });
+      expect(await ctx.svc.startAuto('sess-1')).toBeNull();
+    });
+
+    it('takes retentionDays from the tenant audio policy', async () => {
+      const ctx = makeService({ audioPolicy: { enabled: true, retentionDays: 7 } });
+      const before = Date.now();
+      const r = await ctx.svc.startAuto('sess-1');
+      const expected = before + 7 * 86400_000;
+      expect(r!.retentionUntil!.getTime()).toBeGreaterThanOrEqual(expected);
+      expect(r!.retentionUntil!.getTime()).toBeLessThan(expected + 5_000);
+    });
+  });
+
+  describe('start (manual) gating', () => {
+    it('rejects when the audioArchive module is off even if the policy is on', async () => {
+      const ctx = makeService({ audioArchive: false, audioPolicy: { enabled: true } });
+      await expect(ctx.svc.start('sess-1', 'consent-1')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+    });
+  });
+
   describe('startAuto', () => {
     it('creates a recording row and one egress per published audio track', async () => {
       const ctx = makeService({
@@ -143,13 +204,13 @@ describe('RecordingService', () => {
 
       const recording = await ctx.svc.startAuto('sess-1');
 
-      expect(recording.status).toBe('RECORDING');
+      expect(recording!.status).toBe('RECORDING');
       expect(ctx.livekit.startAudioTrackEgress).toHaveBeenCalledTimes(2);
       expect(ctx.egressesState.rows.size).toBe(2);
       const trackSids = [...ctx.egressesState.rows.values()].map((e) => e.trackSid).sort();
       expect(trackSids).toEqual(['TR_doctor', 'TR_patient']);
       // session row got linked
-      expect(ctx.session.recordingId).toBe(recording.id);
+      expect(ctx.session.recordingId).toBe(recording!.id);
     });
 
     it('is idempotent: second call returns the same recording and re-runs catch-up', async () => {
@@ -166,7 +227,7 @@ describe('RecordingService', () => {
       ];
       const r2 = await ctx.svc.startAuto('sess-1');
 
-      expect(r1.id).toBe(r2.id);
+      expect(r1!.id).toBe(r2!.id);
       // doctor egress not duplicated, patient egress added
       expect(ctx.egressesState.rows.size).toBe(2);
     });

@@ -195,7 +195,7 @@ export class ConsultationService {
       } catch {
         // already in progress
       }
-      // Auto-start audio recording.
+      // Auto-start audio recording (no-op when the clinic has it switched off).
       // NB: startAuto loads its own copy of `session` and writes
       // session.recordingId itself. We must sync that value back into THIS
       // function's `session` object — otherwise the `sessions.save(session)`
@@ -204,7 +204,7 @@ export class ConsultationService {
       // later sees session.recordingId=null and skips starting his egress.
       try {
         const recording = await this.recording.startAuto(session.id);
-        session.recordingId = recording.id;
+        if (recording) session.recordingId = recording.id;
       } catch (e) {
         this.logger.warn(`Auto-recording failed for session ${session.id}: ${(e as Error).message}`);
       }

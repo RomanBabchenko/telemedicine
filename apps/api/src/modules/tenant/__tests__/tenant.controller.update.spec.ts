@@ -41,7 +41,6 @@ describe('PATCH /admin/tenants/:id — INTEGRATION_ADMIN is branding-only', () =
   });
 
   it.each([
-    ['features', { features: { misSync: false } }],
     ['audioPolicy', { audioPolicy: { enabled: false } }],
     ['invitePolicy', { invitePolicy: { bindIp: true } }],
     ['loginPolicy', { loginPolicy: { doctorEnabled: false } }],
@@ -53,20 +52,48 @@ describe('PATCH /admin/tenants/:id — INTEGRATION_ADMIN is branding-only', () =
     expect(service.update).not.toHaveBeenCalled();
   });
 
-  it('CLINIC_ADMIN may toggle features', async () => {
+  it('CLINIC_ADMIN may change policies of their own tenant', async () => {
     const { ctrl, service } = build();
-    await ctrl.update(TENANT, { features: { misSync: true } } as never, actor([Role.CLINIC_ADMIN]));
-    expect(service.update).toHaveBeenCalled();
+    await ctrl.update(
+      TENANT,
+      { audioPolicy: { enabled: false, retentionDays: 14 } } as never,
+      actor([Role.CLINIC_ADMIN]),
+    );
+    expect(service.update).toHaveBeenCalledWith(
+      TENANT,
+      expect.objectContaining({ audioPolicy: { enabled: false, retentionDays: 14 } }),
+    );
   });
 
   it('an actor holding both INTEGRATION_ADMIN and CLINIC_ADMIN behaves as CLINIC_ADMIN', async () => {
     const { ctrl, service } = build();
     await ctrl.update(
       TENANT,
-      { features: { misSync: true } } as never,
+      { loginPolicy: { doctorEnabled: false } } as never,
       actor([Role.INTEGRATION_ADMIN, Role.CLINIC_ADMIN]),
     );
     expect(service.update).toHaveBeenCalled();
+  });
+
+  it('CLINIC_ADMIN cannot change the module matrix (platform-only)', async () => {
+    const { ctrl, service } = build();
+    await expect(
+      ctrl.update(TENANT, { features: { audioArchive: true } } as never, actor([Role.CLINIC_ADMIN])),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(service.update).not.toHaveBeenCalled();
+  });
+
+  it('PLATFORM_SUPER_ADMIN may change the module matrix of any tenant', async () => {
+    const { ctrl, service } = build();
+    await ctrl.update(
+      TENANT,
+      { features: { audioArchive: false } } as never,
+      actor([Role.PLATFORM_SUPER_ADMIN], 't-platform'),
+    );
+    expect(service.update).toHaveBeenCalledWith(
+      TENANT,
+      expect.objectContaining({ features: { audioArchive: false } }),
+    );
   });
 
   it('INTEGRATION_ADMIN cannot touch a foreign tenant even for branding', async () => {
