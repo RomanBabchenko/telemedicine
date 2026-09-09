@@ -66,6 +66,14 @@ resource "aws_instance" "app" {
   # Force re-bootstrap if the script changes (helpful while iterating).
   user_data_replace_on_change = true
 
+  # The AMI data source resolves to the latest Ubuntu image, so without this
+  # any apply after a new AMI release would destroy the instance (and its
+  # postgres/minio data) as a side effect. Remove the ignore only when an OS
+  # image refresh is actually intended.
+  lifecycle {
+    ignore_changes = [ami]
+  }
+
   tags = {
     Name = "telemed-demo"
   }

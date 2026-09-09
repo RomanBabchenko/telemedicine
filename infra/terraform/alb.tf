@@ -79,16 +79,21 @@ resource "aws_lb_listener" "https" {
   }
 }
 
-# Admin IP allowlist. Two rules layered on top of the default forward:
-#   - priority 100: host=admin AND source-ip IN allowed → forward to TG
-#   - priority 110: host=admin (anything else)          → 403
-# Both `count` on length(admin_allowed_cidrs); an empty list keeps the
-# legacy behaviour where admin is reachable from any IP. Source-IP is
+# Admin IP allowlist. Allow rules layered on top of the default forward:
+#   - priority 100+n: host=admin AND source-ip IN allowed → forward to TG
+#   - priority 500:   host=admin (anything else)          → 403
+# An ALB rule allows at most 5 condition values total; 2 are taken by the
+# host_header pair, so CIDRs are chunked 3 per rule. An empty list keeps
+# the legacy behaviour where admin is reachable from any IP. Source-IP is
 # the real client IP — ALB sees it directly since it terminates TLS.
+locals {
+  admin_cidr_chunks = chunklist(var.admin_allowed_cidrs, 3)
+}
+
 resource "aws_lb_listener_rule" "admin_allow" {
-  count        = length(var.admin_allowed_cidrs) > 0 ? 1 : 0
+  count        = length(local.admin_cidr_chunks)
   listener_arn = aws_lb_listener.https.arn
-  priority     = 100
+  priority     = 100 + count.index
 
   action {
     type             = "forward"
@@ -103,7 +108,7 @@ resource "aws_lb_listener_rule" "admin_allow" {
 
   condition {
     source_ip {
-      values = var.admin_allowed_cidrs
+      values = local.admin_cidr_chunks[count.index]
     }
   }
 }
@@ -111,7 +116,9 @@ resource "aws_lb_listener_rule" "admin_allow" {
 resource "aws_lb_listener_rule" "admin_deny" {
   count        = length(var.admin_allowed_cidrs) > 0 ? 1 : 0
   listener_arn = aws_lb_listener.https.arn
-  priority     = 110
+  # Well below the allow chunks (100+n) so the allowlist can grow to
+  # 400 chunks (~1200 CIDRs) before priorities would collide.
+  priority     = 500
 
   action {
     type = "fixed-response"
