@@ -20,6 +20,11 @@ export class Tenant extends BaseEntity {
   @Column({ name: 'logo_url', type: 'text', nullable: true })
   logoUrl!: string | null;
 
+  // Clinic's public website — target of «Повернутися на сайт клініки» on the
+  // patient's post-call screen. Null hides the button.
+  @Column({ name: 'website_url', type: 'text', nullable: true })
+  websiteUrl!: string | null;
+
   @Column({ type: 'varchar', length: 8, default: 'uk' })
   locale!: string;
 

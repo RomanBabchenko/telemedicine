@@ -1,5 +1,6 @@
 import type { AppointmentSource } from './enums';
 import { AppointmentStatus, ServiceMode, SlotStatus } from './enums';
+import type { AppointmentFeedbackSummary, FeedbackResolved } from './feedback';
 
 // Admin-UI labels for AppointmentDto.source.
 export const APPOINTMENT_SOURCE_LABELS: Record<AppointmentSource, string> = {
@@ -27,13 +28,28 @@ export interface SlotDto {
   sourceIsMis: boolean;
 }
 
-export type AppointmentListSort = 'startAt' | 'patient' | 'doctor' | 'status' | 'source';
+export type AppointmentListSort =
+  | 'startAt'
+  | 'patient'
+  | 'doctor'
+  | 'status'
+  | 'source'
+  // Patient clarity rating (unrated rows sort last in both directions).
+  | 'rating';
 
 // Admin list (GET /appointments/admin/list) — server-side paging + filters.
 export interface AppointmentListQuery {
   search?: string;
   status?: AppointmentStatus;
   source?: AppointmentSource;
+  // Patient feedback filters (admin list only).
+  //   feedback: 'rated' — only appointments with a submitted feedback;
+  //             'unrated' — only those without one.
+  //   clarityRating: exact star value 1..5.
+  //   resolved: answer to «Чи вирішено ваше питання?».
+  feedback?: 'rated' | 'unrated';
+  clarityRating?: number;
+  resolved?: FeedbackResolved;
   sort?: AppointmentListSort;
   order?: 'asc' | 'desc';
   page?: number;
@@ -105,6 +121,10 @@ export interface AppointmentDto {
   // a bare appointment row.
   patient?: AppointmentPatientSummary;
   doctor?: AppointmentDoctorSummary;
+  // Patient's post-consultation feedback. Populated ONLY by the admin list
+  // endpoint (GET /appointments/admin/list) — never by the role-aware list
+  // or GET /appointments/:id, so doctors and patients never see it.
+  feedback?: AppointmentFeedbackSummary;
 }
 
 // Response of the admin invite reissue endpoint

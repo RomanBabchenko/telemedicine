@@ -9,6 +9,7 @@ import { AppointmentParticipant } from './domain/entities/appointment-participan
 import { Patient } from '../patient/domain/entities/patient.entity';
 import { AvailabilityService } from './application/availability.service';
 import { SessionRecording } from '../recording/domain/entities/session-recording.entity';
+import { AppointmentFeedback } from '../feedback/domain/entities/appointment-feedback.entity';
 import { AppointmentService } from './application/appointment.service';
 import { SlotHoldService } from './application/slot-hold.service';
 import { APPOINTMENT_EVENT_HANDLERS } from './events/appointment.listeners';
@@ -28,6 +29,8 @@ import { BookingController } from './api/booking.controller';
       Patient,
       // Read-only: the list endpoint marks rows whose recording is STORED.
       SessionRecording,
+      // Read-only: the admin list joins/decorates rows with patient feedback.
+      AppointmentFeedback,
     ]),
   ],
   providers: [

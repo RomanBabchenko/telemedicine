@@ -6,6 +6,8 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUrl,
+  MaxLength,
   Min,
   Validate,
   ValidateNested,
@@ -96,6 +98,18 @@ export class UpdateTenantBodyDto implements UpdateTenantDto {
   @IsOptional()
   @IsString()
   logoUrl?: string | null;
+
+  // Branding field (INTEGRATION_ADMIN may set it too). null clears.
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: 'https://clinic.example',
+    description: 'Clinic website for the patient post-call «Повернутися на сайт клініки» button',
+  })
+  @IsOptional()
+  @IsUrl({ require_protocol: true, protocols: ['http', 'https'] })
+  @MaxLength(512)
+  websiteUrl?: string | null;
 
   @ApiPropertyOptional({ example: 'uk' })
   @IsOptional()

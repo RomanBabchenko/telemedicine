@@ -8,8 +8,13 @@ import {
   AppointmentListSort,
   AppointmentSource,
   AppointmentStatus,
+  CLARITY_RATING_LABELS,
+  CLARITY_RATING_VALUES,
+  FEEDBACK_RESOLVED_LABELS,
+  FEEDBACK_RESOLVED_VALUES,
   isMisScopedActor,
 } from '@telemed/shared-types';
+import type { ClarityRating, FeedbackResolved } from '@telemed/shared-types';
 import {
   Badge,
   EmptyState,
@@ -48,6 +53,42 @@ const SOURCE_OPTIONS: Array<{ value: '' | AppointmentSource; label: string }> = 
   })),
 ];
 
+// «Оцінка» filter: '' = all, 'rated'/'unrated' = presence, '1'..'5' = exact stars.
+type RatingFilter = '' | 'rated' | 'unrated' | `${ClarityRating}`;
+const RATING_OPTIONS: Array<{ value: RatingFilter; label: string }> = [
+  { value: '', label: 'Усі оцінки' },
+  { value: 'unrated', label: 'Без оцінки' },
+  { value: 'rated', label: 'З оцінкою' },
+  ...CLARITY_RATING_VALUES.map((n) => ({
+    value: `${n}` as RatingFilter,
+    label: `${n} ★ — ${CLARITY_RATING_LABELS[n]}`,
+  })),
+];
+
+const RESOLVED_OPTIONS: Array<{ value: '' | FeedbackResolved; label: string }> = [
+  { value: '', label: 'Усі' },
+  ...FEEDBACK_RESOLVED_VALUES.map((v) => ({ value: v, label: FEEDBACK_RESOLVED_LABELS[v] })),
+];
+
+const RESOLVED_BADGE: Record<FeedbackResolved, 'success' | 'warning' | 'danger'> = {
+  YES: 'success',
+  PARTIALLY: 'warning',
+  NO: 'danger',
+};
+
+const isStar = (v: RatingFilter): v is `${ClarityRating}` => /^[1-5]$/.test(v);
+
+const Stars = ({ value }: { value: number }) => (
+  <span
+    className="whitespace-nowrap text-amber-500"
+    title={CLARITY_RATING_LABELS[value as ClarityRating] ?? `${value} з 5`}
+    aria-label={`${value} з 5`}
+  >
+    {'★'.repeat(value)}
+    <span className="text-slate-300">{'☆'.repeat(Math.max(0, 5 - value))}</span>
+  </span>
+);
+
 const fullName = (first?: string, last?: string): string => {
   const value = `${first ?? ''} ${last ?? ''}`.trim();
   return value || '—';
@@ -61,6 +102,8 @@ export const AppointmentsPage = () => {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<'' | AppointmentStatus>('');
   const [source, setSource] = useState<'' | AppointmentSource>('');
+  const [ratingFilter, setRatingFilter] = useState<RatingFilter>('');
+  const [resolved, setResolved] = useState<'' | FeedbackResolved>('');
   const [sort, setSort] = useState<AppointmentListSort>('startAt');
   const [order, setOrder] = useState<SortDirection>('desc');
   const [page, setPage] = useState(1);
@@ -73,7 +116,7 @@ export const AppointmentsPage = () => {
   // Filter changes restart pagination from the first page.
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, status, source, sort, order]);
+  }, [debouncedSearch, status, source, ratingFilter, resolved, sort, order]);
 
   const query: AppointmentListQuery = {
     page,
@@ -81,15 +124,29 @@ export const AppointmentsPage = () => {
     search: debouncedSearch.trim() || undefined,
     status: status || undefined,
     source: source || undefined,
+    feedback: ratingFilter === 'rated' || ratingFilter === 'unrated' ? ratingFilter : undefined,
+    clarityRating: isStar(ratingFilter) ? Number(ratingFilter) : undefined,
+    resolved: resolved || undefined,
     sort,
     order,
   };
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, error } = useQuery({
     queryKey: ['admin-appointments', query],
     queryFn: () => booking.adminList(query),
     placeholderData: (prev) => prev,
   });
+
+  // Deploy window: a fresh admin bundle against an API that doesn't know
+  // `sort=rating` yet answers 400 — fall back to the default sort instead of
+  // leaving the table empty.
+  useEffect(() => {
+    const httpStatus = (error as { response?: { status?: number } } | null)?.response?.status;
+    if (httpStatus === 400 && sort === 'rating') {
+      setSort('startAt');
+      setOrder('desc');
+    }
+  }, [error, sort]);
 
   const toggleSort = (field: AppointmentListSort) => {
     if (sort === field) {
@@ -102,14 +159,14 @@ export const AppointmentsPage = () => {
   const sortActive = (field: AppointmentListSort): SortDirection | null =>
     sort === field ? order : null;
 
-  const hasFilters = !!(debouncedSearch.trim() || status || source);
+  const hasFilters = !!(debouncedSearch.trim() || status || source || ratingFilter || resolved);
   const items = data?.items ?? [];
 
   return (
     <div className="space-y-6">
       <PageHeader title="Прийоми клініки" />
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <FormField label="Пошук">
           <Input
             value={search}
@@ -137,6 +194,33 @@ export const AppointmentsPage = () => {
             onChange={(e) => setStatus(e.target.value as '' | AppointmentStatus)}
           >
             {STATUS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
+        </FormField>
+        {/* Feedback filters are always shown (not tied to the patientFeedback
+         * module): answers collected earlier stay reachable even after a
+         * clinic switches the survey off. */}
+        <FormField label="Оцінка">
+          <Select
+            value={ratingFilter}
+            onChange={(e) => setRatingFilter(e.target.value as RatingFilter)}
+          >
+            {RATING_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
+        </FormField>
+        <FormField label="Питання вирішено">
+          <Select
+            value={resolved}
+            onChange={(e) => setResolved(e.target.value as '' | FeedbackResolved)}
+          >
+            {RESOLVED_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
@@ -173,6 +257,9 @@ export const AppointmentsPage = () => {
                 <SortableTH active={sortActive('source')} onSort={() => toggleSort('source')}>
                   Джерело
                 </SortableTH>
+                <SortableTH active={sortActive('rating')} onSort={() => toggleSort('rating')}>
+                  Оцінка
+                </SortableTH>
                 <TH>Запис</TH>
               </TR>
             </THead>
@@ -195,6 +282,18 @@ export const AppointmentsPage = () => {
                     <Badge variant={a.source === 'MIS' ? 'warning' : 'default'}>
                       {APPOINTMENT_SOURCE_LABELS[a.source] ?? a.source}
                     </Badge>
+                  </TD>
+                  <TD>
+                    {a.feedback ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Stars value={a.feedback.clarityRating} />
+                        <Badge variant={RESOLVED_BADGE[a.feedback.resolved]}>
+                          {FEEDBACK_RESOLVED_LABELS[a.feedback.resolved]}
+                        </Badge>
+                      </span>
+                    ) : (
+                      '—'
+                    )}
                   </TD>
                   {/* Full player lives in the details modal; the icon means a
                    * merged recording is actually stored and downloadable. */}

@@ -1,8 +1,12 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsEnum, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
-import { AppointmentSource, AppointmentStatus } from '@telemed/shared-types';
-import type { AppointmentListQuery, AppointmentListSort } from '@telemed/shared-types';
+import { AppointmentSource, AppointmentStatus, FEEDBACK_RESOLVED_VALUES } from '@telemed/shared-types';
+import type {
+  AppointmentListQuery,
+  AppointmentListSort,
+  FeedbackResolved,
+} from '@telemed/shared-types';
 
 export const APPOINTMENT_LIST_SORTS: AppointmentListSort[] = [
   'startAt',
@@ -10,6 +14,7 @@ export const APPOINTMENT_LIST_SORTS: AppointmentListSort[] = [
   'doctor',
   'status',
   'source',
+  'rating',
 ];
 
 export class ListAppointmentsQueryDto implements AppointmentListQuery {
@@ -33,6 +38,30 @@ export class ListAppointmentsQueryDto implements AppointmentListQuery {
   @IsOptional()
   @IsEnum(AppointmentSource)
   source?: AppointmentSource;
+
+  @ApiPropertyOptional({
+    enum: ['rated', 'unrated'],
+    description: 'rated — only appointments with patient feedback; unrated — only those without',
+  })
+  @IsOptional()
+  @IsIn(['rated', 'unrated'])
+  feedback?: 'rated' | 'unrated';
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 5, description: 'Exact clarity star value' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  clarityRating?: number;
+
+  @ApiPropertyOptional({
+    enum: FEEDBACK_RESOLVED_VALUES,
+    description: 'Answer to «Чи вирішено ваше питання?»',
+  })
+  @IsOptional()
+  @IsIn(FEEDBACK_RESOLVED_VALUES)
+  resolved?: FeedbackResolved;
 
   @ApiPropertyOptional({ enum: APPOINTMENT_LIST_SORTS, default: 'startAt' })
   @IsOptional()

@@ -14,6 +14,7 @@ export interface UpdateTenantInput {
   brandName?: string;
   primaryColor?: string;
   logoUrl?: string | null;
+  websiteUrl?: string | null;
   locale?: string;
   features?: Record<string, boolean>;
   audioPolicy?: { enabled?: boolean; retentionDays?: number; consentRequired?: boolean };
@@ -120,6 +121,7 @@ export class TenantService {
     if (input.brandName !== undefined) tenant.brandName = input.brandName;
     if (input.primaryColor !== undefined) tenant.primaryColor = input.primaryColor;
     if (input.logoUrl !== undefined) tenant.logoUrl = input.logoUrl;
+    if (input.websiteUrl !== undefined) tenant.websiteUrl = input.websiteUrl;
     if (input.locale !== undefined) tenant.locale = input.locale;
     if (input.features) {
       tenant.featureMatrix = { ...tenant.featureMatrix, ...input.features };

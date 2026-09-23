@@ -15,14 +15,16 @@ const build = () => {
     cancel: jest.fn(),
   };
   const recordings = { find: jest.fn().mockResolvedValue([]) };
+  const feedbacks = { find: jest.fn().mockResolvedValue([]) };
   const ctrl = new BookingController(
     {} as never,
     appointments as never,
     {} as never,
     {} as never,
     recordings as never,
+    feedbacks as never,
   );
-  return { ctrl, appointments };
+  return { ctrl, appointments, feedbacks };
 };
 
 describe('BookingController — MIS scoping for INTEGRATION_ADMIN', () => {
@@ -53,6 +55,51 @@ describe('BookingController — MIS scoping for INTEGRATION_ADMIN', () => {
       expect(appointments.listPaged).toHaveBeenCalledWith(
         expect.objectContaining({ source: AppointmentSource.MIS }),
       );
+    });
+
+    it('forwards the patient-feedback filters to listPaged', async () => {
+      const { ctrl, appointments } = build();
+      await ctrl.adminList(
+        { feedback: 'rated', clarityRating: 2, resolved: 'NO', sort: 'rating', order: 'asc' },
+        actor([Role.CLINIC_ADMIN]),
+      );
+      expect(appointments.listPaged).toHaveBeenCalledWith(
+        expect.objectContaining({
+          feedback: 'rated',
+          clarityRating: 2,
+          resolved: 'NO',
+          sort: 'rating',
+          order: 'asc',
+        }),
+      );
+    });
+
+    it('decorates rows with the feedback summary from one batched lookup', async () => {
+      const { ctrl, appointments, feedbacks } = build();
+      appointments.listPaged.mockResolvedValueOnce({
+        items: [
+          { id: 'a-1', consultationSessionId: null },
+          { id: 'a-2', consultationSessionId: null },
+        ],
+        total: 2,
+      });
+      feedbacks.find.mockResolvedValueOnce([
+        {
+          appointmentId: 'a-2',
+          resolved: 'YES',
+          clarityRating: 5,
+          submittedAt: new Date('2026-09-22T10:00:00Z'),
+          submittedByUserId: 'u-secret',
+        },
+      ]);
+      const res = await ctrl.adminList({}, actor([Role.CHIEF_MEDICAL_OFFICER]));
+      expect(feedbacks.find).toHaveBeenCalledTimes(1);
+      expect(res.items[0]).not.toHaveProperty('feedback');
+      expect(res.items[1].feedback).toEqual({
+        resolved: 'YES',
+        clarityRating: 5,
+        submittedAt: '2026-09-22T10:00:00.000Z',
+      });
     });
 
     it('CLINIC_ADMIN keeps the requested source filter and gets a page envelope', async () => {

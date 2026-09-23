@@ -57,6 +57,9 @@ export class TenantResponseDto {
   @ApiProperty({ type: String, nullable: true })
   logoUrl!: string | null;
 
+  @ApiProperty({ type: String, nullable: true })
+  websiteUrl!: string | null;
+
   @ApiProperty({ example: 'uk' })
   locale!: string;
 

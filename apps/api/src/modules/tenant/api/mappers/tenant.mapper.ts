@@ -19,6 +19,7 @@ export const toTenantResponse = (t: Tenant): TenantResponseDto => ({
   subdomain: t.subdomain,
   primaryColor: t.primaryColor,
   logoUrl: t.logoUrl,
+  websiteUrl: t.websiteUrl ?? null,
   locale: t.locale,
   currency: t.currency,
   features: t.featureMatrix,

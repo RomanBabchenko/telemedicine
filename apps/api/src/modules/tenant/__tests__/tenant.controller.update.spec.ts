@@ -40,6 +40,25 @@ describe('PATCH /admin/tenants/:id — INTEGRATION_ADMIN is branding-only', () =
     expect(service.update).toHaveBeenCalledWith(TENANT, expect.objectContaining({ brandName: 'New' }));
   });
 
+  it('INTEGRATION_ADMIN may set the clinic website (branding field)', async () => {
+    const { ctrl, service } = build();
+    await ctrl.update(
+      TENANT,
+      { websiteUrl: 'https://clinic.example' } as never,
+      actor([Role.INTEGRATION_ADMIN]),
+    );
+    expect(service.update).toHaveBeenCalledWith(
+      TENANT,
+      expect.objectContaining({ websiteUrl: 'https://clinic.example' }),
+    );
+  });
+
+  it('response carries websiteUrl (null when the column is empty)', async () => {
+    const { ctrl } = build();
+    const dto = await ctrl.update(TENANT, { brandName: 'x' } as never, actor([Role.CLINIC_ADMIN]));
+    expect(dto).toMatchObject({ websiteUrl: null });
+  });
+
   it.each([
     ['audioPolicy', { audioPolicy: { enabled: false } }],
     ['invitePolicy', { invitePolicy: { bindIp: true } }],

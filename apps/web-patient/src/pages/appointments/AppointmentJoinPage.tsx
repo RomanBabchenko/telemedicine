@@ -14,11 +14,13 @@ import {
 import { DisconnectReason, Track, VideoPreset } from 'livekit-client';
 import dayjs from 'dayjs';
 import { bookingApi, consultationApi } from '@telemed/api-client';
-import { AppointmentStatus } from '@telemed/shared-types';
+import { AppointmentStatus, ConsultationStatus } from '@telemed/shared-types';
 import { Alert, Button, Card, PageHeader, Spinner } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
 import { CallControls } from '@telemed/web-shared';
 import { LobbyDeviceState, LobbyPreview } from './LobbyPreview';
+import { useTenant } from '../../hooks/useTenant';
+import { PostCallFeedback, wasFeedbackSubmitted } from './PostCallFeedback';
 
 // Replaces LiveKit's built-in DisconnectButton (hidden via controls={{leave:false}})
 // so the label is Ukrainian like the rest of the UI — the library's default
@@ -256,6 +258,17 @@ export const AppointmentJoinPage = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const fsContainerRef = useRef<HTMLDivElement>(null);
 
+  // Post-call survey is a per-clinic module (off by default) — `=== true`
+  // on purpose so an older API that doesn't know the key shows nothing.
+  const tenant = useTenant();
+  const feedbackOn = tenant?.features?.patientFeedback === true;
+  const websiteUrl = tenant?.websiteUrl ?? null;
+
+  // Client-side fallback for the «Консультація тривала» header when the
+  // session row has no startedAt/endedAt yet (or the refetch is slow).
+  const connectedAtRef = useRef<number | null>(null);
+  const [disconnectedAt, setDisconnectedAt] = useState<number | null>(null);
+
   // Device choices made in the pre-join lobby — passed to LiveKitRoom on
   // connect so the call starts with the camera/mic the user previewed.
   const [deviceState, setDeviceState] = useState<LobbyDeviceState>({
@@ -384,8 +397,34 @@ export const AppointmentJoinPage = () => {
     queryKey: ['session-presence', sessionId],
     queryFn: () => consultation.getById(sessionId!),
     enabled: !!sessionId && !joined,
-    refetchInterval: !joined ? 5_000 : false,
+    // Stop once the doctor has ended the session — nothing left to watch.
+    refetchInterval: (query) =>
+      !joined && query.state.data?.status !== ConsultationStatus.ENDED ? 5_000 : false,
   });
+
+  // The doctor's "end" flips the session to ENDED before the appointment
+  // becomes COMPLETED (and that second step is best-effort on the server).
+  // Treat either as "the consultation is over" so the post-call screen shows
+  // up as soon as possible — and also when the patient left first and is
+  // sitting in the lobby when the doctor ends.
+  const sessionEnded = sessionQ.data?.status === ConsultationStatus.ENDED;
+  useEffect(() => {
+    if (!sessionEnded) return;
+    const status = apptQ.data?.status;
+    if (status && !COMPLETED_STATUSES.has(status)) void apptQ.refetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionEnded]);
+
+  const durationSec = useMemo((): number | null => {
+    const sd = sessionQ.data;
+    if (sd?.startedAt && sd.endedAt) {
+      return (new Date(sd.endedAt).getTime() - new Date(sd.startedAt).getTime()) / 1000;
+    }
+    if (connectedAtRef.current !== null && disconnectedAt !== null) {
+      return (disconnectedAt - connectedAtRef.current) / 1000;
+    }
+    return null;
+  }, [sessionQ.data, disconnectedAt]);
 
   const paymentRequired =
     apptQ.data?.misPaymentType === 'prepaid' &&
@@ -463,7 +502,20 @@ export const AppointmentJoinPage = () => {
       </div>
     );
   }
-  if (apptStatus && COMPLETED_STATUSES.has(apptStatus)) {
+  if ((apptStatus && COMPLETED_STATUSES.has(apptStatus)) || sessionEnded) {
+    if (feedbackOn && id) {
+      return (
+        <div className="space-y-4">
+          <PageHeader title="Консультація" />
+          <PostCallFeedback
+            appointmentId={id}
+            durationSec={durationSec}
+            websiteUrl={websiteUrl}
+            alreadySubmitted={wasFeedbackSubmitted(id)}
+          />
+        </div>
+      );
+    }
     return (
       <div className="space-y-6">
         <PageHeader title="Зустріч завершено" />
@@ -472,6 +524,17 @@ export const AppointmentJoinPage = () => {
             Цю зустріч уже завершено — підключення недоступне. Якщо у вас
             залишились питання, зверніться до клініки.
           </Alert>
+          {websiteUrl ? (
+            <div className="mt-4">
+              <a
+                href={websiteUrl}
+                rel="noopener"
+                className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Повернутися на сайт клініки
+              </a>
+            </div>
+          ) : null}
         </Card>
       </div>
     );
@@ -693,7 +756,10 @@ export const AppointmentJoinPage = () => {
               ],
             },
           }}
-          onConnected={() => setDisconnectReason(null)}
+          onConnected={() => {
+            setDisconnectReason(null);
+            if (connectedAtRef.current === null) connectedAtRef.current = Date.now();
+          }}
           onError={(e) => setDisconnectReason(e.message)}
           onDisconnected={(reason) => {
             // CLIENT_INITIATED fires for intentional disconnects (Leave
@@ -704,13 +770,16 @@ export const AppointmentJoinPage = () => {
               setDisconnectReason(reason ? `disconnected: ${reason}` : 'disconnected');
             }
             setJoined(false);
+            setDisconnectedAt(Date.now());
             // Refetch the appointment so the terminal-state branch can take
             // over: when the doctor ends the call, the backend deletes the
             // LK room (triggering this disconnect) and marks the appointment
             // COMPLETED. Without a refetch we'd render the "Підключитись"
             // lobby again and the user would only learn the call ended on
-            // the next 403.
+            // the next 403. The session refetch catches the ENDED status
+            // that the server writes *before* deleting the room.
             void apptQ.refetch();
+            void sessionQ.refetch();
           }}
         >
           <LayoutContextProvider>

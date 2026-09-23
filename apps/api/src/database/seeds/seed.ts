@@ -44,6 +44,7 @@ async function seed(ds: DataSource): Promise<void> {
       misSync: true,
       advancedReports: true,
       audioArchive: true,
+      patientFeedback: true,
       // MIS demo flows (invites, payment status, recording fetch) authenticate
       // with integration API keys — keep machine access on for the clinic.
       apiAccess: true,

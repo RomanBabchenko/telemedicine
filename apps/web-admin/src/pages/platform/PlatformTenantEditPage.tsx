@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminApi, adminUsersApi } from '@telemed/api-client';
 import {
+  DEFAULT_FEATURE_MATRIX,
   FEATURE_LABELS,
   TenantFeatureMatrix,
   TenantLoginPolicyDto,
@@ -94,7 +95,10 @@ export const PlatformTenantEditPage = () => {
       setPrimaryColor(t.primaryColor);
       setLogoUrl(t.logoUrl ?? '');
       setLocale(t.locale);
-      setFeatures(t.features);
+      // Merge defaults first: tenants created before a feature key existed
+      // have no entry for it, and an undefined `checked` would flip the
+      // checkbox to uncontrolled.
+      setFeatures({ ...DEFAULT_FEATURE_MATRIX, ...t.features });
       setLoginPolicy({
         doctorEnabled: t.loginPolicy?.doctorEnabled !== false,
         patientEnabled: t.loginPolicy?.patientEnabled !== false,

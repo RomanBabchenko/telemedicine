@@ -9,12 +9,13 @@ import { EventBus } from '@nestjs/cqrs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { AppointmentSource, AppointmentStatus, SlotStatus } from '@telemed/shared-types';
-import type { AppointmentListSort } from '@telemed/shared-types';
+import type { AppointmentListSort, FeedbackResolved } from '@telemed/shared-types';
 import { Slot } from '../domain/entities/slot.entity';
 import { Appointment } from '../domain/entities/appointment.entity';
 import { ServiceType } from '../domain/entities/service-type.entity';
 import { Patient } from '../../patient/domain/entities/patient.entity';
 import { Doctor } from '../../provider/domain/entities/doctor.entity';
+import { AppointmentFeedback } from '../../feedback/domain/entities/appointment-feedback.entity';
 import { ProviderService } from '../../provider/application/provider.service';
 import { TenantContextService } from '../../../common/tenant/tenant-context.service';
 import { AppointmentResponseDto } from '../api/dto/appointment.response.dto';
@@ -139,6 +140,9 @@ export class AppointmentService {
     source?: AppointmentSource;
     status?: AppointmentStatus;
     search?: string;
+    feedback?: 'rated' | 'unrated';
+    clarityRating?: number;
+    resolved?: FeedbackResolved;
     sort?: AppointmentListSort;
     order?: 'asc' | 'desc';
     page?: number;
@@ -152,9 +156,18 @@ export class AppointmentService {
       .createQueryBuilder('a')
       .leftJoin(Patient, 'p', 'p.id = a.patientId')
       .leftJoin(Doctor, 'd', 'd.id = a.doctorId')
+      // Patient feedback is 0..1 per appointment (unique index) — the join
+      // keeps rows 1:1 so offset/limit below stay correct.
+      .leftJoin(AppointmentFeedback, 'f', 'f.appointmentId = a.id AND f.tenantId = a.tenantId')
       .where('a.tenantId = :tenantId', { tenantId });
     if (filters.source) qb.andWhere('a.source = :source', { source: filters.source });
     if (filters.status) qb.andWhere('a.status = :status', { status: filters.status });
+    if (filters.feedback === 'rated') qb.andWhere('f.id IS NOT NULL');
+    if (filters.feedback === 'unrated') qb.andWhere('f.id IS NULL');
+    if (filters.clarityRating) {
+      qb.andWhere('f.clarityRating = :clarityRating', { clarityRating: filters.clarityRating });
+    }
+    if (filters.resolved) qb.andWhere('f.resolved = :resolved', { resolved: filters.resolved });
     const needle = filters.search?.trim();
     if (needle) {
       qb.andWhere(
@@ -176,6 +189,8 @@ export class AppointmentService {
       doctor: ['d.lastName', 'd.firstName'],
       status: ['a.status'],
       source: ['a.source'],
+      // Unrated rows have NULL here and sink to the end either way.
+      rating: ['f.clarityRating'],
     };
     for (const key of sortKeys[filters.sort ?? 'startAt']) {
       qb.addOrderBy(key, order, 'NULLS LAST');
