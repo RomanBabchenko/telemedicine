@@ -72,7 +72,25 @@ export interface TenantDto {
   audioPolicy: TenantAudioPolicyDto;
   invitePolicy: TenantInvitePolicyDto;
   loginPolicy: TenantLoginPolicyDto;
+  consultationPolicy: TenantConsultationPolicyDto;
 }
+
+// Settings of the video-consultation module (embeddedConsultation). The
+// recording notice is shown to both doctor and patient before they join —
+// only while audio recording is actually on for the clinic.
+export interface TenantConsultationPolicyDto {
+  recordingNoticeEnabled: boolean;
+  // Replaces the default consent sentence in the notice. Null = default.
+  recordingNoticeText: string | null;
+  // Public offer agreement. Null falls back to websiteUrl, then no link.
+  offerUrl: string | null;
+}
+
+export const RECORDING_NOTICE_MAX_LENGTH = 150;
+export const DEFAULT_RECORDING_NOTICE_TEXT =
+  'Продовжуючи консультацію, ви погоджуєтесь на аудіозапис.';
+// Appointment.cancelledReason written when a participant declines the notice.
+export const RECORDING_DECLINED_REASON = 'recording_consent_declined';
 
 export interface TenantAudioPolicyDto {
   enabled: boolean;
@@ -126,4 +144,5 @@ export interface UpdateTenantDto {
   audioPolicy?: Partial<TenantAudioPolicyDto>;
   invitePolicy?: Partial<TenantInvitePolicyDto>;
   loginPolicy?: Partial<TenantLoginPolicyDto>;
+  consultationPolicy?: Partial<TenantConsultationPolicyDto>;
 }

@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConsultationSession } from './domain/entities/consultation-session.entity';
 import { SessionEvent } from './domain/entities/session-event.entity';
 import { Appointment } from '../booking/domain/entities/appointment.entity';
+import { Tenant } from '../tenant/domain/entities/tenant.entity';
 import { RecordingModule } from '../recording/recording.module';
 import { ConsultationService } from './application/consultation.service';
 import { ConsultationController } from './api/consultation.controller';
@@ -13,7 +14,7 @@ import { WaitingRoomGateway } from './api/waiting-room.gateway';
 @Module({
   imports: [
     CqrsModule,
-    TypeOrmModule.forFeature([ConsultationSession, SessionEvent, Appointment]),
+    TypeOrmModule.forFeature([ConsultationSession, SessionEvent, Appointment, Tenant]),
     RecordingModule,
   ],
   providers: [ConsultationService, CreateSessionOnConfirmHandler, WaitingRoomGateway],

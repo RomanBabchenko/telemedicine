@@ -24,6 +24,11 @@ export interface UpdateTenantInput {
     patientEnabled?: boolean;
     requireSubdomain?: boolean;
   };
+  consultationPolicy?: {
+    recordingNoticeEnabled?: boolean;
+    recordingNoticeText?: string | null;
+    offerUrl?: string | null;
+  };
 }
 
 // Roles that bypass loginPolicy gating — admin / internal accounts must
@@ -134,6 +139,15 @@ export class TenantService {
     }
     if (input.loginPolicy) {
       tenant.loginPolicy = { ...tenant.loginPolicy, ...input.loginPolicy };
+    }
+    if (input.consultationPolicy) {
+      const next = { ...tenant.consultationPolicy, ...input.consultationPolicy };
+      // Blank text/URL from the admin form means "use the default", not "".
+      if (next.recordingNoticeText !== undefined) {
+        next.recordingNoticeText = next.recordingNoticeText?.trim() || null;
+      }
+      if (next.offerUrl !== undefined) next.offerUrl = next.offerUrl?.trim() || null;
+      tenant.consultationPolicy = next;
     }
     return this.repo.save(tenant);
   }

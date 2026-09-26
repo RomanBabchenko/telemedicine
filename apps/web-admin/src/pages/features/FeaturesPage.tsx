@@ -4,6 +4,13 @@ import { tenantsApi } from '@telemed/api-client';
 import { FEATURE_LABELS, TenantFeatureKey } from '@telemed/shared-types';
 import { Alert, Badge, Button, Card, FormField, Input, PageHeader, Spinner } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
+import {
+  ConsultationPolicyFields,
+  type ConsultationPolicyForm,
+  fromConsultationPolicyForm,
+  offerUrlError,
+  toConsultationPolicyForm,
+} from '../../components/ConsultationPolicyFields';
 import { useAuthStore } from '../../stores/auth.store';
 
 const tenants = tenantsApi(apiClient);
@@ -28,6 +35,9 @@ export const FeaturesPage = () => {
   const tenantQ = useQuery({ queryKey: ['tenant', 'current'], queryFn: () => tenants.current() });
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [retentionDays, setRetentionDays] = useState(30);
+  const [consultationPolicy, setConsultationPolicy] = useState<ConsultationPolicyForm>(() =>
+    toConsultationPolicyForm(undefined),
+  );
 
   useEffect(() => {
     const t = tenantQ.data;
@@ -35,6 +45,7 @@ export const FeaturesPage = () => {
       // Missing `enabled` = OFF (auto-recording is opt-in).
       setAudioEnabled(t.audioPolicy?.enabled === true);
       setRetentionDays(t.audioPolicy?.retentionDays ?? 30);
+      setConsultationPolicy(toConsultationPolicyForm(t.consultationPolicy));
     }
   }, [tenantQ.data]);
 
@@ -46,16 +57,26 @@ export const FeaturesPage = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tenant', 'current'] }),
   });
 
+  const saveConsultationM = useMutation({
+    mutationFn: () =>
+      tenants.update(tenantId!, {
+        consultationPolicy: fromConsultationPolicyForm(consultationPolicy),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['tenant', 'current'] }),
+  });
+
   if (tenantQ.isLoading) return <Spinner />;
 
   const features = tenantQ.data?.features;
   const audioArchiveOn = features?.audioArchive === true;
+  // Saved state, not the unsaved checkbox — the notice follows what's live.
+  const recordingActive = audioArchiveOn && tenantQ.data?.audioPolicy?.enabled === true;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Модулі"
-        description="Склад модулів визначає адміністратор платформи. Налаштування запису консультацій змінює клініка."
+        description="Склад модулів визначає адміністратор платформи. Налаштування запису та відеоконсультацій змінює клініка."
       />
 
       <Card>
@@ -127,6 +148,33 @@ export const FeaturesPage = () => {
           </Button>
           {saveM.isSuccess ? <Alert variant="success">Збережено</Alert> : null}
           {saveM.isError ? <Alert variant="danger">{errorMessage(saveM.error)}</Alert> : null}
+        </div>
+      </Card>
+
+      <Card>
+        <h3 className="mb-1 font-semibold">Відеоконсультації: попередження про запис</h3>
+        <p className="mb-3 text-sm text-slate-500">
+          Вікно «Запис консультації» перед підключенням до відеокімнати — для лікаря і
+          пацієнта.
+        </p>
+        <ConsultationPolicyFields
+          value={consultationPolicy}
+          onChange={setConsultationPolicy}
+          recordingActive={recordingActive}
+          websiteUrl={tenantQ.data?.websiteUrl ?? null}
+        />
+        <div className="mt-4 flex items-center gap-3">
+          <Button
+            onClick={() => saveConsultationM.mutate()}
+            isLoading={saveConsultationM.isPending}
+            disabled={!!offerUrlError(consultationPolicy)}
+          >
+            Зберегти
+          </Button>
+          {saveConsultationM.isSuccess ? <Alert variant="success">Збережено</Alert> : null}
+          {saveConsultationM.isError ? (
+            <Alert variant="danger">{errorMessage(saveConsultationM.error)}</Alert>
+          ) : null}
         </div>
       </Card>
     </div>

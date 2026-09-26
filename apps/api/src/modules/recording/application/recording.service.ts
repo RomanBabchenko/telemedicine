@@ -59,7 +59,7 @@ export class RecordingService {
    * module for the clinic, and the clinic itself opts in via
    * `audioPolicy.enabled`. Returns the reason when either key is off.
    */
-  private recordingDisabledReason(tenant: Tenant): string | null {
+  recordingDisabledReason(tenant: Tenant): string | null {
     if (!this.tenantService.hasFeature(tenant, 'audioArchive')) {
       return 'audioArchive module is disabled';
     }
@@ -262,6 +262,18 @@ export class RecordingService {
       participantIdentity,
       trackSid,
     );
+  }
+
+  /**
+   * True while the session's recording is running (auto-started once both
+   * sides joined, not yet stopped/merged). Drives the in-call «Запис»
+   * indicator — from our own row, not LiveKit's room.isRecording, which
+   * isn't documented to cover per-track egress.
+   */
+  async isRecordingActive(sessionId: string): Promise<boolean> {
+    const tenantId = this.tenantContext.getTenantId();
+    const recording = await this.recordings.findOne({ where: { sessionId, tenantId } });
+    return recording?.status === 'RECORDING';
   }
 
   async getRecordingInfo(sessionId: string): Promise<{

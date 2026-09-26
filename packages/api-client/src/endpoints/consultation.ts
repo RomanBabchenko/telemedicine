@@ -1,6 +1,7 @@
 import type {
   ConsultationSessionDto,
   JoinTokenDto,
+  RecordingNoticeDecision,
   SessionEventDto,
   StartRecordingDto,
 } from '@telemed/shared-types';
@@ -9,6 +10,9 @@ import type { ApiClient } from '../http';
 export const consultationApi = (client: ApiClient) => ({
   getById: (id: string) => client.get<ConsultationSessionDto>(`/sessions/${id}`),
   joinToken: (id: string) => client.post<JoinTokenDto>(`/sessions/${id}/join-token`),
+  // 'declined' cancels the appointment and closes the room for both sides.
+  recordingNotice: (id: string, decision: RecordingNoticeDecision) =>
+    client.post<ConsultationSessionDto>(`/sessions/${id}/recording-notice`, { decision }),
   postEvent: (id: string, dto: SessionEventDto) =>
     client.post<{ ok: true }>(`/sessions/${id}/events`, dto),
   startRecording: (id: string, dto: StartRecordingDto) =>

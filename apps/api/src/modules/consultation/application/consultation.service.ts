@@ -4,12 +4,17 @@ import { Repository } from 'typeorm';
 import {
   AppointmentStatus,
   ConsultationStatus,
+  DEFAULT_RECORDING_NOTICE_TEXT,
   ParticipantRole,
+  RECORDING_DECLINED_REASON,
   Role,
+  type RecordingNoticeDecision,
+  type RecordingNoticeDto,
 } from '@telemed/shared-types';
 import { ConsultationSession } from '../domain/entities/consultation-session.entity';
 import { SessionEvent, SessionEventType } from '../domain/entities/session-event.entity';
 import { Appointment } from '../../booking/domain/entities/appointment.entity';
+import { Tenant } from '../../tenant/domain/entities/tenant.entity';
 import { LiveKitClientService } from '../../../infrastructure/livekit/livekit-client.service';
 import { TenantContextService } from '../../../common/tenant/tenant-context.service';
 import { AppointmentService } from '../../booking/application/appointment.service';
@@ -46,6 +51,7 @@ export class ConsultationService {
     private readonly sessions: Repository<ConsultationSession>,
     @InjectRepository(SessionEvent) private readonly events: Repository<SessionEvent>,
     @InjectRepository(Appointment) private readonly appointments: Repository<Appointment>,
+    @InjectRepository(Tenant) private readonly tenants: Repository<Tenant>,
     private readonly livekit: LiveKitClientService,
     private readonly tenantContext: TenantContextService,
     private readonly appointmentService: AppointmentService,
@@ -93,6 +99,80 @@ export class ConsultationService {
       else if (id.startsWith('patient-')) patientPresent = true;
     }
     return { doctorPresent, patientPresent };
+  }
+
+  /**
+   * The recording notice for this tenant, or null when there's nothing to
+   * warn about: the clinic switched the notice off, or recording itself is
+   * off (audioArchive module / audioPolicy) — the text claims the call IS
+   * recorded, so it must never show when it isn't.
+   */
+  async getRecordingNotice(): Promise<RecordingNoticeDto | null> {
+    const tenant = await this.tenants.findOne({
+      where: { id: this.tenantContext.getTenantId() },
+    });
+    if (!tenant) return null;
+    if (tenant.consultationPolicy?.recordingNoticeEnabled === false) return null;
+    if (this.recording.recordingDisabledReason(tenant) !== null) return null;
+    const offerUrl = tenant.consultationPolicy?.offerUrl ?? null;
+    const websiteUrl = tenant.websiteUrl ?? null;
+    return {
+      text: tenant.consultationPolicy?.recordingNoticeText || DEFAULT_RECORDING_NOTICE_TEXT,
+      linkUrl: offerUrl ?? websiteUrl,
+      linkLabel: offerUrl ? 'Договір публічної оферти' : websiteUrl ? 'Сайт клініки' : null,
+    };
+  }
+
+  /** Audio recording is running for this (not yet ended) session. */
+  async isRecordingActive(session: ConsultationSession): Promise<boolean> {
+    if (session.status === ConsultationStatus.ENDED) return false;
+    return this.recording.isRecordingActive(session.id);
+  }
+
+  /**
+   * Doctor or patient answers the recording notice. Accept is remembered on
+   * the session so reconnects don't ask again. Decline is terminal: the
+   * appointment is cancelled on behalf of whoever declined (reason
+   * RECORDING_DECLINED_REASON) and the room is closed, which kicks the other
+   * side out to their cancelled screen.
+   */
+  async respondToRecordingNotice(
+    sessionId: string,
+    user: AuthUser,
+    decision: RecordingNoticeDecision,
+  ): Promise<ConsultationSession> {
+    const session = await this.getById(sessionId);
+    const isDoctor = user.roles.includes(Role.DOCTOR);
+    const isAnonPatient = !isDoctor && user.scope === 'invite-anon';
+    const actorUserId = isAnonPatient ? null : user.id;
+    const payload = { role: isDoctor ? 'doctor' : 'patient' };
+
+    if (decision === 'accepted') {
+      if (isDoctor) session.doctorRecordingNoticeAt ??= new Date();
+      else session.patientRecordingNoticeAt ??= new Date();
+      await this.sessions.save(session);
+      await this.recordEvent(session.id, 'RECORDING_NOTICE_ACCEPTED', actorUserId, payload);
+      return session;
+    }
+
+    const appointment = await this.appointments.findOne({
+      where: { id: session.appointmentId },
+    });
+    if (!appointment) throw new NotFoundException('Appointment not found');
+    await this.recordEvent(session.id, 'RECORDING_NOTICE_DECLINED', actorUserId, payload);
+    if (TERMINAL_APPOINTMENT_STATUSES.has(appointment.status)) return session;
+
+    if (appointment.status === AppointmentStatus.IN_PROGRESS) {
+      // Both sides already talked (the notice was switched on mid-session),
+      // and IN_PROGRESS can't be cancelled — finish it the normal way.
+      return this.end(sessionId);
+    }
+    await this.appointmentService.cancel(appointment.id, !isDoctor, RECORDING_DECLINED_REASON);
+    session.status = ConsultationStatus.ENDED;
+    session.endedAt = new Date();
+    await this.sessions.save(session);
+    await this.closeRoom(session);
+    return session;
   }
 
   async issueJoinToken(sessionId: string, user: AuthUser): Promise<{
@@ -160,6 +240,19 @@ export class ConsultationService {
       throw new ForbiddenException({
         message: 'Оплату не завершено. Будь ласка, зверніться до клініки для завершення оплати.',
         code: 'consultation.mis_payment_pending',
+      });
+    }
+
+    // Recording-notice gate — each side must have accepted the clinic's
+    // recording notice (POST /sessions/:id/recording-notice) before joining.
+    const notice = await this.getRecordingNotice();
+    const noticeAcceptedAt = isDoctor
+      ? session.doctorRecordingNoticeAt
+      : session.patientRecordingNoticeAt;
+    if (notice && !noticeAcceptedAt) {
+      throw new ForbiddenException({
+        message: 'Підтвердіть попередження про аудіозапис консультації.',
+        code: 'consultation.recording_notice_required',
       });
     }
 
@@ -253,19 +346,23 @@ export class ConsultationService {
     session.status = ConsultationStatus.ENDED;
     session.endedAt = new Date();
     await this.sessions.save(session);
-    // Stop recording before deleting the room
-    try {
-      await this.recording.stop(sessionId);
-    } catch (e) {
-      this.logger.warn(`Stop recording failed for session ${sessionId}: ${(e as Error).message}`);
-    }
-    await this.livekit.deleteRoom(session.livekitRoomName);
+    await this.closeRoom(session);
     try {
       await this.appointmentService.complete(session.appointmentId);
     } catch {
       // already terminal
     }
     return session;
+  }
+
+  // Stops recording before deleting the room; deleting it disconnects everyone.
+  private async closeRoom(session: ConsultationSession): Promise<void> {
+    try {
+      await this.recording.stop(session.id);
+    } catch (e) {
+      this.logger.warn(`Stop recording failed for session ${session.id}: ${(e as Error).message}`);
+    }
+    await this.livekit.deleteRoom(session.livekitRoomName);
   }
 
   async setRecordingId(sessionId: string, recordingId: string | null): Promise<void> {

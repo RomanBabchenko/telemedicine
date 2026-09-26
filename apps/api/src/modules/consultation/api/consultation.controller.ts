@@ -25,6 +25,7 @@ import { SessionEventType } from '../domain/entities/session-event.entity';
 import {
   ConsultationSessionResponseDto,
   JoinTokenResponseDto,
+  RecordingNoticeBodyDto,
   SessionEventBodyDto,
 } from './dto';
 import { toConsultationSessionResponse } from './mappers/consultation.mapper';
@@ -50,8 +51,36 @@ export class ConsultationController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<ConsultationSessionResponseDto> {
     const session = await this.service.getById(id);
-    const presence = await this.service.getPresence(session.livekitRoomName);
-    return toConsultationSessionResponse(session, presence);
+    const [presence, recordingNotice, recordingActive] = await Promise.all([
+      this.service.getPresence(session.livekitRoomName),
+      this.service.getRecordingNotice(),
+      this.service.isRecordingActive(session),
+    ]);
+    return toConsultationSessionResponse(session, presence, recordingNotice, recordingActive);
+  }
+
+  @Post(':id/recording-notice')
+  @HttpCode(HttpStatus.OK)
+  @InviteAccessible('consultationSessionId')
+  @Auditable({ action: 'session.recording-notice', resource: 'ConsultationSession', captureBody: true })
+  @ApiOperation({
+    summary: 'Accept or decline the recording notice',
+    description:
+      "Doctor or patient answers the clinic's audio-recording notice before joining. 'accepted' is stored on the session (join-token requires it while the notice is on). 'declined' cancels the appointment (CANCELLED_BY_PATIENT / CANCELLED_BY_PROVIDER, cancelledReason 'recording_consent_declined') and closes the room; an IN_PROGRESS appointment is ended as COMPLETED instead.",
+    operationId: 'respondToRecordingNotice',
+  })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiBody({ type: RecordingNoticeBodyDto })
+  @ApiOkResponse({ type: ConsultationSessionResponseDto })
+  @ApiStandardErrors()
+  async recordingNotice(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: RecordingNoticeBodyDto,
+    @CurrentUser() user: AuthUser,
+  ): Promise<ConsultationSessionResponseDto> {
+    const session = await this.service.respondToRecordingNotice(id, user, body.decision);
+    const recordingNotice = await this.service.getRecordingNotice();
+    return toConsultationSessionResponse(session, undefined, recordingNotice);
   }
 
   @Post(':id/join-token')
@@ -61,7 +90,7 @@ export class ConsultationController {
   @ApiOperation({
     summary: 'Issue a LiveKit join token for a session',
     description:
-      "Three gates apply before a token is issued: (1) terminal-state gate (code 'consultation.terminal'); (2) time-gate — room opens 15 min before start, closes 30 min after end ('consultation.not_yet_open', 'consultation.meeting_over'); (3) MIS prepaid gate for patients ('consultation.mis_payment_pending'). Frontends branch on the ErrorResponseDto.code.",
+      "Four gates apply before a token is issued: (1) terminal-state gate (code 'consultation.terminal'); (2) time-gate — room opens 15 min before start, closes 30 min after end ('consultation.not_yet_open', 'consultation.meeting_over'); (3) MIS prepaid gate for patients ('consultation.mis_payment_pending'); (4) caller has not accepted the recording notice ('consultation.recording_notice_required'). Frontends branch on the ErrorResponseDto.code.",
     operationId: 'issueJoinToken',
   })
   @ApiParam({ name: 'id', format: 'uuid' })

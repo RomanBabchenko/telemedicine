@@ -34,4 +34,12 @@ export class ConsultationSession extends TenantOwnedEntity {
 
   @Column({ name: 'recording_id', type: 'uuid', nullable: true })
   recordingId!: string | null;
+
+  // When each side accepted the clinic's recording notice. Set once; a
+  // reconnect skips the notice and join-token checks it while it's required.
+  @Column({ name: 'doctor_recording_notice_at', type: 'timestamptz', nullable: true })
+  doctorRecordingNoticeAt!: Date | null;
+
+  @Column({ name: 'patient_recording_notice_at', type: 'timestamptz', nullable: true })
+  patientRecordingNoticeAt!: Date | null;
 }

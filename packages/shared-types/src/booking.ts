@@ -100,6 +100,9 @@ export interface AppointmentDto {
   source: AppointmentSource;
   status: AppointmentStatus;
   reasonText: string | null;
+  // Why it was cancelled — free text from the canceller, or a machine code
+  // such as RECORDING_DECLINED_REASON. Null when not cancelled.
+  cancelledReason: string | null;
   startAt: string;
   endAt: string;
   paymentId: string | null;

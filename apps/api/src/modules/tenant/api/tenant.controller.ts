@@ -169,4 +169,9 @@ export class TenantController {
   }
 }
 
-const TENANT_POLICY_FIELDS = ['audioPolicy', 'invitePolicy', 'loginPolicy'] as const;
+const TENANT_POLICY_FIELDS = [
+  'audioPolicy',
+  'invitePolicy',
+  'loginPolicy',
+  'consultationPolicy',
+] as const;

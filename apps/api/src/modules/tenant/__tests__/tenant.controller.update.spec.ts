@@ -63,12 +63,30 @@ describe('PATCH /admin/tenants/:id — INTEGRATION_ADMIN is branding-only', () =
     ['audioPolicy', { audioPolicy: { enabled: false } }],
     ['invitePolicy', { invitePolicy: { bindIp: true } }],
     ['loginPolicy', { loginPolicy: { doctorEnabled: false } }],
+    ['consultationPolicy', { consultationPolicy: { recordingNoticeEnabled: false } }],
   ])('INTEGRATION_ADMIN is rejected when body contains %s', async (_k, body) => {
     const { ctrl, service } = build();
     await expect(
       ctrl.update(TENANT, { brandName: 'x', ...body } as never, actor([Role.INTEGRATION_ADMIN])),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(service.update).not.toHaveBeenCalled();
+  });
+
+  it('response fills consultationPolicy defaults (notice on, default text, no link)', async () => {
+    const { ctrl } = build();
+    const dto = await ctrl.update(TENANT, { brandName: 'x' } as never, actor([Role.CLINIC_ADMIN]));
+    expect(dto.consultationPolicy).toEqual({
+      recordingNoticeEnabled: true,
+      recordingNoticeText: null,
+      offerUrl: null,
+    });
+  });
+
+  it('CLINIC_ADMIN may change the recording notice settings', async () => {
+    const { ctrl, service } = build();
+    const consultationPolicy = { recordingNoticeText: 'Текст', offerUrl: 'https://clinic.example/oferta' };
+    await ctrl.update(TENANT, { consultationPolicy } as never, actor([Role.CLINIC_ADMIN]));
+    expect(service.update).toHaveBeenCalledWith(TENANT, expect.objectContaining({ consultationPolicy }));
   });
 
   it('CLINIC_ADMIN may change policies of their own tenant', async () => {

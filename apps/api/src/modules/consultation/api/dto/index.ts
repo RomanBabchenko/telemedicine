@@ -1,4 +1,5 @@
 // Request DTOs
+export * from './recording-notice.body.dto';
 export * from './session-event.body.dto';
 export * from './start-recording.body.dto';
 

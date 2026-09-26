@@ -76,6 +76,13 @@ export class AppointmentResponseDto implements AppointmentDto {
   @ApiProperty({ type: String, nullable: true })
   reasonText!: string | null;
 
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: "Cancellation reason; 'recording_consent_declined' when a participant declined the recording notice",
+  })
+  cancelledReason!: string | null;
+
   @ApiProperty({ format: 'date-time' })
   startAt!: string;
 

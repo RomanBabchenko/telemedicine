@@ -15,6 +15,26 @@ export interface ConsultationSessionDto {
   // connecting to the room. False also when LiveKit is unreachable.
   doctorPresent: boolean;
   patientPresent: boolean;
+  // Recording notice each side must accept before a join token is issued.
+  // Null when the clinic has the notice off or isn't recording at all.
+  recordingNotice: RecordingNoticeDto | null;
+  doctorRecordingNoticeAt: string | null;
+  patientRecordingNoticeAt: string | null;
+  // Audio is being recorded right now — drives the in-call «Запис» badge.
+  // Derived on each fetch (recording row still RECORDING, session not ENDED).
+  recordingActive: boolean;
+}
+
+export interface RecordingNoticeDto {
+  text: string;
+  linkUrl: string | null;
+  linkLabel: string | null;
+}
+
+export type RecordingNoticeDecision = 'accepted' | 'declined';
+
+export interface RecordingNoticeDecisionDto {
+  decision: RecordingNoticeDecision;
 }
 
 export interface JoinTokenDto {

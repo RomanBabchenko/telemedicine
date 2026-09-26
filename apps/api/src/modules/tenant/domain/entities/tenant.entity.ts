@@ -59,6 +59,15 @@ export class Tenant extends BaseEntity {
     requireSubdomain?: boolean;
   };
 
+  // Video-consultation module settings: the recording notice both sides
+  // must accept before joining. Missing keys fall back to mapper defaults.
+  @Column({ type: 'jsonb', name: 'consultation_policy', default: () => `'{}'::jsonb` })
+  consultationPolicy!: {
+    recordingNoticeEnabled?: boolean;
+    recordingNoticeText?: string | null;
+    offerUrl?: string | null;
+  };
+
   @Column({ name: 'billing_plan_id', type: 'uuid', nullable: true })
   billingPlanId!: string | null;
 

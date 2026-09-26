@@ -28,6 +28,13 @@ import {
   TR,
 } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
+import {
+  ConsultationPolicyFields,
+  type ConsultationPolicyForm,
+  fromConsultationPolicyForm,
+  offerUrlError,
+  toConsultationPolicyForm,
+} from '../../components/ConsultationPolicyFields';
 
 const admin = adminApi(apiClient);
 const adminUsers = adminUsersApi(apiClient);
@@ -87,6 +94,9 @@ export const PlatformTenantEditPage = () => {
     enabled: false,
     retentionDays: 30,
   });
+  const [consultationPolicy, setConsultationPolicy] = useState<ConsultationPolicyForm>(() =>
+    toConsultationPolicyForm(undefined),
+  );
 
   useEffect(() => {
     const t = tenantQ.data;
@@ -109,6 +119,7 @@ export const PlatformTenantEditPage = () => {
         enabled: t.audioPolicy?.enabled === true,
         retentionDays: t.audioPolicy?.retentionDays ?? 30,
       });
+      setConsultationPolicy(toConsultationPolicyForm(t.consultationPolicy));
     }
   }, [tenantQ.data]);
 
@@ -140,6 +151,7 @@ export const PlatformTenantEditPage = () => {
       features: features ?? undefined,
       loginPolicy,
       audioPolicy,
+      consultationPolicy: fromConsultationPolicyForm(consultationPolicy),
     });
   };
 
@@ -288,8 +300,26 @@ export const PlatformTenantEditPage = () => {
         </div>
       </Card>
 
+      <Card>
+        <h3 className="mb-1 font-semibold">Відеоконсультації: попередження про запис</h3>
+        <p className="mb-3 text-sm text-slate-500">
+          Вікно «Запис консультації» перед підключенням до відеокімнати — для лікаря і
+          пацієнта. Клініка може змінювати ці налаштування самостійно.
+        </p>
+        <ConsultationPolicyFields
+          value={consultationPolicy}
+          onChange={setConsultationPolicy}
+          recordingActive={audioArchiveOn && audioPolicy.enabled}
+          websiteUrl={tenant.websiteUrl ?? null}
+        />
+      </Card>
+
       <div className="flex items-center gap-3">
-        <Button onClick={save} isLoading={updateM.isPending}>
+        <Button
+          onClick={save}
+          isLoading={updateM.isPending}
+          disabled={!!offerUrlError(consultationPolicy)}
+        >
           Зберегти зміни
         </Button>
         {updateM.isSuccess ? <Alert variant="success">Збережено</Alert> : null}
