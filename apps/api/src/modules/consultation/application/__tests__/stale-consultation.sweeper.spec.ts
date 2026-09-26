@@ -7,9 +7,17 @@ const NOW = new Date('2026-09-26T12:00:00Z');
 function build(opts?: {
   lock?: boolean;
   rows?: Array<{ session_id: string; tenant_id: string }>;
+  idleRecordings?: Array<{ recording_id: string }>;
   autoEnd?: jest.Mock;
+  finalize?: jest.Mock;
 }) {
-  const dataSource = { query: jest.fn(async () => opts?.rows ?? []) };
+  // First query: abandoned sessions; second: idle (paused) recordings.
+  const dataSource = {
+    query: jest
+      .fn()
+      .mockResolvedValueOnce(opts?.rows ?? [])
+      .mockResolvedValueOnce(opts?.idleRecordings ?? []),
+  };
   const redis = { setNxEx: jest.fn(async () => opts?.lock ?? true) };
   const seenTenants: string[] = [];
   let current: string | null = null;
@@ -26,13 +34,16 @@ function build(opts?: {
       return 'ended';
     });
   const consultations = { autoEndIfAbandoned: autoEnd };
+  const finalize = opts?.finalize ?? jest.fn(async () => undefined);
+  const recordings = { finalizeIfIdle: finalize };
   const sweeper = new StaleConsultationSweeper(
     dataSource as never,
     redis as never,
     tenantContext as never,
     consultations as never,
+    recordings as never,
   );
-  return { sweeper, dataSource, redis, autoEnd, seenTenants };
+  return { sweeper, dataSource, redis, autoEnd, finalize, seenTenants };
 }
 
 describe('StaleConsultationSweeper', () => {
@@ -77,5 +88,20 @@ describe('StaleConsultationSweeper', () => {
     });
     await expect(sweeper.sweep(NOW)).resolves.toBeUndefined();
     expect(autoEnd).toHaveBeenCalledTimes(2);
+  });
+
+  it('finalizes idle recordings of ended sessions, one failure does not stop the rest', async () => {
+    const finalize = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValueOnce(undefined);
+    const { sweeper, dataSource } = build({
+      idleRecordings: [{ recording_id: 'r-1' }, { recording_id: 'r-2' }],
+      finalize,
+    });
+    await sweeper.sweep(NOW);
+    expect(dataSource.query).toHaveBeenCalledTimes(2);
+    expect(finalize).toHaveBeenCalledWith('r-1');
+    expect(finalize).toHaveBeenCalledWith('r-2');
   });
 });

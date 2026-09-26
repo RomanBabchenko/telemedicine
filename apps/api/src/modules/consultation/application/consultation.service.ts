@@ -311,6 +311,16 @@ export class ConsultationService {
       }
     } else if (session.status === ConsultationStatus.SCHEDULED) {
       session.status = ConsultationStatus.WAITING;
+    } else if (session.status === ConsultationStatus.ACTIVE && session.recordingId) {
+      // Rejoin into a running consultation (e.g. both sides had left — the
+      // recording is paused, not finalised). New tracks are normally picked
+      // up by the track_published webhook; this catch-up covers tracks
+      // already in the room whose webhook was missed. Idempotent per track.
+      try {
+        await this.recording.startAuto(session.id);
+      } catch (e) {
+        this.logger.warn(`Recording catch-up failed for session ${session.id}: ${(e as Error).message}`);
+      }
     }
     await this.sessions.save(session);
     // session_events.actor_user_id joins to users(id); for anonymous invites

@@ -1,5 +1,6 @@
 import { ForbiddenException } from '@nestjs/common';
 import { QueryFailedError } from 'typeorm';
+import { ConsultationStatus } from '@telemed/shared-types';
 import { RecordingService } from '../application/recording.service';
 import type { RecordingEgress } from '../domain/entities/recording-egress.entity';
 import type { SessionRecording } from '../domain/entities/session-recording.entity';
@@ -80,6 +81,8 @@ function makeService(opts?: {
   startEgress?: jest.Mock;
   audioArchive?: boolean;
   audioPolicy?: { enabled?: boolean; retentionDays?: number };
+  // Most merge tests model a finished call; pass ACTIVE for a pause.
+  sessionStatus?: ConsultationStatus;
 }) {
   const recordingsState: FakeRecordingsState = { rows: new Map() };
   const egressesState: FakeEgressesState = { rows: new Map() };
@@ -90,6 +93,7 @@ function makeService(opts?: {
     id: 'sess-1',
     tenantId: 't-1',
     livekitRoomName: 'room-1',
+    status: opts?.sessionStatus ?? ConsultationStatus.ENDED,
     recordingId: null as string | null,
   };
   const sessions = {
@@ -304,6 +308,64 @@ describe('RecordingService', () => {
   });
 
   describe('handleEgressEnded + maybeScheduleMerge', () => {
+    it('keeps the recording open when everyone left but the session is still ACTIVE', async () => {
+      const ctx = makeService({
+        sessionStatus: ConsultationStatus.ACTIVE,
+        listAudioTracks: async () => [
+          { identity: 'doctor-1', trackSid: 'TR_doctor' },
+          { identity: 'patient-1', trackSid: 'TR_patient' },
+        ],
+      });
+      await ctx.svc.startAuto('sess-1');
+      const all = [...ctx.egressesState.rows.values()];
+      await ctx.svc.handleEgressEnded(all[0].egressId, 60);
+      await ctx.svc.handleEgressEnded(all[1].egressId, 60);
+
+      expect(ctx.queue.add).not.toHaveBeenCalled();
+      const recording = [...ctx.recordingsState.rows.values()][0];
+      expect(recording.status).toBe('RECORDING');
+    });
+
+    it('a rejoin after the pause records into the same recording and merges on session end', async () => {
+      const ctx = makeService({
+        sessionStatus: ConsultationStatus.ACTIVE,
+        listAudioTracks: async () => [{ identity: 'doctor-1', trackSid: 'TR_doctor_1' }],
+      });
+      const rec = await ctx.svc.startAuto('sess-1');
+      ctx.session.recordingId = rec!.id;
+      const [first] = [...ctx.egressesState.rows.values()];
+      await ctx.svc.handleEgressEnded(first.egressId, 60); // everyone left → paused
+
+      // Doctor rejoins: new track SID → new egress on the same recording.
+      await ctx.svc.handleTrackPublished('room-1', 'doctor-1', 'TR_doctor_2', 'AUDIO');
+      expect(ctx.egressesState.rows.size).toBe(2);
+
+      // Doctor ends the call; the second egress finishes afterwards.
+      ctx.session.status = ConsultationStatus.ENDED;
+      const second = [...ctx.egressesState.rows.values()].find(
+        (e) => e.trackSid === 'TR_doctor_2',
+      )!;
+      await ctx.svc.handleEgressEnded(second.egressId, 30);
+
+      const recording = [...ctx.recordingsState.rows.values()][0];
+      expect(recording.status).toBe('MERGING');
+      expect(ctx.queue.add).toHaveBeenCalledTimes(1);
+    });
+
+    it('finalizeIfIdle merges a paused recording once nothing is in flight', async () => {
+      const ctx = makeService({
+        sessionStatus: ConsultationStatus.ACTIVE,
+        listAudioTracks: async () => [{ identity: 'doctor-1', trackSid: 'TR_doctor' }],
+      });
+      const rec = await ctx.svc.startAuto('sess-1');
+      const [only] = [...ctx.egressesState.rows.values()];
+      await ctx.svc.handleEgressEnded(only.egressId, 60);
+      expect(ctx.queue.add).not.toHaveBeenCalled();
+
+      await ctx.svc.finalizeIfIdle(rec!.id);
+      expect(ctx.queue.add).toHaveBeenCalledTimes(1);
+    });
+
     it('does not enqueue merge while siblings still RECORDING', async () => {
       const ctx = makeService({
         listAudioTracks: async () => [

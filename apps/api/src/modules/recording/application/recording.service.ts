@@ -9,7 +9,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Queue } from 'bullmq';
 import { QueryFailedError, Repository } from 'typeorm';
-import { ConsentStatus, ConsentType } from '@telemed/shared-types';
+import { ConsentStatus, ConsentType, ConsultationStatus } from '@telemed/shared-types';
 import { SessionRecording } from '../domain/entities/session-recording.entity';
 import { RecordingEgress } from '../domain/entities/recording-egress.entity';
 import { ConsultationSession } from '../../consultation/domain/entities/consultation-session.entity';
@@ -202,7 +202,11 @@ export class RecordingService {
 
   /**
    * Called from the LiveKit `egress_ended` webhook. Marks the per-track row
-   * terminal and, when all siblings are terminal, schedules the merge job.
+   * terminal and, once all siblings are terminal *and the session has ended*,
+   * schedules the merge job. While the session is still open, everyone
+   * leaving only pauses the recording: a rejoin (same invite links, window
+   * still open) publishes new tracks whose egresses land in the same
+   * recording, and the merge places every segment by its startedAt.
    * Webhooks have no tenant context — we look up by globally-unique egressId.
    *
    * @param failed - true if EgressInfo.status was EGRESS_FAILED / ABORTED
@@ -226,7 +230,30 @@ export class RecordingService {
     re.endedAt = new Date();
     await this.egresses.save(re);
 
+    const recording = await this.recordings.findOne({ where: { id: re.recordingId } });
+    const session = recording
+      ? await this.sessions.findOne({ where: { id: recording.sessionId } })
+      : null;
+    if (session && session.status !== ConsultationStatus.ENDED) {
+      // Merge happens on session end: ConsultationService.end() → stop(), or
+      // the stale-consultation sweeper's idle-recording pass.
+      this.logger.log(
+        `egress ${egressId} ended; recording ${re.recordingId} stays open until session ${session.id} ends`,
+      );
+      return;
+    }
     await this.maybeScheduleMerge(re.recordingId);
+  }
+
+  /**
+   * Merge (or fail) a recording whose egresses have all finished. Safe to
+   * call repeatedly — no-op while a track is still recording or once the
+   * recording left RECORDING. Used by the sweeper for recordings paused when
+   * everyone left and whose session was then ended without a webhook to
+   * follow (or whose appointment moved on, e.g. NO_SHOW from MIS).
+   */
+  async finalizeIfIdle(recordingId: string): Promise<void> {
+    await this.maybeScheduleMerge(recordingId);
   }
 
   /**

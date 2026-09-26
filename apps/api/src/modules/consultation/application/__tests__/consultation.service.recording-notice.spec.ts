@@ -241,6 +241,20 @@ describe('ConsultationService — recording notice', () => {
       );
     });
 
+    it('rejoin into an ACTIVE session with a recording runs the egress catch-up', async () => {
+      const { service, recording } = makeService({
+        session: {
+          status: ConsultationStatus.ACTIVE,
+          recordingId: 'r-1',
+          doctorRecordingNoticeAt: new Date(),
+          doctorJoinedAt: new Date(),
+          patientJoinedAt: new Date(),
+        },
+      });
+      await service.issueJoinToken('s-1', doctor);
+      expect(recording.startAuto).toHaveBeenCalledWith('s-1');
+    });
+
     it('does not gate when there is no notice', async () => {
       const { service } = makeService({ recordingOff: true });
       await expect(service.issueJoinToken('s-1', doctor)).resolves.toMatchObject({ token: 'tok' });
