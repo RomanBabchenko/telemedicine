@@ -480,11 +480,13 @@ export class AppointmentService {
     return this.transition(id, AppointmentStatus.IN_PROGRESS);
   }
 
+  // Ends at COMPLETED. The former follow-up COMPLETED → DOCUMENTATION_PENDING
+  // could never succeed (COMPLETED is terminal), threw, and — being swallowed
+  // by the callers — also skipped the event below.
   async complete(id: string): Promise<Appointment> {
     const appt = await this.transition(id, AppointmentStatus.COMPLETED);
-    await this.transition(id, AppointmentStatus.DOCUMENTATION_PENDING);
     this.eventBus.publish(new AppointmentCompletedEvent(appt.id, appt.tenantId));
-    return this.getById(id);
+    return appt;
   }
 
   async markDocumentationCompleted(id: string): Promise<Appointment> {

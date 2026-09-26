@@ -265,16 +265,16 @@ const resolveLiveKitUrl = (apiProvidedUrl: string): string => {
 const LeaveButton = ({
   onEnd,
   endPending,
-  finishFlowPath,
+  documentFlow,
 }: {
   onEnd: () => void;
   endPending: boolean;
-  // Set for regular appointments — the "end & document" flow. Null for
+  // True for regular appointments — «Завершити та оформити» ends the
+  // consultation, then opens the documentation form. False for
   // invite-scoped/anonymous consultations where the MIS owns documentation.
-  finishFlowPath: string | null;
+  documentFlow: boolean;
 }) => {
   const room = useRoomContext();
-  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -304,28 +304,16 @@ const LeaveButton = ({
             >
               Відлучитися
             </Button>
-            {finishFlowPath ? (
-              <Button
-                variant="danger"
-                onClick={() => {
-                  setOpen(false);
-                  navigate(finishFlowPath);
-                }}
-              >
-                Завершити та оформити
-              </Button>
-            ) : (
-              <Button
-                variant="danger"
-                isLoading={endPending}
-                onClick={() => {
-                  setOpen(false);
-                  onEnd();
-                }}
-              >
-                Завершити консультацію
-              </Button>
-            )}
+            <Button
+              variant="danger"
+              isLoading={endPending}
+              onClick={() => {
+                setOpen(false);
+                onEnd();
+              }}
+            >
+              {documentFlow ? 'Завершити та оформити' : 'Завершити консультацію'}
+            </Button>
           </>
         }
       >
@@ -551,9 +539,18 @@ export const ConsultationPage = () => {
   // inside our app — the MIS owns conclusions/prescriptions/referrals. They
   // just need a way to close the session and move the appointment to
   // COMPLETED when the call is over.
+  // Regular appointments: the consultation is ended *before* the
+  // documentation form opens — the form used to end it only after the docs
+  // were signed, so an abandoned form left the appointment IN_PROGRESS.
+  const documentFlow = !isInviteScope && !apptQ.data?.isAnonymousPatient;
+  const navigate = useNavigate();
   const endM = useMutation({
     mutationFn: () => consultation.end(sessionId!),
     onSuccess: () => {
+      if (documentFlow) {
+        navigate(`/consultation/${sessionId}/finish`);
+        return;
+      }
       setJoined(false);
       setDisconnectReason('Консультацію завершено');
       // Refetch so the terminal-state branch flips the page from the
@@ -845,11 +842,7 @@ export const ConsultationPage = () => {
               <LeaveButton
                 onEnd={() => endM.mutate()}
                 endPending={endM.isPending}
-                finishFlowPath={
-                  isInviteScope || apptQ.data?.isAnonymousPatient
-                    ? null
-                    : `/consultation/${sessionId}/finish`
-                }
+                documentFlow={documentFlow}
               />
               <button
                 type="button"

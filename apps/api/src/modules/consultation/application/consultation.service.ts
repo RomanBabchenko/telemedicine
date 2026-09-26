@@ -8,6 +8,7 @@ import {
   ParticipantRole,
   RECORDING_DECLINED_REASON,
   Role,
+  type ConsultationEndReason,
   type RecordingNoticeDecision,
   type RecordingNoticeDto,
 } from '@telemed/shared-types';
@@ -25,7 +26,13 @@ import { AuthUser } from '../../../common/auth/decorators';
 // Same window for doctor and patient: early enough for mic/camera check,
 // generous enough for late arrivals and reconnects.
 const JOIN_OPENS_BEFORE_START_MS = 15 * 60 * 1000;
-const JOIN_CLOSES_AFTER_END_MS = 30 * 60 * 1000;
+export const JOIN_CLOSES_AFTER_END_MS = 30 * 60 * 1000;
+
+// Past endAt + this, an abandoned session is closed even if someone still
+// sits in the room or a track egress is still running.
+export const FORCE_END_AFTER_END_MS = 2 * 60 * 60 * 1000;
+
+export type AutoEndResult = 'ended' | 'healed' | 'occupied' | 'recording' | 'not_in_progress';
 
 const TERMINAL_APPOINTMENT_STATUSES = new Set<AppointmentStatus>([
   AppointmentStatus.COMPLETED,
@@ -165,11 +172,12 @@ export class ConsultationService {
     if (appointment.status === AppointmentStatus.IN_PROGRESS) {
       // Both sides already talked (the notice was switched on mid-session),
       // and IN_PROGRESS can't be cancelled — finish it the normal way.
-      return this.end(sessionId);
+      return this.end(sessionId, { reason: 'RECORDING_DECLINED' });
     }
     await this.appointmentService.cancel(appointment.id, !isDoctor, RECORDING_DECLINED_REASON);
     session.status = ConsultationStatus.ENDED;
     session.endedAt = new Date();
+    session.endReason = 'RECORDING_DECLINED';
     await this.sessions.save(session);
     await this.closeRoom(session);
     return session;
@@ -323,6 +331,27 @@ export class ConsultationService {
     };
   }
 
+  /**
+   * LiveKit `participant_left` → LEAVE session event. Webhooks carry no
+   * tenant, so the session is looked up by its (unique) room name and the
+   * event is written inside that session's tenant context. Identities follow
+   * issueJoinToken's scheme; anonymous invite pseudonyms must not land in
+   * actor_user_id (FK to users), same rule as for JOIN.
+   */
+  async recordParticipantLeft(roomName: string, identity: string, leftAt: Date): Promise<void> {
+    const session = await this.sessions.findOne({ where: { livekitRoomName: roomName } });
+    if (!session) return;
+    const isAnon = identity.startsWith('patient-anon-');
+    const actorUserId = isAnon ? null : identity.replace(/^(doctor|patient)-/, '') || null;
+    await this.tenantContext.run({ tenantId: session.tenantId }, () =>
+      this.recordEvent(session.id, 'LEAVE', actorUserId, {
+        identity,
+        leftAt: leftAt.toISOString(),
+        ...(isAnon ? { anonymous: true } : {}),
+      }),
+    );
+  }
+
   async recordEvent(
     sessionId: string,
     type: SessionEventType,
@@ -341,18 +370,79 @@ export class ConsultationService {
     );
   }
 
-  async end(sessionId: string): Promise<ConsultationSession> {
+  /**
+   * Ends the session (room closed, recording stopped) and completes the
+   * appointment. Idempotent: an already ENDED session keeps its endedAt /
+   * endReason; only the appointment completion is retried, which heals a
+   * session whose earlier completion failed.
+   */
+  async end(
+    sessionId: string,
+    opts: { reason?: ConsultationEndReason; endedAt?: Date } = {},
+  ): Promise<ConsultationSession> {
     const session = await this.getById(sessionId);
-    session.status = ConsultationStatus.ENDED;
-    session.endedAt = new Date();
-    await this.sessions.save(session);
-    await this.closeRoom(session);
+    if (session.status !== ConsultationStatus.ENDED) {
+      session.status = ConsultationStatus.ENDED;
+      session.endedAt = opts.endedAt ?? new Date();
+      session.endReason = opts.reason ?? 'DOCTOR';
+      await this.sessions.save(session);
+      await this.closeRoom(session);
+    }
     try {
       await this.appointmentService.complete(session.appointmentId);
     } catch {
       // already terminal
     }
     return session;
+  }
+
+  /**
+   * Closes a consultation nobody ended (doctor closed the tab, «Відлучитися»,
+   * lost connection, docs never submitted). Called by the sweeper for
+   * IN_PROGRESS appointments whose join window has closed. Waits while
+   * someone is still in the room or audio is still being recorded — until
+   * endAt + FORCE_END_AFTER_END_MS, then closes regardless. endedAt is the
+   * last observed activity, not the sweep time, so durations stay honest.
+   */
+  async autoEndIfAbandoned(sessionId: string, now = new Date()): Promise<AutoEndResult> {
+    const session = await this.getById(sessionId);
+    const appointment = await this.appointments.findOne({
+      where: { id: session.appointmentId },
+    });
+    if (!appointment || appointment.status !== AppointmentStatus.IN_PROGRESS) {
+      return 'not_in_progress';
+    }
+    if (session.status === ConsultationStatus.ENDED) {
+      // Ended earlier but the completion step failed — retry it.
+      await this.end(sessionId);
+      return 'healed';
+    }
+
+    const forced = now.getTime() > appointment.endAt.getTime() + FORCE_END_AFTER_END_MS;
+    const presence = await this.getPresence(session.livekitRoomName);
+    if (!forced && (presence.doctorPresent || presence.patientPresent)) return 'occupied';
+    const egress = await this.recording.egressActivity(sessionId);
+    if (!forced && egress.inflight) return 'recording';
+
+    const lastEvent = await this.events.findOne({
+      where: { sessionId },
+      order: { createdAt: 'DESC' },
+    });
+    const candidates = [egress.lastEndedAt, lastEvent?.createdAt ?? null, session.startedAt]
+      .filter((d): d is Date => d instanceof Date)
+      .filter((d) => d.getTime() <= now.getTime());
+    const lastActivityAt = candidates.length
+      ? new Date(Math.max(...candidates.map((d) => d.getTime())))
+      : now;
+
+    await this.end(sessionId, { reason: 'AUTO_TIMEOUT', endedAt: lastActivityAt });
+    await this.recordEvent(session.id, 'AUTO_ENDED', null, {
+      forced,
+      lastActivityAt: lastActivityAt.toISOString(),
+      ...presence,
+      egressInflight: egress.inflight,
+    });
+    return 'ended';
   }
 
   // Stops recording before deleting the room; deleting it disconnects everyone.

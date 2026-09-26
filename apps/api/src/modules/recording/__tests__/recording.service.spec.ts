@@ -414,5 +414,44 @@ describe('RecordingService', () => {
       const recording = [...ctx.recordingsState.rows.values()][0];
       expect(recording.status).toBe('RECORDING');
     });
+
+    it('finalises a recording with no egresses as FAILED (no webhook will ever come)', async () => {
+      // No audio track was ever published — startAuto creates the row but
+      // starts nothing, so without this the row would stay RECORDING forever.
+      const ctx = makeService({ listAudioTracks: async () => [] });
+      await ctx.svc.startAuto('sess-1');
+
+      await ctx.svc.stop('sess-1');
+
+      const recording = [...ctx.recordingsState.rows.values()][0];
+      expect(recording.status).toBe('FAILED');
+      expect(ctx.queue.add).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('egressActivity', () => {
+    it('reports in-flight egresses and the latest end time', async () => {
+      const ctx = makeService({
+        listAudioTracks: async () => [
+          { identity: 'doctor-1', trackSid: 'TR_doctor' },
+          { identity: 'patient-1', trackSid: 'TR_patient' },
+        ],
+      });
+      await ctx.svc.startAuto('sess-1');
+      const [first] = [...ctx.egressesState.rows.values()];
+      await ctx.svc.handleEgressEnded(first.egressId, 60);
+
+      const activity = await ctx.svc.egressActivity('sess-1');
+      expect(activity.inflight).toBe(true);
+      expect(activity.lastEndedAt).toBeInstanceOf(Date);
+    });
+
+    it('is idle with no recording', async () => {
+      const ctx = makeService();
+      await expect(ctx.svc.egressActivity('sess-1')).resolves.toEqual({
+        inflight: false,
+        lastEndedAt: null,
+      });
+    });
   });
 });

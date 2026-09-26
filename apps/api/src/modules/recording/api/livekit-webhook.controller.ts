@@ -8,11 +8,13 @@ import {
 } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
+import { EventBus } from '@nestjs/cqrs';
 import { Request } from 'express';
 import { EgressStatus, TrackType, WebhookReceiver } from 'livekit-server-sdk';
 import { Public } from '../../../common/auth/decorators';
 import { AppConfig } from '../../../config/env.config';
 import { RecordingService } from '../application/recording.service';
+import { LiveKitParticipantLeftEvent } from '../../consultation/events/livekit-participant-left.event';
 
 // LiveKit signs its webhook body as JWT in the Authorization header using the
 // same api_key/api_secret pair configured for the server. WebhookReceiver
@@ -35,6 +37,7 @@ export class LiveKitWebhookController {
 
   constructor(
     private readonly recording: RecordingService,
+    private readonly eventBus: EventBus,
     config: AppConfig,
   ) {
     this.receiver = new WebhookReceiver(
@@ -95,10 +98,27 @@ export class LiveKitWebhookController {
         event.track.sid,
         trackKindFromType(event.track.type),
       );
+    } else if (event.event === 'participant_left' && event.room && event.participant) {
+      // LEAVE session events live in the consultation module — hand over via
+      // the event bus (it already depends on this module, not vice versa).
+      this.eventBus.publish(
+        new LiveKitParticipantLeftEvent(
+          event.room.name,
+          event.participant.identity,
+          webhookTime(event.createdAt),
+        ),
+      );
     }
 
     return { received: true };
   }
+}
+
+// WebhookEvent.createdAt is unix seconds (bigint); fall back to "now" when
+// absent — webhooks arrive within seconds anyway.
+function webhookTime(createdAt: bigint | number | string | undefined): Date {
+  const s = toBigInt(createdAt);
+  return s !== null && s > 0n ? new Date(Number(s) * 1000) : new Date();
 }
 
 function trackKindFromType(t: TrackType): 'AUDIO' | 'VIDEO' | 'DATA' {

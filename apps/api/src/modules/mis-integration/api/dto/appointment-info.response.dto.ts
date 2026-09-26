@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { AppointmentStatus, ConsultationStatus } from '@telemed/shared-types';
+import type { ConsultationEndReason } from '@telemed/shared-types';
 
 /**
  * Per-call consultation info — the `consultation` block on the appointment
@@ -37,6 +38,14 @@ export class AppointmentConsultationInfoDto {
     description: 'Recording id, if the audio recorder produced one. Use the /recording endpoint to fetch the actual MP3.',
   })
   recordingId!: string | null;
+
+  @ApiProperty({
+    enum: ['DOCTOR', 'AUTO_TIMEOUT', 'RECORDING_DECLINED'],
+    nullable: true,
+    description:
+      'Why the call ended: DOCTOR — the doctor ended it; AUTO_TIMEOUT — nobody ended it, the platform closed it after the join window (room empty, no audio being recorded); RECORDING_DECLINED — a participant refused the recording notice. Null while not ended.',
+  })
+  endReason!: ConsultationEndReason | null;
 }
 
 export class AppointmentInfoResponseDto {

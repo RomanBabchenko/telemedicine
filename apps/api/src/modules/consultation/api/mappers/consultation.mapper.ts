@@ -28,4 +28,5 @@ export const toConsultationSessionResponse = (
   doctorRecordingNoticeAt: s.doctorRecordingNoticeAt?.toISOString() ?? null,
   patientRecordingNoticeAt: s.patientRecordingNoticeAt?.toISOString() ?? null,
   recordingActive,
+  endReason: s.endReason ?? null,
 });

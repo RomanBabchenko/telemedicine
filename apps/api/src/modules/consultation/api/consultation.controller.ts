@@ -144,7 +144,7 @@ export class ConsultationController {
   async end(
     @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<ConsultationSessionResponseDto> {
-    const session = await this.service.end(id);
+    const session = await this.service.end(id, { reason: 'DOCTOR' });
     return toConsultationSessionResponse(session);
   }
 }

@@ -92,7 +92,9 @@ export class MisAppointmentService {
    *     /recording endpoint as a happened-or-not signal.
    *   - "did anyone show up?" — `consultation.patientJoinedAt` /
    *     `doctorJoinedAt` are populated as participants click join.
-   *   - "is the call over?" — `consultation.endedAt` is set on disconnect.
+   *   - "is the call over?" — `consultation.endedAt` is set when the doctor
+   *     ends the call, or by the stale-consultation sweeper once the join
+   *     window closed with an empty room (`endReason` tells which).
    *
    * `consultation` is null until the first joinToken request creates the
    * session row (lazy creation in ConsultationService.ensureForAppointment),
@@ -130,6 +132,7 @@ export class MisAppointmentService {
               ? session.doctorJoinedAt.toISOString()
               : null,
             recordingId: session.recordingId,
+            endReason: session.endReason ?? null,
           }
         : null,
     };

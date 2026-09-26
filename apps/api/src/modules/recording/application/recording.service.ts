@@ -175,7 +175,29 @@ export class RecordingService {
     // Don't flip SessionRecording.status here — egress_ended webhooks are the
     // authoritative completion signal, and the merge job (scheduled when the
     // last egress finishes) is what eventually flips status to STORED.
+    // Exception: with nothing in flight no webhook will ever come (e.g. no
+    // audio track was ever published) — finalise now instead of leaving the
+    // row RECORDING forever.
+    if (inflight.length === 0) await this.maybeScheduleMerge(recording.id);
     return recording;
+  }
+
+  /**
+   * Egress state of the session's recording, for the stale-consultation
+   * sweeper: is audio still being written, and when did the last track stop.
+   */
+  async egressActivity(
+    sessionId: string,
+  ): Promise<{ inflight: boolean; lastEndedAt: Date | null }> {
+    const tenantId = this.tenantContext.getTenantId();
+    const recording = await this.recordings.findOne({ where: { sessionId, tenantId } });
+    if (!recording) return { inflight: false, lastEndedAt: null };
+    const all = await this.egresses.find({ where: { recordingId: recording.id } });
+    let lastEndedAt: Date | null = null;
+    for (const e of all) {
+      if (e.endedAt && (!lastEndedAt || e.endedAt > lastEndedAt)) lastEndedAt = e.endedAt;
+    }
+    return { inflight: all.some((e) => e.status === 'RECORDING'), lastEndedAt };
   }
 
   /**

@@ -23,7 +23,15 @@ export interface ConsultationSessionDto {
   // Audio is being recorded right now — drives the in-call «Запис» badge.
   // Derived on each fetch (recording row still RECORDING, session not ENDED).
   recordingActive: boolean;
+  // Who/what ended the session; null while it's not ENDED (and for sessions
+  // ended before this field existed).
+  endReason: ConsultationEndReason | null;
 }
+
+// DOCTOR — explicit «Завершити» by the doctor; AUTO_TIMEOUT — closed by the
+// server after the join window with an empty room and no audio recording;
+// RECORDING_DECLINED — a participant refused the recording notice.
+export type ConsultationEndReason = 'DOCTOR' | 'AUTO_TIMEOUT' | 'RECORDING_DECLINED';
 
 export interface RecordingNoticeDto {
   text: string;

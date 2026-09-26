@@ -1,6 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ConsultationStatus } from '@telemed/shared-types';
-import type { ConsultationSessionDto, RecordingNoticeDto } from '@telemed/shared-types';
+import type {
+  ConsultationEndReason,
+  ConsultationSessionDto,
+  RecordingNoticeDto,
+} from '@telemed/shared-types';
 
 export class RecordingNoticeResponseDto implements RecordingNoticeDto {
   @ApiProperty({ description: 'Consent sentence (clinic text or the default)' })
@@ -74,4 +78,12 @@ export class ConsultationSessionResponseDto implements ConsultationSessionDto {
       'True while the audio recording is running (derived on each fetch) — drives the in-call recording badge',
   })
   recordingActive!: boolean;
+
+  @ApiProperty({
+    enum: ['DOCTOR', 'AUTO_TIMEOUT', 'RECORDING_DECLINED'],
+    nullable: true,
+    description:
+      'Why the session ended: DOCTOR (explicit end), AUTO_TIMEOUT (closed by the server after the join window — room empty, audio not recording), RECORDING_DECLINED. Null while not ended.',
+  })
+  endReason!: ConsultationEndReason | null;
 }
