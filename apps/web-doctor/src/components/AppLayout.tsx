@@ -34,16 +34,22 @@ export const AppLayout = ({ children }: { children: ReactNode }) => {
             <span className="text-xs text-slate-500">
               {user?.firstName} {user?.lastName}
             </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                logout();
-                navigate('/auth/login');
-              }}
-            >
-              Вийти
-            </Button>
+            {/* No global logout for invite-link sessions: it drops the
+             * single-use invite JWT and leaves the room outside the
+             * consultation flow (recording keeps running, no way back).
+             * Leaving goes through the call's own «Вийти» modal. */}
+            {!isInviteScope && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  logout();
+                  navigate('/auth/login');
+                }}
+              >
+                Вийти
+              </Button>
+            )}
           </nav>
         </div>
       </header>

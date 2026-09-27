@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CqrsModule } from '@nestjs/cqrs';
 import { BullModule } from '@nestjs/bullmq';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SessionRecording } from './domain/entities/session-recording.entity';
@@ -14,6 +15,7 @@ import { LiveKitWebhookController } from './api/livekit-webhook.controller';
 
 @Module({
   imports: [
+    CqrsModule,
     TypeOrmModule.forFeature([
       SessionRecording,
       RecordingEgress,

@@ -45,7 +45,11 @@ export const AppLayout = () => {
                 </Link>
               </>
             )}
-            {user && (
+            {/* No global logout for invite-link sessions: it drops the
+             * single-use invite JWT and leaves the room outside the
+             * consultation flow (no way back in). Leaving the call goes
+             * through the call's own «Вийти» button. */}
+            {user && !isInviteScope && (
               <Button
                 variant="ghost"
                 size="sm"

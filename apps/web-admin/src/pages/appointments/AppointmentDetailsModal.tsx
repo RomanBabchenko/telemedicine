@@ -5,7 +5,11 @@ import { bookingApi, consultationApi } from '@telemed/api-client';
 import {
   APPOINTMENT_SOURCE_LABELS,
   AppointmentStatus,
+  CLARITY_RATING_LABELS,
+  FEEDBACK_RESOLVED_LABELS,
   hasAnyRole,
+  type ClarityRating,
+  type FeedbackResolved,
   type ReissueInvitesDto,
   type Role,
 } from '@telemed/shared-types';
@@ -31,6 +35,15 @@ const TERMINAL_STATUSES: ReadonlySet<AppointmentStatus> = new Set([
   AppointmentStatus.NO_SHOW_PROVIDER,
   AppointmentStatus.REFUNDED,
 ]);
+
+const RESOLVED_BADGE: Record<FeedbackResolved, 'success' | 'warning' | 'danger'> = {
+  YES: 'success',
+  PARTIALLY: 'warning',
+  NO: 'danger',
+};
+
+const httpStatus = (e: unknown): number | undefined =>
+  (e as { response?: { status?: number } } | null)?.response?.status;
 
 const Row = ({ label, value }: { label: string; value: React.ReactNode }) => (
   <div className="flex items-start justify-between gap-4 border-b border-slate-100 py-1.5 text-sm">
@@ -84,6 +97,15 @@ export const AppointmentDetailsModal = ({ appointmentId, onClose }: Props) => {
     queryKey: ['admin-appointment-recording', a?.consultationSessionId],
     queryFn: () => consultation.getRecording(a!.consultationSessionId!),
     enabled: !!a?.consultationSessionId && audioArchiveOn,
+    retry: false,
+  });
+
+  // Patient's post-consultation answers. Admin-console roles only; the
+  // endpoint is not feature-gated so older answers stay readable. 404 =
+  // the patient did not answer.
+  const feedbackQ = useQuery({
+    queryKey: ['admin-appointment-feedback', appointmentId],
+    queryFn: () => booking.getFeedback(appointmentId),
     retry: false,
   });
 
@@ -150,6 +172,52 @@ export const AppointmentDetailsModal = ({ appointmentId, onClose }: Props) => {
                 <Row label="Причина звернення" value={a.reasonText} />
               </div>
             </div>
+          </section>
+
+          <section>
+            <h4 className="mb-1 text-xs font-semibold uppercase text-slate-400">Оцінка пацієнта</h4>
+            {feedbackQ.isLoading ? (
+              <Spinner />
+            ) : feedbackQ.data ? (
+              <div className="grid gap-x-8 sm:grid-cols-2">
+                <div>
+                  <Row
+                    label="Питання вирішено"
+                    value={
+                      <Badge variant={RESOLVED_BADGE[feedbackQ.data.resolved]}>
+                        {FEEDBACK_RESOLVED_LABELS[feedbackQ.data.resolved]}
+                      </Badge>
+                    }
+                  />
+                  <Row
+                    label="Зрозумілість пояснень"
+                    value={
+                      <span>
+                        <span className="text-amber-500">
+                          {'★'.repeat(feedbackQ.data.clarityRating)}
+                          <span className="text-slate-300">
+                            {'☆'.repeat(Math.max(0, 5 - feedbackQ.data.clarityRating))}
+                          </span>
+                        </span>
+                        {' · '}
+                        {CLARITY_RATING_LABELS[feedbackQ.data.clarityRating as ClarityRating] ??
+                          `${feedbackQ.data.clarityRating} з 5`}
+                      </span>
+                    }
+                  />
+                </div>
+                <div>
+                  <Row
+                    label="Надіслано"
+                    value={dayjs(feedbackQ.data.submittedAt).format('DD.MM.YYYY HH:mm')}
+                  />
+                </div>
+              </div>
+            ) : httpStatus(feedbackQ.error) === 403 ? (
+              <p className="text-sm text-slate-400">Оцінка недоступна.</p>
+            ) : (
+              <p className="text-sm text-slate-400">Пацієнт не залишив оцінку.</p>
+            )}
           </section>
 
           {canReissue ? (

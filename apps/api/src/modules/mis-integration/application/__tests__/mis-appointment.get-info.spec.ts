@@ -79,6 +79,7 @@ describe('MisAppointmentService.getInfo', () => {
       patientJoinedAt: new Date('2026-05-01T10:00:30Z'),
       doctorJoinedAt: new Date('2026-05-01T10:01:00Z'),
       recordingId: 'rec-1',
+      endReason: 'AUTO_TIMEOUT',
     } as unknown as ConsultationSession;
 
     const { service } = buildService(appt, session);
@@ -92,6 +93,7 @@ describe('MisAppointmentService.getInfo', () => {
       patientJoinedAt: '2026-05-01T10:00:30.000Z',
       doctorJoinedAt: '2026-05-01T10:01:00.000Z',
       recordingId: 'rec-1',
+      endReason: 'AUTO_TIMEOUT',
     });
     expect(dto.misPaymentType).toBe('prepaid');
     expect(dto.misPaymentStatus).toBe('paid');
@@ -126,6 +128,7 @@ describe('MisAppointmentService.getInfo', () => {
       patientJoinedAt: '2026-05-01T10:00:30.000Z',
       doctorJoinedAt: null,
       recordingId: null,
+      endReason: null,
     });
   });
 });

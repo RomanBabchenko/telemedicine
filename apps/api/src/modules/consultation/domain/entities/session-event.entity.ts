@@ -9,6 +9,9 @@ export type SessionEventType =
   | 'RECONNECT'
   | 'RECORDING_START'
   | 'RECORDING_STOP'
+  | 'RECORDING_NOTICE_ACCEPTED'
+  | 'RECORDING_NOTICE_DECLINED'
+  | 'AUTO_ENDED'
   | 'ERROR';
 
 @Entity('session_events')

@@ -9,7 +9,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Queue } from 'bullmq';
 import { QueryFailedError, Repository } from 'typeorm';
-import { ConsentStatus, ConsentType } from '@telemed/shared-types';
+import { ConsentStatus, ConsentType, ConsultationStatus } from '@telemed/shared-types';
 import { SessionRecording } from '../domain/entities/session-recording.entity';
 import { RecordingEgress } from '../domain/entities/recording-egress.entity';
 import { ConsultationSession } from '../../consultation/domain/entities/consultation-session.entity';
@@ -59,7 +59,7 @@ export class RecordingService {
    * module for the clinic, and the clinic itself opts in via
    * `audioPolicy.enabled`. Returns the reason when either key is off.
    */
-  private recordingDisabledReason(tenant: Tenant): string | null {
+  recordingDisabledReason(tenant: Tenant): string | null {
     if (!this.tenantService.hasFeature(tenant, 'audioArchive')) {
       return 'audioArchive module is disabled';
     }
@@ -175,12 +175,38 @@ export class RecordingService {
     // Don't flip SessionRecording.status here — egress_ended webhooks are the
     // authoritative completion signal, and the merge job (scheduled when the
     // last egress finishes) is what eventually flips status to STORED.
+    // Exception: with nothing in flight no webhook will ever come (e.g. no
+    // audio track was ever published) — finalise now instead of leaving the
+    // row RECORDING forever.
+    if (inflight.length === 0) await this.maybeScheduleMerge(recording.id);
     return recording;
   }
 
   /**
+   * Egress state of the session's recording, for the stale-consultation
+   * sweeper: is audio still being written, and when did the last track stop.
+   */
+  async egressActivity(
+    sessionId: string,
+  ): Promise<{ inflight: boolean; lastEndedAt: Date | null }> {
+    const tenantId = this.tenantContext.getTenantId();
+    const recording = await this.recordings.findOne({ where: { sessionId, tenantId } });
+    if (!recording) return { inflight: false, lastEndedAt: null };
+    const all = await this.egresses.find({ where: { recordingId: recording.id } });
+    let lastEndedAt: Date | null = null;
+    for (const e of all) {
+      if (e.endedAt && (!lastEndedAt || e.endedAt > lastEndedAt)) lastEndedAt = e.endedAt;
+    }
+    return { inflight: all.some((e) => e.status === 'RECORDING'), lastEndedAt };
+  }
+
+  /**
    * Called from the LiveKit `egress_ended` webhook. Marks the per-track row
-   * terminal and, when all siblings are terminal, schedules the merge job.
+   * terminal and, once all siblings are terminal *and the session has ended*,
+   * schedules the merge job. While the session is still open, everyone
+   * leaving only pauses the recording: a rejoin (same invite links, window
+   * still open) publishes new tracks whose egresses land in the same
+   * recording, and the merge places every segment by its startedAt.
    * Webhooks have no tenant context — we look up by globally-unique egressId.
    *
    * @param failed - true if EgressInfo.status was EGRESS_FAILED / ABORTED
@@ -204,7 +230,30 @@ export class RecordingService {
     re.endedAt = new Date();
     await this.egresses.save(re);
 
+    const recording = await this.recordings.findOne({ where: { id: re.recordingId } });
+    const session = recording
+      ? await this.sessions.findOne({ where: { id: recording.sessionId } })
+      : null;
+    if (session && session.status !== ConsultationStatus.ENDED) {
+      // Merge happens on session end: ConsultationService.end() → stop(), or
+      // the stale-consultation sweeper's idle-recording pass.
+      this.logger.log(
+        `egress ${egressId} ended; recording ${re.recordingId} stays open until session ${session.id} ends`,
+      );
+      return;
+    }
     await this.maybeScheduleMerge(re.recordingId);
+  }
+
+  /**
+   * Merge (or fail) a recording whose egresses have all finished. Safe to
+   * call repeatedly — no-op while a track is still recording or once the
+   * recording left RECORDING. Used by the sweeper for recordings paused when
+   * everyone left and whose session was then ended without a webhook to
+   * follow (or whose appointment moved on, e.g. NO_SHOW from MIS).
+   */
+  async finalizeIfIdle(recordingId: string): Promise<void> {
+    await this.maybeScheduleMerge(recordingId);
   }
 
   /**
@@ -262,6 +311,18 @@ export class RecordingService {
       participantIdentity,
       trackSid,
     );
+  }
+
+  /**
+   * True while the session's recording is running (auto-started once both
+   * sides joined, not yet stopped/merged). Drives the in-call «Запис»
+   * indicator — from our own row, not LiveKit's room.isRecording, which
+   * isn't documented to cover per-track egress.
+   */
+  async isRecordingActive(sessionId: string): Promise<boolean> {
+    const tenantId = this.tenantContext.getTenantId();
+    const recording = await this.recordings.findOne({ where: { sessionId, tenantId } });
+    return recording?.status === 'RECORDING';
   }
 
   async getRecordingInfo(sessionId: string): Promise<{

@@ -7,7 +7,7 @@ import type { Role, TenantFeatureKey } from '@telemed/shared-types';
 // The API enforces everything server-side; this is purely UX gating.
 //
 //   FULL = CLINIC_ADMIN, PLATFORM_SUPER_ADMIN — everything
-//   IA   = INTEGRATION_ADMIN — everything except doctors / MIS sync / modules
+//   IA   = INTEGRATION_ADMIN — everything except doctors / MIS sync
 //   CMO  = CHIEF_MEDICAL_OFFICER — dashboard, appointments, analytics only
 const FULL: readonly Role[] = ['CLINIC_ADMIN', 'PLATFORM_SUPER_ADMIN'];
 const IA: Role = 'INTEGRATION_ADMIN';
@@ -36,7 +36,7 @@ export const CLINIC_SECTIONS: readonly AdminSection[] = [
   { to: '/billing', label: 'Білінг', roles: FULL },
   { to: '/analytics', label: 'Аналітика', roles: FULL, feature: 'analyticsPackage' },
   { to: '/branding', label: 'Брендинг', roles: [...FULL, IA] },
-  { to: '/features', label: 'Модулі', roles: FULL },
+  { to: '/features', label: 'Модулі', roles: [...FULL, IA] },
   { to: '/audit', label: 'Аудит', roles: [...FULL, IA] },
 ];
 

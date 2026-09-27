@@ -37,6 +37,8 @@ import { buildPaginationMeta } from '../../../common/dto/pagination.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { SessionRecording } from '../../recording/domain/entities/session-recording.entity';
+import { AppointmentFeedback } from '../../feedback/domain/entities/appointment-feedback.entity';
+import { toFeedbackSummary } from '../../feedback/api/mappers/feedback.mapper';
 import { AvailabilityService } from '../application/availability.service';
 import { AppointmentService } from '../application/appointment.service';
 import { PatientService } from '../../patient/application/patient.service';
@@ -63,7 +65,25 @@ export class BookingController {
     private readonly providers: ProviderService,
     @InjectRepository(SessionRecording)
     private readonly recordings: Repository<SessionRecording>,
+    @InjectRepository(AppointmentFeedback)
+    private readonly feedbacks: Repository<AppointmentFeedback>,
   ) {}
+
+  // Attach the patient's post-consultation answers to admin list rows. One
+  // batched query per list call. Only adminList uses this — the role-aware
+  // list and getById are consumed by doctors/patients, who must never see
+  // the feedback.
+  private async withFeedback(rows: AppointmentResponseDto[]): Promise<AppointmentResponseDto[]> {
+    if (rows.length === 0) return rows;
+    const found = await this.feedbacks.find({
+      where: { appointmentId: In(rows.map((r) => r.id)) },
+    });
+    const byAppointment = new Map(found.map((f) => [f.appointmentId, f]));
+    return rows.map((r) => {
+      const f = byAppointment.get(r.id);
+      return f ? { ...r, feedback: toFeedbackSummary(f) } : r;
+    });
+  }
 
   // Mark rows whose merged recording is actually STORED — the table's
   // indicator must not light up for sessions that were never recorded or are
@@ -263,7 +283,7 @@ export class BookingController {
       pageSize,
     });
     return {
-      items: await this.withRecordingFlags(items),
+      items: await this.withFeedback(await this.withRecordingFlags(items)),
       meta: buildPaginationMeta(total, page, pageSize),
     };
   }

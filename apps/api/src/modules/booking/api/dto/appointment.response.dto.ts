@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AppointmentSource, AppointmentStatus } from '@telemed/shared-types';
 import { PaginatedResponseDto, PaginationMetaDto } from '../../../../common/dto/pagination.dto';
+import { AppointmentFeedbackSummaryDto } from '../../../feedback/api/dto/appointment-feedback.response.dto';
 import type {
   AppointmentDoctorSummary,
   AppointmentDto,
@@ -75,6 +76,13 @@ export class AppointmentResponseDto implements AppointmentDto {
   @ApiProperty({ type: String, nullable: true })
   reasonText!: string | null;
 
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: "Cancellation reason; 'recording_consent_declined' when a participant declined the recording notice",
+  })
+  cancelledReason!: string | null;
+
   @ApiProperty({ format: 'date-time' })
   startAt!: string;
 
@@ -119,6 +127,13 @@ export class AppointmentResponseDto implements AppointmentDto {
 
   @ApiPropertyOptional({ type: AppointmentDoctorSummaryDto })
   doctor?: AppointmentDoctorSummaryDto;
+
+  @ApiPropertyOptional({
+    type: AppointmentFeedbackSummaryDto,
+    description:
+      "Patient's post-consultation feedback. Set only by the admin list endpoint — never returned to doctors or patients.",
+  })
+  feedback?: AppointmentFeedbackSummaryDto;
 }
 
 export class AppointmentsPageResponseDto extends PaginatedResponseDto<AppointmentResponseDto> {

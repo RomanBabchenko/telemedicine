@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import type {
   TenantAudioPolicyDto,
+  TenantConsultationPolicyDto,
   TenantInvitePolicyDto,
   TenantLoginPolicyDto,
 } from '@telemed/shared-types';
@@ -38,6 +39,17 @@ export class TenantLoginPolicyResponseDto implements TenantLoginPolicyDto {
   patientEnabled?: boolean;
 }
 
+export class TenantConsultationPolicyResponseDto implements TenantConsultationPolicyDto {
+  @ApiProperty({ description: 'Show the recording notice before joining' })
+  recordingNoticeEnabled!: boolean;
+
+  @ApiProperty({ type: String, nullable: true })
+  recordingNoticeText!: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  offerUrl!: string | null;
+}
+
 export class TenantResponseDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;
@@ -56,6 +68,9 @@ export class TenantResponseDto {
 
   @ApiProperty({ type: String, nullable: true })
   logoUrl!: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  websiteUrl!: string | null;
 
   @ApiProperty({ example: 'uk' })
   locale!: string;
@@ -77,4 +92,7 @@ export class TenantResponseDto {
 
   @ApiProperty({ type: TenantLoginPolicyResponseDto })
   loginPolicy!: TenantLoginPolicyResponseDto;
+
+  @ApiProperty({ type: TenantConsultationPolicyResponseDto })
+  consultationPolicy!: TenantConsultationPolicyResponseDto;
 }

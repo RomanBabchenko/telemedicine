@@ -205,3 +205,4 @@ export * from './notification';
 export * from './audit';
 export * from './common';
 export * from './integration';
+export * from './feedback';

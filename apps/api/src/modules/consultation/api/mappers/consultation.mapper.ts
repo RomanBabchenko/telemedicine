@@ -1,3 +1,4 @@
+import type { RecordingNoticeDto } from '@telemed/shared-types';
 import { ConsultationSession } from '../../domain/entities/consultation-session.entity';
 import { ConsultationSessionResponseDto } from '../dto/consultation-session.response.dto';
 
@@ -9,6 +10,8 @@ export interface SessionPresence {
 export const toConsultationSessionResponse = (
   s: ConsultationSession,
   presence: SessionPresence = { doctorPresent: false, patientPresent: false },
+  recordingNotice: RecordingNoticeDto | null = null,
+  recordingActive = false,
 ): ConsultationSessionResponseDto => ({
   id: s.id,
   appointmentId: s.appointmentId,
@@ -21,4 +24,9 @@ export const toConsultationSessionResponse = (
   recordingId: s.recordingId,
   doctorPresent: presence.doctorPresent,
   patientPresent: presence.patientPresent,
+  recordingNotice,
+  doctorRecordingNoticeAt: s.doctorRecordingNoticeAt?.toISOString() ?? null,
+  patientRecordingNoticeAt: s.patientRecordingNoticeAt?.toISOString() ?? null,
+  recordingActive,
+  endReason: s.endReason ?? null,
 });

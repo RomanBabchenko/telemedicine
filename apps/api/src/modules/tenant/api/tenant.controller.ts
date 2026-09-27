@@ -125,7 +125,7 @@ export class TenantController {
   @ApiOperation({
     summary: 'Update tenant branding / features / policies',
     description:
-      'CLINIC_ADMIN is allowed only for their own tenant; PLATFORM_SUPER_ADMIN may touch any. The module matrix (features) is platform-only — CLINIC_ADMIN gets 403 for it. INTEGRATION_ADMIN may update branding fields only — policies are rejected with 403.',
+      'CLINIC_ADMIN is allowed only for their own tenant; PLATFORM_SUPER_ADMIN may touch any. The module matrix (features) is platform-only — CLINIC_ADMIN gets 403 for it. INTEGRATION_ADMIN may update branding and the module settings (audioPolicy, consultationPolicy) of its own tenant; invitePolicy / loginPolicy are rejected with 403.',
     operationId: 'updateTenant',
   })
   @ApiParam({ name: 'id', format: 'uuid' })
@@ -149,18 +149,19 @@ export class TenantController {
     if (!isPlatformAdmin && body.features !== undefined) {
       throw new ForbiddenException('Only PLATFORM_SUPER_ADMIN may change features');
     }
-    this.assertBrandingOnlyForScopedAdmins(user, body);
+    this.assertClinicOnlyPoliciesForScopedAdmins(user, body);
     const t = await this.service.update(id, body);
     return toTenantResponse(t);
   }
 
-  // Policies are clinic-level decisions: only full tenant admins may change
-  // them. INTEGRATION_ADMIN shares this endpoint for branding, so reject the
-  // policy keys rather than the whole request. (`features` is rejected for
-  // every non-platform actor before we get here.)
-  private assertBrandingOnlyForScopedAdmins(user: AuthUser, body: UpdateTenantBodyDto): void {
+  // Security/auth policies stay with full tenant admins. INTEGRATION_ADMIN
+  // shares this endpoint for branding and the module settings on «Модулі»
+  // (audioPolicy, consultationPolicy), so reject only the clinic-only keys
+  // rather than the whole request. (`features` is rejected for every
+  // non-platform actor before we get here.)
+  private assertClinicOnlyPoliciesForScopedAdmins(user: AuthUser, body: UpdateTenantBodyDto): void {
     if (isFullTenantAdmin(user.roles)) return;
-    const touched = TENANT_POLICY_FIELDS.filter((k) => body[k] !== undefined);
+    const touched = CLINIC_ONLY_POLICY_FIELDS.filter((k) => body[k] !== undefined);
     if (touched.length > 0) {
       throw new ForbiddenException(
         `Only CLINIC_ADMIN may change ${touched.join(', ')}`,
@@ -169,4 +170,4 @@ export class TenantController {
   }
 }
 
-const TENANT_POLICY_FIELDS = ['audioPolicy', 'invitePolicy', 'loginPolicy'] as const;
+const CLINIC_ONLY_POLICY_FIELDS = ['invitePolicy', 'loginPolicy'] as const;

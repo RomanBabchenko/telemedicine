@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   GridLayout,
   LayoutContextProvider,
@@ -14,11 +14,21 @@ import {
 import { DisconnectReason, Track, VideoPreset } from 'livekit-client';
 import dayjs from 'dayjs';
 import { bookingApi, consultationApi } from '@telemed/api-client';
-import { AppointmentStatus } from '@telemed/shared-types';
+import {
+  AppointmentStatus,
+  ConsultationStatus,
+  RECORDING_DECLINED_REASON,
+  type ConsultationSessionDto,
+} from '@telemed/shared-types';
 import { Alert, Button, Card, Modal, PageHeader, Spinner } from '@telemed/ui';
 import { apiClient } from '../../lib/api';
 import { useAuthStore } from '../../stores/auth.store';
-import { CallControls } from '@telemed/web-shared';
+import {
+  CallControls,
+  RecordingIndicator,
+  RECORDING_NOTICE_REQUIRED_CODE,
+  useRecordingNotice,
+} from '@telemed/web-shared';
 import { LobbyDeviceState, LobbyPreview } from './LobbyPreview';
 
 const consultation = consultationApi(apiClient);
@@ -55,6 +65,11 @@ const extractApiMessage = (e: unknown, fallback: string): string => {
   }
   if (e instanceof Error && e.message) return e.message;
   return fallback;
+};
+
+const extractApiCode = (e: unknown): string | null => {
+  const code = (e as { response?: { data?: { code?: unknown } } })?.response?.data?.code;
+  return typeof code === 'string' ? code : null;
 };
 
 const formatUntil = (targetMs: number, nowMs: number): string => {
@@ -250,16 +265,16 @@ const resolveLiveKitUrl = (apiProvidedUrl: string): string => {
 const LeaveButton = ({
   onEnd,
   endPending,
-  finishFlowPath,
+  documentFlow,
 }: {
   onEnd: () => void;
   endPending: boolean;
-  // Set for regular appointments — the "end & document" flow. Null for
+  // True for regular appointments — «Завершити та оформити» ends the
+  // consultation, then opens the documentation form. False for
   // invite-scoped/anonymous consultations where the MIS owns documentation.
-  finishFlowPath: string | null;
+  documentFlow: boolean;
 }) => {
   const room = useRoomContext();
-  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -289,28 +304,16 @@ const LeaveButton = ({
             >
               Відлучитися
             </Button>
-            {finishFlowPath ? (
-              <Button
-                variant="danger"
-                onClick={() => {
-                  setOpen(false);
-                  navigate(finishFlowPath);
-                }}
-              >
-                Завершити та оформити
-              </Button>
-            ) : (
-              <Button
-                variant="danger"
-                isLoading={endPending}
-                onClick={() => {
-                  setOpen(false);
-                  onEnd();
-                }}
-              >
-                Завершити консультацію
-              </Button>
-            )}
+            <Button
+              variant="danger"
+              isLoading={endPending}
+              onClick={() => {
+                setOpen(false);
+                onEnd();
+              }}
+            >
+              {documentFlow ? 'Завершити та оформити' : 'Завершити консультацію'}
+            </Button>
           </>
         }
       >
@@ -443,10 +446,10 @@ export const ConsultationPage = () => {
     queryKey: ['session', sessionId],
     queryFn: () => consultation.getById(sessionId!),
     enabled: !!sessionId,
-    // Poll while in the lobby so the patient-presence indicator updates.
-    // Once the doctor connects the LiveKit room exposes presence directly
-    // and this server-side poll is no longer needed.
-    refetchInterval: !joined ? 5_000 : false,
+    // Lobby: patient-presence indicator. In the call: recordingActive for
+    // the «Іде аудіозапис» badge — slower, it only flips on join/end.
+    refetchInterval: (query) =>
+      query.state.data?.status === ConsultationStatus.ENDED ? false : joined ? 10_000 : 5_000,
   });
 
   // Second hop — we need the appointment's startAt/endAt to render the
@@ -488,6 +491,14 @@ export const ConsultationPage = () => {
         ? 'too_late'
         : 'can_join';
 
+  // The patient declining the recording notice ends the session while the
+  // doctor waits in the lobby — flip to the cancelled screen on the next poll.
+  const sessionEnded = sessionQ.data?.status === ConsultationStatus.ENDED;
+  useEffect(() => {
+    if (sessionEnded) void apptQ.refetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionEnded]);
+
   const tokenM = useMutation({
     mutationFn: () => consultation.joinToken(sessionId!),
     onSuccess: () => {
@@ -497,17 +508,49 @@ export const ConsultationPage = () => {
       setDisconnectReason(null);
       setJoined(true);
     },
-    onError: (e: Error) =>
-      setError(extractApiMessage(e, 'Не вдалося підключитись до зустрічі')),
+    onError: (e: Error) => {
+      // The clinic switched the notice on after this page loaded — show it.
+      if (extractApiCode(e) === RECORDING_NOTICE_REQUIRED_CODE) {
+        void sessionQ.refetch().then(() => recordingNotice.show());
+        return;
+      }
+      setError(extractApiMessage(e, 'Не вдалося підключитись до зустрічі'));
+    },
+  });
+
+  const queryClient = useQueryClient();
+  const recordingNotice = useRecordingNotice({
+    session: sessionQ.data,
+    side: 'doctor',
+    respond: (decision) => consultation.recordingNotice(sessionId!, decision),
+    onAccepted: (updated) => {
+      queryClient.setQueryData<ConsultationSessionDto>(['session', sessionId], (prev) =>
+        prev ? { ...prev, doctorRecordingNoticeAt: updated.doctorRecordingNoticeAt } : prev,
+      );
+      tokenM.mutate();
+    },
+    onDeclined: () => {
+      void sessionQ.refetch();
+      void apptQ.refetch();
+    },
   });
 
   // Invite-scoped doctors (coming from MIS) don't run the documentation flow
   // inside our app — the MIS owns conclusions/prescriptions/referrals. They
   // just need a way to close the session and move the appointment to
   // COMPLETED when the call is over.
+  // Regular appointments: the consultation is ended *before* the
+  // documentation form opens — the form used to end it only after the docs
+  // were signed, so an abandoned form left the appointment IN_PROGRESS.
+  const documentFlow = !isInviteScope && !apptQ.data?.isAnonymousPatient;
+  const navigate = useNavigate();
   const endM = useMutation({
     mutationFn: () => consultation.end(sessionId!),
     onSuccess: () => {
+      if (documentFlow) {
+        navigate(`/consultation/${sessionId}/finish`);
+        return;
+      }
       setJoined(false);
       setDisconnectReason('Консультацію завершено');
       // Refetch so the terminal-state branch flips the page from the
@@ -537,7 +580,11 @@ export const ConsultationPage = () => {
         <PageHeader title="Зустріч скасовано" />
         <Card>
           <Alert variant="info">
-            Цю зустріч скасовано — підключення недоступне.
+            {apptQ.data?.cancelledReason === RECORDING_DECLINED_REASON
+              ? apptStatus === AppointmentStatus.CANCELLED_BY_PATIENT
+                ? 'Консультацію скасовано через відмову пацієнта від аудіозапису.'
+                : 'Консультацію скасовано через вашу відмову від аудіозапису.'
+              : 'Цю зустріч скасовано — підключення недоступне.'}
           </Alert>
         </Card>
       </div>
@@ -661,7 +708,7 @@ export const ConsultationPage = () => {
               </p>
               {error ? <Alert variant="danger">{error}</Alert> : null}
               <Button
-                onClick={() => tokenM.mutate()}
+                onClick={() => recordingNotice.requestJoin(() => tokenM.mutate())}
                 isLoading={tokenM.isPending}
                 fullWidth
                 size="lg"
@@ -670,6 +717,7 @@ export const ConsultationPage = () => {
               </Button>
             </div>
           </Card>
+          {recordingNotice.modal}
           <Card>
             <LobbyPreview state={deviceState} onChange={updateDeviceState} />
           </Card>
@@ -690,7 +738,7 @@ export const ConsultationPage = () => {
       ) : null}
       <div
         ref={fsContainerRef}
-        className="overflow-hidden rounded-lg bg-black"
+        className="relative overflow-hidden rounded-lg bg-black"
         style={
           // Pseudo-fullscreen styles — applied only when we are flagged as
           // fullscreen but the real FS API is not in use (iPhone Safari, or
@@ -713,6 +761,7 @@ export const ConsultationPage = () => {
             : undefined
         }
       >
+        {sessionQ.data?.recordingActive ? <RecordingIndicator /> : null}
         <LiveKitRoom
           token={tokenM.data.token}
           serverUrl={livekitUrl}
@@ -748,7 +797,12 @@ export const ConsultationPage = () => {
               ],
             },
           }}
-          onConnected={() => setDisconnectReason(null)}
+          onConnected={() => {
+            setDisconnectReason(null);
+            // Recording may have just started (it does when the second side
+            // gets its token) — don't wait for the next poll to show it.
+            void sessionQ.refetch();
+          }}
           onError={(e) => setDisconnectReason(e.message)}
           onDisconnected={(reason) => {
             // Don't auto-redirect — show the user what happened so they can
@@ -788,11 +842,7 @@ export const ConsultationPage = () => {
               <LeaveButton
                 onEnd={() => endM.mutate()}
                 endPending={endM.isPending}
-                finishFlowPath={
-                  isInviteScope || apptQ.data?.isAnonymousPatient
-                    ? null
-                    : `/consultation/${sessionId}/finish`
-                }
+                documentFlow={documentFlow}
               />
               <button
                 type="button"

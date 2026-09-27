@@ -20,6 +20,11 @@ export class Tenant extends BaseEntity {
   @Column({ name: 'logo_url', type: 'text', nullable: true })
   logoUrl!: string | null;
 
+  // Clinic's public website — target of «Повернутися на сайт клініки» on the
+  // patient's post-call screen. Null hides the button.
+  @Column({ name: 'website_url', type: 'text', nullable: true })
+  websiteUrl!: string | null;
+
   @Column({ type: 'varchar', length: 8, default: 'uk' })
   locale!: string;
 
@@ -52,6 +57,15 @@ export class Tenant extends BaseEntity {
     doctorEnabled?: boolean;
     patientEnabled?: boolean;
     requireSubdomain?: boolean;
+  };
+
+  // Video-consultation module settings: the recording notice both sides
+  // must accept before joining. Missing keys fall back to mapper defaults.
+  @Column({ type: 'jsonb', name: 'consultation_policy', default: () => `'{}'::jsonb` })
+  consultationPolicy!: {
+    recordingNoticeEnabled?: boolean;
+    recordingNoticeText?: string | null;
+    offerUrl?: string | null;
   };
 
   @Column({ name: 'billing_plan_id', type: 'uuid', nullable: true })

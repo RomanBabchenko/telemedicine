@@ -33,6 +33,7 @@ import { ConsultationModule } from './modules/consultation/consultation.module';
 import { DocumentationModule } from './modules/documentation/documentation.module';
 import { PrescriptionModule } from './modules/prescription/prescription.module';
 import { RecordingModule } from './modules/recording/recording.module';
+import { FeedbackModule } from './modules/feedback/feedback.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { MisIntegrationModule } from './modules/mis-integration/mis-integration.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
@@ -80,6 +81,7 @@ import { HealthModule } from './modules/health/health.module';
     DocumentationModule,
     PrescriptionModule,
     RecordingModule,
+    FeedbackModule,
     NotificationModule,
     MisIntegrationModule,
     AnalyticsModule,

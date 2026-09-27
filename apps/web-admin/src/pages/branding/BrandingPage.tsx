@@ -15,18 +15,25 @@ export const BrandingPage = () => {
   const [brandName, setBrandName] = useState('');
   const [primaryColor, setPrimaryColor] = useState('#2563EB');
   const [logoUrl, setLogoUrl] = useState('');
+  const [websiteUrl, setWebsiteUrl] = useState('');
 
   useEffect(() => {
     if (tenantQ.data) {
       setBrandName(tenantQ.data.brandName);
       setPrimaryColor(tenantQ.data.primaryColor);
       setLogoUrl(tenantQ.data.logoUrl ?? '');
+      setWebsiteUrl(tenantQ.data.websiteUrl ?? '');
     }
   }, [tenantQ.data]);
 
   const updateM = useMutation({
     mutationFn: () =>
-      tenants.update(tenantId!, { brandName, primaryColor, logoUrl: logoUrl || null }),
+      tenants.update(tenantId!, {
+        brandName,
+        primaryColor,
+        logoUrl: logoUrl || null,
+        websiteUrl: websiteUrl.trim() || null,
+      }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tenant', 'current'] }),
   });
 
@@ -49,7 +56,21 @@ export const BrandingPage = () => {
         <FormField label="URL логотипу">
           <Input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} />
         </FormField>
+        {/* Target of «Повернутися на сайт клініки» on the patient's post-call
+         * screen. Empty = the button is hidden. */}
+        <FormField label="Сайт клініки (URL)">
+          <Input
+            value={websiteUrl}
+            onChange={(e) => setWebsiteUrl(e.target.value)}
+            placeholder="https://clinic.example"
+          />
+        </FormField>
         {updateM.isSuccess ? <Alert variant="success">Збережено</Alert> : null}
+        {updateM.isError ? (
+          <Alert variant="danger">
+            Не вдалося зберегти. Перевірте, що URL сайту починається з http:// або https://.
+          </Alert>
+        ) : null}
         <div className="mt-4">
           <Button onClick={() => updateM.mutate()} isLoading={updateM.isPending}>
             Зберегти

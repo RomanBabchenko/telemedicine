@@ -19,6 +19,7 @@ export const toAppointmentResponse = (a: Appointment): AppointmentResponseDto =>
   source: a.source ?? AppointmentSource.PLATFORM,
   status: a.status,
   reasonText: a.reasonText,
+  cancelledReason: a.cancelledReason ?? null,
   startAt: a.startAt.toISOString(),
   endAt: a.endAt.toISOString(),
   paymentId: a.paymentId,

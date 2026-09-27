@@ -6,13 +6,15 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUrl,
+  MaxLength,
   Min,
   Validate,
   ValidateNested,
   ValidatorConstraint,
   ValidatorConstraintInterface,
 } from 'class-validator';
-import { FEATURE_KEYS } from '@telemed/shared-types';
+import { FEATURE_KEYS, RECORDING_NOTICE_MAX_LENGTH } from '@telemed/shared-types';
 import type { UpdateTenantDto } from '@telemed/shared-types';
 
 // Rejects unknown feature keys and non-boolean values — a typo'd key used to
@@ -81,6 +83,35 @@ class TenantLoginPolicyInput {
   requireSubdomain?: boolean;
 }
 
+class TenantConsultationPolicyInput {
+  @ApiPropertyOptional({ description: 'Show the recording notice before joining (default true)' })
+  @IsOptional()
+  @IsBoolean()
+  recordingNoticeEnabled?: boolean;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    maxLength: RECORDING_NOTICE_MAX_LENGTH,
+    description: 'Custom consent sentence; null restores the default',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(RECORDING_NOTICE_MAX_LENGTH)
+  recordingNoticeText?: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: 'https://clinic.example/oferta',
+    description: 'Public offer agreement URL; null falls back to websiteUrl',
+  })
+  @IsOptional()
+  @IsUrl({ require_protocol: true, protocols: ['http', 'https'] })
+  @MaxLength(512)
+  offerUrl?: string | null;
+}
+
 export class UpdateTenantBodyDto implements UpdateTenantDto {
   @ApiPropertyOptional()
   @IsOptional()
@@ -96,6 +127,18 @@ export class UpdateTenantBodyDto implements UpdateTenantDto {
   @IsOptional()
   @IsString()
   logoUrl?: string | null;
+
+  // Branding field (INTEGRATION_ADMIN may set it too). null clears.
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: 'https://clinic.example',
+    description: 'Clinic website for the patient post-call «Повернутися на сайт клініки» button',
+  })
+  @IsOptional()
+  @IsUrl({ require_protocol: true, protocols: ['http', 'https'] })
+  @MaxLength(512)
+  websiteUrl?: string | null;
 
   @ApiPropertyOptional({ example: 'uk' })
   @IsOptional()
@@ -124,4 +167,10 @@ export class UpdateTenantBodyDto implements UpdateTenantDto {
   @ValidateNested()
   @Type(() => TenantLoginPolicyInput)
   loginPolicy?: TenantLoginPolicyInput;
+
+  @ApiPropertyOptional({ type: TenantConsultationPolicyInput })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TenantConsultationPolicyInput)
+  consultationPolicy?: TenantConsultationPolicyInput;
 }

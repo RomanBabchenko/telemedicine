@@ -1,5 +1,6 @@
 import type {
   AppointmentDto,
+  AppointmentFeedbackDto,
   AppointmentListQuery,
   AvailabilityQuery,
   CancelAppointmentDto,
@@ -33,4 +34,6 @@ export const bookingApi = (client: ApiClient) => ({
   getById: (id: string) => client.get<AppointmentDto>(`/appointments/${id}`),
   // Admin-only: revoke old invite links and get a fresh patient/doctor pair.
   reissueInvites: (id: string) => client.post<ReissueInvitesDto>(`/appointments/${id}/invites`),
+  // Admin-console roles only: the patient's post-consultation answers (404 = not answered).
+  getFeedback: (id: string) => client.get<AppointmentFeedbackDto>(`/appointments/${id}/feedback`),
 });

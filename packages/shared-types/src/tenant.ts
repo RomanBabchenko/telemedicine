@@ -15,6 +15,9 @@ export interface TenantFeatureMatrix {
   advancedReports: boolean;
   audioArchive: boolean;
   apiAccess: boolean;
+  // Post-consultation patient survey (two questions). Off by default — a
+  // clinic opts in via the platform admin, same as audioArchive.
+  patientFeedback: boolean;
 }
 
 export type TenantFeatureKey = keyof TenantFeatureMatrix;
@@ -33,6 +36,7 @@ export const DEFAULT_FEATURE_MATRIX: TenantFeatureMatrix = {
   advancedReports: false,
   audioArchive: false,
   apiAccess: false,
+  patientFeedback: false,
 };
 
 export const FEATURE_KEYS = Object.keys(DEFAULT_FEATURE_MATRIX) as TenantFeatureKey[];
@@ -49,6 +53,7 @@ export const FEATURE_LABELS: Record<TenantFeatureKey, string> = {
   advancedReports: 'Розширені звіти',
   audioArchive: 'Аудіоархів консультацій',
   apiAccess: 'API-доступ (інтеграційні ключі)',
+  patientFeedback: 'Опитування пацієнтів після консультації',
 };
 
 export interface TenantDto {
@@ -58,13 +63,34 @@ export interface TenantDto {
   subdomain: string;
   primaryColor: string;
   logoUrl: string | null;
+  // Clinic's public website — target of the «Повернутися на сайт клініки»
+  // button on the patient's post-call screen. Null hides the button.
+  websiteUrl: string | null;
   locale: string;
   currency: string;
   features: TenantFeatureMatrix;
   audioPolicy: TenantAudioPolicyDto;
   invitePolicy: TenantInvitePolicyDto;
   loginPolicy: TenantLoginPolicyDto;
+  consultationPolicy: TenantConsultationPolicyDto;
 }
+
+// Settings of the video-consultation module (embeddedConsultation). The
+// recording notice is shown to both doctor and patient before they join —
+// only while audio recording is actually on for the clinic.
+export interface TenantConsultationPolicyDto {
+  recordingNoticeEnabled: boolean;
+  // Replaces the default consent sentence in the notice. Null = default.
+  recordingNoticeText: string | null;
+  // Public offer agreement. Null falls back to websiteUrl, then no link.
+  offerUrl: string | null;
+}
+
+export const RECORDING_NOTICE_MAX_LENGTH = 150;
+export const DEFAULT_RECORDING_NOTICE_TEXT =
+  'Продовжуючи консультацію, ви погоджуєтесь на аудіозапис.';
+// Appointment.cancelledReason written when a participant declines the notice.
+export const RECORDING_DECLINED_REASON = 'recording_consent_declined';
 
 export interface TenantAudioPolicyDto {
   enabled: boolean;
@@ -112,9 +138,11 @@ export interface UpdateTenantDto {
   brandName?: string;
   primaryColor?: string;
   logoUrl?: string | null;
+  websiteUrl?: string | null;
   locale?: string;
   features?: Partial<TenantFeatureMatrix>;
   audioPolicy?: Partial<TenantAudioPolicyDto>;
   invitePolicy?: Partial<TenantInvitePolicyDto>;
   loginPolicy?: Partial<TenantLoginPolicyDto>;
+  consultationPolicy?: Partial<TenantConsultationPolicyDto>;
 }

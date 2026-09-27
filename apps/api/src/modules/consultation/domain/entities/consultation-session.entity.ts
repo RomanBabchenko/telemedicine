@@ -1,5 +1,5 @@
 import { Column, Entity, Index, Unique } from 'typeorm';
-import { ConsultationStatus } from '@telemed/shared-types';
+import { ConsultationStatus, type ConsultationEndReason } from '@telemed/shared-types';
 import { TenantOwnedEntity } from '../../../../common/entities/tenant-owned.entity';
 
 @Entity('consultation_sessions')
@@ -34,4 +34,16 @@ export class ConsultationSession extends TenantOwnedEntity {
 
   @Column({ name: 'recording_id', type: 'uuid', nullable: true })
   recordingId!: string | null;
+
+  // When each side accepted the clinic's recording notice. Set once; a
+  // reconnect skips the notice and join-token checks it while it's required.
+  @Column({ name: 'doctor_recording_notice_at', type: 'timestamptz', nullable: true })
+  doctorRecordingNoticeAt!: Date | null;
+
+  @Column({ name: 'patient_recording_notice_at', type: 'timestamptz', nullable: true })
+  patientRecordingNoticeAt!: Date | null;
+
+  // Set together with status=ENDED — see ConsultationEndReason.
+  @Column({ name: 'end_reason', type: 'varchar', length: 24, nullable: true })
+  endReason!: ConsultationEndReason | null;
 }

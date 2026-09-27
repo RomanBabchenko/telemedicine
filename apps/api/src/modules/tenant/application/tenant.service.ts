@@ -14,6 +14,7 @@ export interface UpdateTenantInput {
   brandName?: string;
   primaryColor?: string;
   logoUrl?: string | null;
+  websiteUrl?: string | null;
   locale?: string;
   features?: Record<string, boolean>;
   audioPolicy?: { enabled?: boolean; retentionDays?: number; consentRequired?: boolean };
@@ -22,6 +23,11 @@ export interface UpdateTenantInput {
     doctorEnabled?: boolean;
     patientEnabled?: boolean;
     requireSubdomain?: boolean;
+  };
+  consultationPolicy?: {
+    recordingNoticeEnabled?: boolean;
+    recordingNoticeText?: string | null;
+    offerUrl?: string | null;
   };
 }
 
@@ -120,6 +126,7 @@ export class TenantService {
     if (input.brandName !== undefined) tenant.brandName = input.brandName;
     if (input.primaryColor !== undefined) tenant.primaryColor = input.primaryColor;
     if (input.logoUrl !== undefined) tenant.logoUrl = input.logoUrl;
+    if (input.websiteUrl !== undefined) tenant.websiteUrl = input.websiteUrl;
     if (input.locale !== undefined) tenant.locale = input.locale;
     if (input.features) {
       tenant.featureMatrix = { ...tenant.featureMatrix, ...input.features };
@@ -132,6 +139,15 @@ export class TenantService {
     }
     if (input.loginPolicy) {
       tenant.loginPolicy = { ...tenant.loginPolicy, ...input.loginPolicy };
+    }
+    if (input.consultationPolicy) {
+      const next = { ...tenant.consultationPolicy, ...input.consultationPolicy };
+      // Blank text/URL from the admin form means "use the default", not "".
+      if (next.recordingNoticeText !== undefined) {
+        next.recordingNoticeText = next.recordingNoticeText?.trim() || null;
+      }
+      if (next.offerUrl !== undefined) next.offerUrl = next.offerUrl?.trim() || null;
+      tenant.consultationPolicy = next;
     }
     return this.repo.save(tenant);
   }
