@@ -60,14 +60,33 @@ describe('PATCH /admin/tenants/:id — INTEGRATION_ADMIN is branding-only', () =
   });
 
   it.each([
-    ['audioPolicy', { audioPolicy: { enabled: false } }],
     ['invitePolicy', { invitePolicy: { bindIp: true } }],
     ['loginPolicy', { loginPolicy: { doctorEnabled: false } }],
-    ['consultationPolicy', { consultationPolicy: { recordingNoticeEnabled: false } }],
   ])('INTEGRATION_ADMIN is rejected when body contains %s', async (_k, body) => {
     const { ctrl, service } = build();
     await expect(
       ctrl.update(TENANT, { brandName: 'x', ...body } as never, actor([Role.INTEGRATION_ADMIN])),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(service.update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['audioPolicy', { audioPolicy: { enabled: false, retentionDays: 14 } }],
+    ['consultationPolicy', { consultationPolicy: { recordingNoticeEnabled: false } }],
+  ])('INTEGRATION_ADMIN may change the module setting %s of its own tenant', async (_k, body) => {
+    const { ctrl, service } = build();
+    await ctrl.update(TENANT, body as never, actor([Role.INTEGRATION_ADMIN]));
+    expect(service.update).toHaveBeenCalledWith(TENANT, expect.objectContaining(body));
+  });
+
+  it('INTEGRATION_ADMIN cannot change module settings of another tenant', async () => {
+    const { ctrl, service } = build();
+    await expect(
+      ctrl.update(
+        TENANT,
+        { audioPolicy: { enabled: true } } as never,
+        actor([Role.INTEGRATION_ADMIN], 't-other'),
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(service.update).not.toHaveBeenCalled();
   });
