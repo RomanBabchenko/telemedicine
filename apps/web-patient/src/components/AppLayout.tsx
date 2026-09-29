@@ -73,7 +73,7 @@ export const AppLayout = () => {
         <Outlet />
       </main>
       <footer className="border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500">
-        © {new Date().getFullYear()} {tenant?.brandName ?? 'Telemed'} · MVP
+        © {new Date().getFullYear()} {tenant?.brandName ?? 'Telemed'}
       </footer>
     </div>
   );
