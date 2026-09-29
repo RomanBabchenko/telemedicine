@@ -86,8 +86,10 @@ export class TokenService {
     scope?: {
       scope: 'invite';
       inviteCtx: InviteContext;
-      // Cap the access-token TTL at this value (seconds). Used for invites so
-      // a JWT minted from the link expires near the end of the appointment.
+      // Access-token TTL (seconds), replacing the default. Used for invites so
+      // a JWT minted from the link expires together with the invite itself
+      // (appointment end + grace). Invite sessions have no refresh token, so
+      // clamping this to the default TTL logs both sides out mid-call.
       accessTtlOverrideSec?: number;
       // Skip creating a Session + refresh token. Invite holders re-auth by
       // consuming the same invite URL again — no server-stored refresh needed.
@@ -101,7 +103,7 @@ export class TokenService {
     const defaultAccessTtl = this.parseTtlSeconds(this.config.jwt.accessTtl);
     const accessTtlSec =
       scope?.accessTtlOverrideSec !== undefined
-        ? Math.max(60, Math.min(defaultAccessTtl, scope.accessTtlOverrideSec))
+        ? Math.max(60, scope.accessTtlOverrideSec)
         : defaultAccessTtl;
     const refreshTtlSec = this.parseTtlSeconds(this.config.jwt.refreshTtl);
 
@@ -167,7 +169,7 @@ export class TokenService {
     const defaultAccessTtl = this.parseTtlSeconds(this.config.jwt.accessTtl);
     const accessTtlSec =
       params.accessTtlOverrideSec !== undefined
-        ? Math.max(60, Math.min(defaultAccessTtl, params.accessTtlOverrideSec))
+        ? Math.max(60, params.accessTtlOverrideSec)
         : defaultAccessTtl;
 
     const payload: AccessTokenPayload = {
