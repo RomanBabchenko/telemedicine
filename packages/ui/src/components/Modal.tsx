@@ -10,6 +10,13 @@ interface Props {
   footer?: ReactNode;
   /** md — forms (default); xl — detail views with wide content (audio player, tables). */
   size?: 'md' | 'xl';
+  /**
+   * Portal target, <body> by default. A modal opened from inside an element
+   * that may go fullscreen has to render inside that element: the browser
+   * paints only the fullscreen element's subtree, so a <body>-level overlay
+   * stays invisible whatever its z-index.
+   */
+  container?: HTMLElement | null;
 }
 
 const sizeClasses = {
@@ -17,7 +24,15 @@ const sizeClasses = {
   xl: 'max-w-3xl',
 };
 
-export const Modal = ({ open, onClose, title, children, footer, size = 'md' }: Props) => {
+export const Modal = ({
+  open,
+  onClose,
+  title,
+  children,
+  footer,
+  size = 'md',
+  container,
+}: Props) => {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -66,6 +81,6 @@ export const Modal = ({ open, onClose, title, children, footer, size = 'md' }: P
         )}
       </div>
     </div>,
-    document.body,
+    container ?? document.body,
   );
 };

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -266,7 +266,11 @@ const LeaveButton = ({
   onEnd,
   endPending,
   documentFlow,
+  containerRef,
 }: {
+  // The call container — the element that goes fullscreen. The modal is
+  // portaled into it so it stays visible in (pseudo-)fullscreen.
+  containerRef: RefObject<HTMLElement>;
   onEnd: () => void;
   endPending: boolean;
   // True for regular appointments — «Завершити та оформити» ends the
@@ -290,6 +294,7 @@ const LeaveButton = ({
         open={open}
         onClose={() => setOpen(false)}
         title="Вийти з консультації?"
+        container={containerRef.current}
         footer={
           <>
             <Button variant="ghost" onClick={() => setOpen(false)}>
@@ -840,6 +845,7 @@ export const ConsultationPage = () => {
                * our LeaveButton opens the end/step-away modal. */}
               <CallControls />
               <LeaveButton
+                containerRef={fsContainerRef}
                 onEnd={() => endM.mutate()}
                 endPending={endM.isPending}
                 documentFlow={documentFlow}
