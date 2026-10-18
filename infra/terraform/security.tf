@@ -34,7 +34,8 @@ resource "aws_security_group" "alb" {
 }
 
 # Application security group: SSH from operator, HTTP only from ALB,
-# LiveKit RTP from anywhere (UDP can't go through ALB).
+# LiveKit RTP from anywhere (UDP can't go through ALB),
+# node_exporter and cAdvisor from inside the VPC.
 resource "aws_security_group" "app" {
   name        = "telemed-demo-app"
   description = "EC2 instance: SSH, ALB HTTP, LiveKit UDP"
@@ -64,6 +65,28 @@ resource "aws_security_group" "app" {
     to_port     = 50100
     protocol    = "udp"
     cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # Prometheus node_exporter (host metrics + per-container Docker metrics via
+  # the textfile collector, see infra/monitoring). Scraped by the monitoring
+  # instance over the VPC private network. That instance is not managed by
+  # this Terraform, so we allow the whole VPC CIDR rather than a specific SG.
+  ingress {
+    description = "node_exporter from VPC"
+    from_port   = 9100
+    to_port     = 9100
+    protocol    = "tcp"
+    cidr_blocks = [data.aws_vpc.default.cidr_block]
+  }
+
+  # cAdvisor (>= v0.54, earlier versions can't read Docker's containerd image
+  # store) — per-container CPU/mem/net/io metrics, same scrape path.
+  ingress {
+    description = "cAdvisor from VPC"
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = [data.aws_vpc.default.cidr_block]
   }
 
   egress {
