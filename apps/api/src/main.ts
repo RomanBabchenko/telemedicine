@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { json } from 'express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
@@ -23,6 +24,32 @@ async function bootstrap() {
     bufferLogs: false,
     rawBody: true,
   });
+  const config = app.get(AppConfig);
+
+  // Guard against stale .env values like `API_GLOBAL_PREFIX=api/v1`. The
+  // `v1` segment belongs to URI versioning below; leaving it in the prefix
+  // produces `/api/v1/v1/<route>`. Strip and warn so dev machines with old
+  // configs self-correct.
+  const rawPrefix = config.globalPrefix.replace(/^\/+|\/+$/g, '');
+  const normalisedPrefix = rawPrefix.replace(/\/v\d+$/i, '');
+  if (normalisedPrefix !== rawPrefix) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `⚠️  API_GLOBAL_PREFIX="${config.globalPrefix}" contains a version segment; stripping to "${normalisedPrefix}". Versions come from NestJS URI versioning — update your .env.`,
+    );
+  }
+
+  // Patient → MIS document relay carries a ~10 MB file as base64 inside a
+  // JSON body. ONLY that route gets a bigger limit; every other endpoint keeps
+  // Express's 100 KB default from the global parser registered right below.
+  // Order is load-bearing: useBodyParser() mounts its parser immediately, and
+  // body-parser skips requests whose body was already consumed (req._body),
+  // so this route-scoped parser must be mounted FIRST. No rawBody is needed
+  // here (no HMAC) — the global parser keeps its verify callback untouched.
+  app.use(
+    `/${normalisedPrefix}/v1/appointments/:id/mis-documents`,
+    json({ limit: '15mb', type: 'application/json' }),
+  );
   // LiveKit webhooks are sent with Content-Type: application/webhook+json
   // (not plain application/json), so Express's default json parser skips
   // them — that leaves req.rawBody undefined and our webhook controller
@@ -31,7 +58,6 @@ async function bootstrap() {
   app.useBodyParser('json', {
     type: ['application/json', 'application/webhook+json'],
   });
-  const config = app.get(AppConfig);
 
   // In production the request chain is client → ALB → nginx (same box) → API,
   // and every hop appends to X-Forwarded-For. req.ip (audit trail, session
@@ -57,18 +83,6 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-Id', 'Idempotency-Key'],
   });
 
-  // Guard against stale .env values like `API_GLOBAL_PREFIX=api/v1`. The
-  // `v1` segment belongs to URI versioning below; leaving it in the prefix
-  // produces `/api/v1/v1/<route>`. Strip and warn so dev machines with old
-  // configs self-correct.
-  const rawPrefix = config.globalPrefix.replace(/^\/+|\/+$/g, '');
-  const normalisedPrefix = rawPrefix.replace(/\/v\d+$/i, '');
-  if (normalisedPrefix !== rawPrefix) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      `⚠️  API_GLOBAL_PREFIX="${config.globalPrefix}" contains a version segment; stripping to "${normalisedPrefix}". Versions come from NestJS URI versioning — update your .env.`,
-    );
-  }
   app.setGlobalPrefix(normalisedPrefix);
   // URI versioning. Every controller without an explicit @Version() serves
   // v1 — final routes land at `/<prefix>/v1/<route>`. Future endpoints opt

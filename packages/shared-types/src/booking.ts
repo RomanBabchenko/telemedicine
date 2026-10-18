@@ -118,6 +118,11 @@ export interface AppointmentDto {
   // the appointment as paid.
   misPaymentType?: 'prepaid' | 'postpaid' | null;
   misPaymentStatus?: 'paid' | 'unpaid' | null;
+  // True when the MIS supplied a per-appointment document upload URL. The
+  // patient app shows the «Надіслати документи» button on this flag; the
+  // URL itself never leaves the backend (POST /appointments/:id/mis-documents
+  // relays files to it server-side).
+  canUploadDocuments?: boolean;
   // Joined summaries — populated by list endpoints so admin/doctor UIs
   // don't have to make N+1 follow-up requests. Optional for backwards
   // compatibility with reserve/confirm/cancel responses that still return

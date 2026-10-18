@@ -21,6 +21,12 @@
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh revoke <appointmentId> [PATIENT|DOCTOR]
 #   API_KEY=tmd_live_... ./scripts/mis-payment-examples.sh revoke:ext <externalAppointmentId> [PATIENT|DOCTOR]
 #
+# Document upload (patient → MIS hub) testing:
+#   ./scripts/mis-payment-examples.sh upload-server [port]               # mock MIS hub on :4100
+#   UPLOAD_URL=http://localhost:4100 API_KEY=... ./scripts/mis-payment-examples.sh anon:now
+#   PATIENT_TOKEN=... ./scripts/mis-payment-examples.sh upload <appointmentId> <file>
+#   UPLOAD_URL=http://localhost:4100 ./scripts/mis-payment-examples.sh uploads
+#
 # Auth: integration API key issued via the admin UI
 # (web-admin → "API ключі" → створити ключ). The key is shown exactly once;
 # store it in your shell env as API_KEY before running this script.
@@ -30,6 +36,17 @@ set -euo pipefail
 API="${API:-http://localhost:3000/api/v1}"
 TENANT="${TENANT:-22222222-2222-4222-8222-222222222222}"
 API_KEY="${API_KEY:-}"
+
+# Document-upload testing. When UPLOAD_URL is set, every create command adds
+#   documentUploadUrl = $UPLOAD_URL/upload/<externalAppointmentId>
+# so the stored link points at the mock hub (`upload-server`). The API must
+# run with MIS_UPLOAD_ALLOW_INSECURE=true to post to a plain-http/localhost URL.
+UPLOAD_URL="${UPLOAD_URL:-}"
+# Patient access token (Bearer) for the `upload` command. Open the invite link
+# in the patient app, then copy tokens.accessToken from localStorage key
+# `telemed-patient-auth` (DevTools → Application → Local Storage).
+PATIENT_TOKEN="${PATIENT_TOKEN:-}"
+UPLOAD_SERVER_PORT="${UPLOAD_SERVER_PORT:-4100}"
 
 cmd="${1:-help}"
 
@@ -42,6 +59,42 @@ require_api_key() {
   fi
 }
 
+require_patient_token() {
+  if [[ -z "$PATIENT_TOKEN" ]]; then
+    echo "ERROR: PATIENT_TOKEN env var is required (patient Bearer token)." >&2
+    echo "  Open the patientInviteUrl in the patient app, then copy" >&2
+    echo "  tokens.accessToken from localStorage['telemed-patient-auth']:" >&2
+    echo "    export PATIENT_TOKEN=eyJ..." >&2
+    exit 1
+  fi
+}
+
+require_node() {
+  if ! command -v node >/dev/null 2>&1; then
+    echo "ERROR: node is required for the mock upload server (https://nodejs.org, >= 18)." >&2
+    exit 1
+  fi
+}
+
+require_upload_url() {
+  if [[ -z "$UPLOAD_URL" ]]; then
+    echo "ERROR: UPLOAD_URL env var is required (e.g. http://localhost:4100)." >&2
+    exit 1
+  fi
+}
+
+# Appends documentUploadUrl to a create payload when UPLOAD_URL is set. The
+# path ends with the externalAppointmentId so the mock hub can tell
+# appointments apart. Usage:  -d "$(with_upload_url '<json>' <extId>)"
+with_upload_url() {
+  local payload="$1" ext_id="$2"
+  if [[ -z "$UPLOAD_URL" ]]; then
+    printf '%s' "$payload"
+    return
+  fi
+  printf '%s' "$payload" | jq --arg u "${UPLOAD_URL%/}/upload/$ext_id" '. + {documentUploadUrl: $u}'
+}
+
 case "$cmd" in
 
   # ─── 1. Prepaid + unpaid ────────────────────────────────────────────────
@@ -52,7 +105,7 @@ case "$cmd" in
     curl -sS -X POST "$API/integrations/$TENANT/appointments" \
       -H "Authorization: ApiKey $API_KEY" \
       -H 'Content-Type: application/json' \
-      -d '{
+      -d "$(with_upload_url '{
         "type": "appointment.online",
         "externalAppointmentId": "dd-prepaid-001",
         "doctorExternalId": "docdream-doc-77",
@@ -68,7 +121,7 @@ case "$cmd" in
         "endAt": "2026-04-20T10:30:00Z",
         "paymentType": "prepaid",
         "paymentStatus": "unpaid"
-      }' | jq .
+      }' dd-prepaid-001)" | jq .
     ;;
 
   # ─── 2. Clinic confirms payment ─────────────────────────────────────────
@@ -105,7 +158,7 @@ case "$cmd" in
     curl -sS -X POST "$API/integrations/$TENANT/appointments" \
       -H "Authorization: ApiKey $API_KEY" \
       -H 'Content-Type: application/json' \
-      -d '{
+      -d "$(with_upload_url '{
         "type": "appointment.online",
         "externalAppointmentId": "dd-postpaid-009",
         "doctorExternalId": "docdream-doc-77",
@@ -121,7 +174,7 @@ case "$cmd" in
         "endAt": "2026-05-10T12:30:00Z",
         "paymentType": "postpaid",
         "paymentStatus": "unpaid"
-      }' | jq .
+      }' dd-postpaid-009)" | jq .
     ;;
 
   # ─── 4. Anonymous patient (postpaid, CONFIRMED) ─────────────────────────
@@ -137,7 +190,7 @@ case "$cmd" in
     curl -sS -X POST "$API/integrations/$TENANT/appointments" \
       -H "Authorization: ApiKey $API_KEY" \
       -H 'Content-Type: application/json' \
-      -d '{
+      -d "$(with_upload_url '{
         "type": "appointment.online",
         "externalAppointmentId": "dd-anon-0014",
         "doctorExternalId": "docdream-doc-77",
@@ -149,7 +202,7 @@ case "$cmd" in
         "paymentType": "postpaid",
         "paymentStatus": "unpaid",
         "isAnonymousPatient": true
-      }' | jq .
+      }' dd-anon-0014)" | jq .
     ;;
 
   # Anonymous + prepaid. Same prepaid gate as the named flow — patient
@@ -159,7 +212,7 @@ case "$cmd" in
     curl -sS -X POST "$API/integrations/$TENANT/appointments" \
       -H "Authorization: ApiKey $API_KEY" \
       -H 'Content-Type: application/json' \
-      -d '{
+      -d "$(with_upload_url '{
         "type": "appointment.online",
         "externalAppointmentId": "dd-anon-prepaid-001",
         "doctorExternalId": "docdream-doc-77",
@@ -171,7 +224,7 @@ case "$cmd" in
         "paymentType": "prepaid",
         "paymentStatus": "unpaid",
         "isAnonymousPatient": true
-      }' | jq .
+      }' dd-anon-prepaid-001)" | jq .
     ;;
 
   # Anonymous + live time window — startAt = now, endAt = now + 30 min, so
@@ -186,26 +239,27 @@ case "$cmd" in
     start_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     end_at=$(date -u -d '+30 minutes' +"%Y-%m-%dT%H:%M:%SZ")
     ext_id="dd-anon-now-$(date +%s)"
+    payload="$(jq -n \
+      --arg ext "$ext_id" \
+      --arg start "$start_at" \
+      --arg end "$end_at" \
+      '{
+        type: "appointment.online",
+        externalAppointmentId: $ext,
+        doctorExternalId: "docdream-doc-77",
+        doctorFirstName: "Анна",
+        doctorLastName: "Коваленко",
+        doctorSpecialization: "Кардіологія",
+        startAt: $start,
+        endAt: $end,
+        paymentType: "postpaid",
+        paymentStatus: "unpaid",
+        isAnonymousPatient: true
+      }')"
     curl -sS -X POST "$API/integrations/$TENANT/appointments" \
       -H "Authorization: ApiKey $API_KEY" \
       -H 'Content-Type: application/json' \
-      -d "$(jq -n \
-        --arg ext "$ext_id" \
-        --arg start "$start_at" \
-        --arg end "$end_at" \
-        '{
-          type: "appointment.online",
-          externalAppointmentId: $ext,
-          doctorExternalId: "docdream-doc-77",
-          doctorFirstName: "Анна",
-          doctorLastName: "Коваленко",
-          doctorSpecialization: "Кардіологія",
-          startAt: $start,
-          endAt: $end,
-          paymentType: "postpaid",
-          paymentStatus: "unpaid",
-          isAnonymousPatient: true
-        }')" | jq .
+      -d "$(with_upload_url "$payload" "$ext_id")" | jq .
     ;;
 
   # ─── 6. Fetch recording after consultation ──────────────────────────────
@@ -348,6 +402,64 @@ case "$cmd" in
       -d "$(jq -n --arg r "$role" '{role: ($r | select(length > 0))}')" | jq .
     ;;
 
+  # ─── Document upload (patient → MIS hub) ───────────────────────────────
+  # The MIS sends a per-appointment documentUploadUrl at create time. The
+  # patient app posts files to our API (POST /appointments/:id/mis-documents),
+  # which relays them as JSON (base64 body) to that URL — nothing is stored on
+  # our side. Until the real DocDream hub exists, run the mock below and
+  # create appointments with UPLOAD_URL set so the stored link points at it.
+  # Start the mock hub (scripts/mock-upload-server.mjs). SAVE_DIR=./tmp/uploads
+  # writes the decoded files to disk; FAIL=1 makes every upload answer 500.
+  upload-server)
+    require_node
+    exec node "$(dirname "$0")/mock-upload-server.mjs" "${2:-$UPLOAD_SERVER_PORT}"
+    ;;
+
+  # What the mock hub has received so far (metadata only, no base64).
+  uploads)
+    require_upload_url
+    curl -sS "${UPLOAD_URL%/}/uploads" | jq .
+    ;;
+
+  # API-level upload without the UI: base64-encode a local file and POST it
+  # to the relay endpoint as the patient (Bearer PATIENT_TOKEN). The body is
+  # staged in a temp file (jq --rawfile) because ~13 MB of base64 does not fit
+  # in a command-line argument.
+  upload)
+    appt_id="${2:?usage: $0 upload <appointmentId> <file>}"
+    file="${3:?usage: $0 upload <appointmentId> <file>}"
+    require_patient_token
+    [[ -f "$file" ]] || { echo "ERROR: no such file: $file" >&2; exit 1; }
+    mime=$(file -b --mime-type "$file" 2>/dev/null || true)
+    if [[ -z "$mime" || "$mime" == application/octet-stream ]]; then
+      case "${file##*.}" in
+        pdf) mime=application/pdf ;;
+        jpg | jpeg) mime=image/jpeg ;;
+        png) mime=image/png ;;
+        webp) mime=image/webp ;;
+        heic) mime=image/heic ;;
+        heif) mime=image/heif ;;
+        *) mime=application/octet-stream ;;
+      esac
+    fi
+    size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file")
+    b64_file=$(mktemp)
+    body_file=$(mktemp)
+    trap 'rm -f "$b64_file" "$body_file"' EXIT
+    base64 -w0 "$file" > "$b64_file" 2>/dev/null || base64 "$file" | tr -d '\n' > "$b64_file"
+    jq -n \
+      --arg n "$(basename "$file")" \
+      --arg t "$mime" \
+      --argjson s "$size" \
+      --rawfile c "$b64_file" \
+      '{fileName: $n, contentType: $t, sizeBytes: $s, contentBase64: $c}' > "$body_file"
+    echo "POST $API/appointments/$appt_id/mis-documents  ($mime, $size bytes)" >&2
+    curl -sS -X POST "$API/appointments/$appt_id/mis-documents" \
+      -H "Authorization: Bearer $PATIENT_TOKEN" \
+      -H 'Content-Type: application/json' \
+      --data-binary @"$body_file" | jq .
+    ;;
+
   help | *)
     cat <<EOF
 MIS payment flow examples.
@@ -377,11 +489,29 @@ Commands:
   revoke <id> [PATIENT|DOCTOR]   Revoke invite link(s) without cancelling appointment
   revoke:ext <extId> [ROLE]      Same, keyed by externalAppointmentId
 
+Document upload (patient → MIS hub):
+  upload-server [port]           Start the mock MIS hub (default port $UPLOAD_SERVER_PORT).
+                                 SAVE_DIR=dir saves decoded files; FAIL=1 → 500s.
+  uploads                        List files the mock hub received (needs UPLOAD_URL)
+  upload <id> <file>             POST a local file to our relay endpoint as the
+                                 patient (needs PATIENT_TOKEN) — tests the API
+                                 path without the UI
+  Any create command (prepaid, postpaid, anon, anon:prepaid, anon:now) adds
+  documentUploadUrl=\$UPLOAD_URL/upload/<extId> when UPLOAD_URL is set, which
+  turns on the «Надіслати документи» button for that appointment.
+
 Env:
-  API_KEY  REQUIRED — integration API key (tmd_live_...).
-           Generate in web-admin → API ключі.
-  API      API base URL   (default: $API)
-  TENANT   Tenant UUID    (default: $TENANT)
+  API_KEY        REQUIRED — integration API key (tmd_live_...).
+                 Generate in web-admin → API ключі.
+  API            API base URL   (default: $API)
+  TENANT         Tenant UUID    (default: $TENANT)
+  UPLOAD_URL     Mock hub base URL, e.g. http://localhost:4100 (default: unset)
+  PATIENT_TOKEN  Patient Bearer token for \`upload\` (default: unset)
+
+Note: the production API on EC2 cannot reach a mock running on your laptop.
+Either expose it (\`ngrok http 4100\` / \`cloudflared tunnel --url http://localhost:4100\`)
+and pass that https URL as UPLOAD_URL, or run the mock on the API box itself.
+Locally the API needs MIS_UPLOAD_ALLOW_INSECURE=true to post to http://localhost.
 
 Examples:
   export API_KEY=tmd_live_abcdef...
@@ -393,6 +523,12 @@ Examples:
       2026-05-10T14:00:00Z 2026-05-10T14:30:00Z "patient asked"
   $0 reschedule:now c6442524-c847-4d28-8d59-a1af5316c3a9
   API=http://10.0.0.5:3000/api/v1 $0 postpaid
+
+  # document upload, end to end against the mock hub
+  $0 upload-server                                   # terminal A
+  UPLOAD_URL=http://localhost:4100 $0 anon:now       # terminal B → open patientInviteUrl
+  PATIENT_TOKEN=eyJ... $0 upload <appointmentId> ./scan.pdf
+  UPLOAD_URL=http://localhost:4100 $0 uploads
 EOF
     ;;
 esac

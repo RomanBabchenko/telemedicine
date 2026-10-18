@@ -72,6 +72,12 @@ export interface OnlineAppointmentPayload {
   // Appointment gets patient_id=null + is_anonymous_patient=true; the patient
   // invite JWT is issued with scope='invite-anon' and sub=null.
   isAnonymousPatient?: boolean;
+  // Per-appointment URL on the MIS webhook hub where patient documents must
+  // be delivered (JSON body with the file as base64). The MIS generates a
+  // fresh one on every create/re-POST, so an idempotent re-POST overwrites
+  // the stored value. Server-side only: the patient app is told whether an
+  // upload target exists (canUploadDocuments), never the URL itself.
+  documentUploadUrl?: string;
 }
 
 export interface NormalizedMisEvent {

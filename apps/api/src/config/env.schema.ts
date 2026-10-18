@@ -80,6 +80,17 @@ export const envSchema = z.object({
     .transform((v) => v === 'true')
     .default('true'),
 
+  // Patient → MIS document relay (POST /appointments/:id/mis-documents).
+  // Timeout for the outbound POST to the MIS-provided upload URL, and a dev
+  // switch that allows plain http / loopback / private-range targets so a
+  // local mock hub (scripts/mock-upload-server.mjs) can be used. Never set
+  // the switch in production — it disables the SSRF host checks.
+  MIS_UPLOAD_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+  MIS_UPLOAD_ALLOW_INSECURE: z
+    .string()
+    .transform((v) => v === 'true')
+    .default('false'),
+
   PATIENT_APP_URL: z.string().url().default('http://localhost:5173'),
   DOCTOR_APP_URL: z.string().url().default('http://localhost:5174'),
 

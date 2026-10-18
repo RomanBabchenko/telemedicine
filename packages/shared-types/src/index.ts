@@ -190,6 +190,22 @@ export const SyncJobStatus = {
 } as const;
 export type SyncJobStatus = (typeof SyncJobStatus)[keyof typeof SyncJobStatus];
 
+// Patient → MIS document relay (POST /appointments/:id/mis-documents).
+// Runtime values live here (see the Vite note above); the DTO interfaces are
+// in ./integration. Keep this list in sync with the MIS contract in
+// docs/integrations/docdream.md — it is the single allowlist used by the
+// API DTO validator and the patient upload modal.
+export const MIS_DOCUMENT_CONTENT_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+] as const;
+export type MisDocumentContentType = (typeof MIS_DOCUMENT_CONTENT_TYPES)[number];
+export const MIS_DOCUMENT_MAX_BYTES = 10 * 1024 * 1024;
+
 // Sub-domain DTO modules below — they only re-export type aliases (not runtime
 // values), so star re-exports are fine here.
 export * from './auth';

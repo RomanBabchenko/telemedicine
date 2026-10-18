@@ -62,6 +62,11 @@ export class Appointment extends TenantOwnedEntity {
   @Column({ name: 'mis_payment_status', type: 'varchar', length: 16, nullable: true })
   misPaymentStatus!: 'paid' | 'unpaid' | null;
 
+  // MIS-provided per-appointment document upload target. Never serialised to
+  // browsers — the response DTO exposes only `canUploadDocuments`.
+  @Column({ name: 'mis_document_upload_url', type: 'varchar', length: 2048, nullable: true })
+  misDocumentUploadUrl!: string | null;
+
   @Column({ name: 'consultation_session_id', type: 'uuid', nullable: true })
   consultationSessionId!: string | null;
 

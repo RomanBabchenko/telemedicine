@@ -111,6 +111,13 @@ export class AppConfig {
     return this.config.get('DOCDREAM_STUB_ENABLED', { infer: true });
   }
 
+  get misUpload() {
+    return {
+      timeoutMs: this.config.get('MIS_UPLOAD_TIMEOUT_MS', { infer: true }),
+      allowInsecure: this.config.get('MIS_UPLOAD_ALLOW_INSECURE', { infer: true }),
+    };
+  }
+
   get patientAppUrl(): string {
     return this.config.get('PATIENT_APP_URL', { infer: true });
   }

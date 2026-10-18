@@ -74,6 +74,12 @@ export class AppointmentInfoResponseDto {
   misPaymentStatus!: 'paid' | 'unpaid' | null;
 
   @ApiProperty({
+    description:
+      'True when a documentUploadUrl is stored for this appointment, i.e. the patient sees the upload button. Debug aid for "why is there no button" — the URL itself is not echoed back.',
+  })
+  documentUploadConfigured!: boolean;
+
+  @ApiProperty({
     type: AppointmentConsultationInfoDto,
     nullable: true,
     description:

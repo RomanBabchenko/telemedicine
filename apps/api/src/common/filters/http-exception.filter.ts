@@ -15,10 +15,22 @@ const STATUS_PHRASES: Record<number, string> = {
   403: 'Forbidden',
   404: 'Not Found',
   409: 'Conflict',
+  413: 'Payload Too Large',
   422: 'Unprocessable Entity',
   429: 'Too Many Requests',
   500: 'Internal Server Error',
+  502: 'Bad Gateway',
+  504: 'Gateway Timeout',
 };
+
+// body-parser rejects an over-limit body before Nest's pipeline runs; the
+// error reaches this filter as a plain Error with `type: 'entity.too.large'`.
+// Map it to 413 so clients (the document upload modal) can show a size
+// message instead of a generic 500.
+const isPayloadTooLarge = (e: unknown): boolean =>
+  typeof e === 'object' &&
+  e !== null &&
+  (e as { type?: unknown }).type === 'entity.too.large';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -32,7 +44,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const status =
       exception instanceof HttpException
         ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
+        : isPayloadTooLarge(exception)
+          ? HttpStatus.PAYLOAD_TOO_LARGE
+          : HttpStatus.INTERNAL_SERVER_ERROR;
 
     const traceId =
       (request.header('x-request-id') ||
@@ -68,6 +82,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
           };
         }
       }
+    } else if (isPayloadTooLarge(exception)) {
+      body.message = 'Request body is too large';
+      body.code = 'payload.too_large';
     } else if (exception instanceof Error) {
       this.logger.error(
         `${request.method} ${request.originalUrl}: ${exception.message}`,

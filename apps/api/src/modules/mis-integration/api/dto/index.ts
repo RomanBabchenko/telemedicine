@@ -7,6 +7,7 @@ export * from './reschedule-appointment.body.dto';
 export * from './revoke-invites.body.dto';
 export * from './submit-appointment.body.dto';
 export * from './update-payment-status.body.dto';
+export * from './upload-mis-document.body.dto';
 
 // Response DTOs
 export * from './appointment-info.response.dto';
@@ -18,3 +19,4 @@ export * from './reschedule-appointment.response.dto';
 export * from './revoke-invites.response.dto';
 export * from './sync-job.response.dto';
 export * from './reissue-invites.response.dto';
+export * from './upload-mis-document.response.dto';

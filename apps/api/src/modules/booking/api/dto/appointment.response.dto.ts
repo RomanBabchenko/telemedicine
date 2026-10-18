@@ -120,6 +120,12 @@ export class AppointmentResponseDto implements AppointmentDto {
   misPaymentStatus?: 'paid' | 'unpaid' | null;
 
   @ApiPropertyOptional({
+    description:
+      'True when the MIS supplied a document upload URL for this appointment — the patient may POST files to /appointments/:id/mis-documents. The URL itself is never returned.',
+  })
+  canUploadDocuments?: boolean;
+
+  @ApiPropertyOptional({
     type: AppointmentPatientSummaryDto,
     description: 'Populated by list endpoints so admin/doctor UIs avoid N+1 lookups.',
   })

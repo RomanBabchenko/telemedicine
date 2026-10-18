@@ -181,3 +181,30 @@ describe('SubmitAppointmentBodyDto', () => {
     });
   });
 });
+
+describe('SubmitAppointmentBodyDto — documentUploadUrl', () => {
+  const anon = { ...baseDoctorAndTime, isAnonymousPatient: true };
+
+  it('is optional', async () => {
+    expect(await validateDto(anon)).toHaveLength(0);
+  });
+
+  it('accepts an absolute http(s) URL', async () => {
+    expect(
+      await validateDto({ ...anon, documentUploadUrl: 'https://hub.docdream.example/upload/dd-1' }),
+    ).toHaveLength(0);
+    expect(
+      await validateDto({ ...anon, documentUploadUrl: 'http://localhost:4100/upload/dd-1' }),
+    ).toHaveLength(0);
+  });
+
+  it.each([
+    ['a relative path', '/upload/dd-1'],
+    ['a non-http scheme', 'ftp://hub.docdream.example/upload'],
+    ['garbage', 'not a url'],
+    ['an over-long URL', `https://hub.docdream.example/${'x'.repeat(2048)}`],
+  ])('rejects %s', async (_label, documentUploadUrl) => {
+    const errors = await validateDto({ ...anon, documentUploadUrl });
+    expect(errors.map((e) => e.property)).toEqual(['documentUploadUrl']);
+  });
+});

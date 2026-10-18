@@ -70,3 +70,6 @@ infra/livekit/*.gen.yaml
 # claude code local state
 .claude
 CLAUDE.local.md
+
+# local scratch (mock upload hub saves files here)
+tmp/

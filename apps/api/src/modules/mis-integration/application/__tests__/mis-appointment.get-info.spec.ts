@@ -18,6 +18,7 @@ const makeAppt = (overrides: Partial<Appointment> = {}): Appointment =>
     cancelledReason: null,
     misPaymentType: null,
     misPaymentStatus: null,
+    misDocumentUploadUrl: null,
     consultationSessionId: null,
     ...overrides,
   }) as unknown as Appointment;
@@ -56,6 +57,7 @@ describe('MisAppointmentService.getInfo', () => {
       isAnonymousPatient: false,
       misPaymentType: null,
       misPaymentStatus: null,
+      documentUploadConfigured: false,
       consultation: null,
     });
     // Don't hit the sessions repo when there's no session id — saves a query.
@@ -97,6 +99,14 @@ describe('MisAppointmentService.getInfo', () => {
     });
     expect(dto.misPaymentType).toBe('prepaid');
     expect(dto.misPaymentStatus).toBe('paid');
+  });
+
+  it('reports documentUploadConfigured without echoing the URL', async () => {
+    const appt = makeAppt({ misDocumentUploadUrl: 'https://hub.docdream.example/upload/x' });
+    const { service } = buildService(appt, null);
+    const dto = await service.getInfo('t-1', { kind: 'internal', appointmentId: 'a-1' });
+    expect(dto.documentUploadConfigured).toBe(true);
+    expect(JSON.stringify(dto)).not.toContain('hub.docdream.example');
   });
 
   it('keeps consultation timestamp fields null when only one party has joined', async () => {

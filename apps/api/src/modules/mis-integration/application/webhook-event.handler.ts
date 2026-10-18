@@ -95,6 +95,15 @@ export class WebhookEventHandler {
       payload.externalAppointmentId,
     );
     if (existingApptId) {
+      // The upload URL is minted per POST by the MIS hub, so a re-POST
+      // carries a fresh one — store it, otherwise the patient would keep
+      // relaying files to a link the MIS has already retired.
+      if (payload.documentUploadUrl) {
+        await this.appointments.update(
+          { id: existingApptId, tenantId },
+          { misDocumentUploadUrl: payload.documentUploadUrl },
+        );
+      }
       return this.reissueInvites(tenantId, existingApptId);
     }
 
@@ -169,11 +178,19 @@ export class WebhookEventHandler {
       if (existingAppt) {
         // A MIS webhook landing on a platform-booked slot adopts the row —
         // flag it so MIS-scoped admins can see it.
+        let dirty = false;
         if (existingAppt.source !== AppointmentSource.MIS) {
           existingAppt.source = AppointmentSource.MIS;
-          return apptRepo.save(existingAppt);
+          dirty = true;
         }
-        return existingAppt;
+        if (
+          payload.documentUploadUrl &&
+          existingAppt.misDocumentUploadUrl !== payload.documentUploadUrl
+        ) {
+          existingAppt.misDocumentUploadUrl = payload.documentUploadUrl;
+          dirty = true;
+        }
+        return dirty ? apptRepo.save(existingAppt) : existingAppt;
       }
 
       // paymentType/paymentStatus default to postpaid+unpaid when the MIS
@@ -205,6 +222,7 @@ export class WebhookEventHandler {
         endAt,
         misPaymentType: paymentType,
         misPaymentStatus: paymentStatus,
+        misDocumentUploadUrl: payload.documentUploadUrl ?? null,
       });
       return apptRepo.save(appt);
     });

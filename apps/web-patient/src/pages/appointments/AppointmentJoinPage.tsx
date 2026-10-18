@@ -13,7 +13,7 @@ import {
 } from '@livekit/components-react';
 import { DisconnectReason, Track, VideoPreset } from 'livekit-client';
 import dayjs from 'dayjs';
-import { bookingApi, consultationApi } from '@telemed/api-client';
+import { bookingApi, consultationApi, misDocumentsApi } from '@telemed/api-client';
 import {
   AppointmentStatus,
   ConsultationStatus,
@@ -26,6 +26,7 @@ import {
   CallControls,
   RecordingIndicator,
   RECORDING_NOTICE_REQUIRED_CODE,
+  UploadDocumentsButton,
   useRecordingNotice,
 } from '@telemed/web-shared';
 import { LobbyDeviceState, LobbyPreview } from './LobbyPreview';
@@ -52,6 +53,7 @@ const LeaveButton = () => {
 
 const booking = bookingApi(apiClient);
 const consultation = consultationApi(apiClient);
+const misDocuments = misDocumentsApi(apiClient);
 
 // Must mirror the backend gate in ConsultationService.issueJoinToken —
 // UI phases flip on the same boundaries so users don't hit a 403 surprise.
@@ -724,6 +726,14 @@ export const AppointmentJoinPage = () => {
               >
                 Підключитись
               </Button>
+              {/* Only MIS appointments that came with a documentUploadUrl —
+               * the backend relays files there and stores nothing. */}
+              {apptQ.data?.canUploadDocuments ? (
+                <UploadDocumentsButton
+                  variant="lobby"
+                  upload={(dto) => misDocuments.upload(id!, dto)}
+                />
+              ) : null}
             </div>
           </Card>
           {recordingNotice.modal}
@@ -844,6 +854,16 @@ export const AppointmentJoinPage = () => {
             >
               <CallControls />
               <LeaveButton />
+              {apptQ.data?.canUploadDocuments ? (
+                <UploadDocumentsButton
+                  variant="call"
+                  upload={(dto) => misDocuments.upload(id!, dto)}
+                  // Portal into the call container so the modal is visible
+                  // in real and pseudo fullscreen (see LeaveButton in the
+                  // doctor app for the same trick).
+                  container={fsContainerRef.current}
+                />
+              ) : null}
               <button
                 type="button"
                 onClick={toggleFullscreen}

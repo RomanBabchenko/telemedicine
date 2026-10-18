@@ -14,3 +14,4 @@ export * from './endpoints/audit';
 export * from './endpoints/admin';
 export * from './endpoints/admin-users';
 export * from './endpoints/feedback';
+export * from './endpoints/mis-documents';

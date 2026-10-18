@@ -119,6 +119,7 @@ export class MisAppointmentService {
       isAnonymousPatient: appt.isAnonymousPatient,
       misPaymentType: appt.misPaymentType,
       misPaymentStatus: appt.misPaymentStatus,
+      documentUploadConfigured: !!appt.misDocumentUploadUrl,
       consultation: session
         ? {
             sessionId: session.id,

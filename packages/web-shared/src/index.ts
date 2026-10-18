@@ -15,3 +15,8 @@ export type { LobbyDeviceState } from './LobbyPreview';
 export { useTableControls, DEFAULT_PAGE_SIZE } from './use-table-controls';
 export type { TableControls } from './use-table-controls';
 export { useDebouncedValue } from './use-debounced-value';
+export { DocumentUploadModal } from './DocumentUploadModal';
+export type { DocumentUploadModalProps } from './DocumentUploadModal';
+export { UploadDocumentsButton } from './UploadDocumentsButton';
+export type { UploadDocumentsButtonProps } from './UploadDocumentsButton';
+export { fileToBase64, resolveContentType, sanitiseFileName } from './file-to-base64';

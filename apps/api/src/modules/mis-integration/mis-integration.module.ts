@@ -24,12 +24,14 @@ import { WebhookEventHandler } from './application/webhook-event.handler';
 import { IntegrationApiKeyService } from './application/integration-api-key.service';
 import { MisAppointmentService } from './application/mis-appointment.service';
 import { InviteConsumeService } from './application/invite-consume.service';
+import { MisDocumentRelayService } from './application/mis-document-relay.service';
 import { ApiKeyGuard } from '../../common/auth/api-key.guard';
 import { DocDreamStubConnector } from './infrastructure/adapters/docdream-stub.connector';
 import { MisController } from './api/mis.controller';
 import { InviteController } from './api/invite.controller';
 import { AdminInviteController } from './api/admin-invite.controller';
 import { IntegrationKeysAdminController } from './api/integration-keys-admin.controller';
+import { MisDocumentController } from './api/mis-document.controller';
 
 @Module({
   imports: [
@@ -62,9 +64,16 @@ import { IntegrationKeysAdminController } from './api/integration-keys-admin.con
     IntegrationApiKeyService,
     MisAppointmentService,
     InviteConsumeService,
+    MisDocumentRelayService,
     ApiKeyGuard,
   ],
-  controllers: [MisController, InviteController, AdminInviteController, IntegrationKeysAdminController],
+  controllers: [
+    MisController,
+    InviteController,
+    AdminInviteController,
+    IntegrationKeysAdminController,
+    MisDocumentController,
+  ],
   exports: [ConnectorRegistry, SyncJobService, IntegrationApiKeyService],
 })
 export class MisIntegrationModule {}

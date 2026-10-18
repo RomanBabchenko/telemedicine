@@ -27,6 +27,7 @@ export const toAppointmentResponse = (a: Appointment): AppointmentResponseDto =>
   createdAt: a.createdAt.toISOString(),
   misPaymentType: a.misPaymentType ?? null,
   misPaymentStatus: a.misPaymentStatus ?? null,
+  canUploadDocuments: !!a.misDocumentUploadUrl,
 });
 
 export const toAppointmentPatientSummary = (

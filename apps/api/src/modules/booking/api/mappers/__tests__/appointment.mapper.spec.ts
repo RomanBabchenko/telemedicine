@@ -25,6 +25,7 @@ const buildAppointment = () =>
     createdAt: new Date('2026-04-20T08:00:00.000Z'),
     misPaymentType: null,
     misPaymentStatus: null,
+    misDocumentUploadUrl: null,
   }) as unknown as Parameters<typeof toAppointmentResponse>[0];
 
 describe('appointment mapper', () => {
@@ -47,6 +48,16 @@ describe('appointment mapper', () => {
     delete (appt as unknown as { isAnonymousPatient?: boolean }).isAnonymousPatient;
     const dto = toAppointmentResponse(appt);
     expect(dto.isAnonymousPatient).toBe(false);
+  });
+
+  it('exposes canUploadDocuments as a flag and never the MIS upload URL', () => {
+    expect(toAppointmentResponse(buildAppointment()).canUploadDocuments).toBe(false);
+    const appt = buildAppointment();
+    (appt as unknown as { misDocumentUploadUrl: string | null }).misDocumentUploadUrl =
+      'https://hub.docdream.example/upload/abc';
+    const dto = toAppointmentResponse(appt);
+    expect(dto.canUploadDocuments).toBe(true);
+    expect(JSON.stringify(dto)).not.toContain('hub.docdream.example');
   });
 
   it('builds the patient summary with null-safe phone/email', () => {
