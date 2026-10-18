@@ -32,7 +32,10 @@ interface AuditMeta {
 
 // Platform staff work from the bare app hosts, so loginPolicy.requireSubdomain
 // never applies to them — and a platform operator can always flip the flag
-// back off for a clinic that misconfigured it.
+// back off for a clinic that misconfigured it. The exemption is judged across
+// ALL of the user's memberships, not just the default tenant: a super admin
+// who also holds a clinic role (with that clinic as default) must not lock
+// themselves out of the platform.
 const SUBDOMAIN_EXEMPT_ROLES: ReadonlySet<Role> = new Set([
   Role.PLATFORM_SUPER_ADMIN,
   Role.PLATFORM_FINANCE,
@@ -151,7 +154,7 @@ export class AuthService {
     if (tenantId && !(await this.tenants.canLogin(tenantId, roles))) {
       throw new ForbiddenException(LOGIN_DISABLED_ERROR);
     }
-    await this.assertSubdomainPolicy(tenantId, roles, meta.origin);
+    await this.assertSubdomainPolicy(user.id, tenantId, meta.origin);
 
     const ok = await this.passwords.verify(user.passwordHash, input.password);
     if (!ok) throw new UnauthorizedException('Invalid credentials');
@@ -217,7 +220,7 @@ export class AuthService {
 
     const tenantId = await this.userService.getDefaultTenantId(user.id);
     const roles = await this.userService.getRoles(user.id, tenantId);
-    await this.assertSubdomainPolicy(tenantId, roles, meta.origin);
+    await this.assertSubdomainPolicy(user.id, tenantId, meta.origin);
     return this.buildAuthResponse(user, roles, tenantId, meta);
   }
 
@@ -257,7 +260,7 @@ export class AuthService {
     }
     const tenantId = await this.userService.getDefaultTenantId(user.id);
     const roles = await this.userService.getRoles(user.id, tenantId);
-    await this.assertSubdomainPolicy(tenantId, roles, meta.origin);
+    await this.assertSubdomainPolicy(user.id, tenantId, meta.origin);
     return this.buildAuthResponse(user, roles, tenantId, meta);
   }
 
@@ -267,15 +270,16 @@ export class AuthService {
   // boundary — a scripted client can forge Origin; credentials and the
   // other login gates still apply either way.
   private async assertSubdomainPolicy(
+    userId: string,
     tenantId: string | null,
-    roles: Role[],
     origin: string | null | undefined,
   ): Promise<void> {
     if (!tenantId) return;
-    if (roles.some((r) => SUBDOMAIN_EXEMPT_ROLES.has(r))) return;
     const tenant = await this.tenants.findById(tenantId);
     if (!tenant || tenant.isPlatform) return;
     if (tenant.loginPolicy?.requireSubdomain !== true) return;
+    const allRoles = await this.userService.getRoles(userId);
+    if (allRoles.some((r) => SUBDOMAIN_EXEMPT_ROLES.has(r))) return;
     if (origin) {
       try {
         const host = new URL(origin).hostname;
