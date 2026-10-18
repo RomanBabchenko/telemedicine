@@ -149,7 +149,7 @@ export class AuthService {
     // of whether the password was right. Admin/internal roles bypass
     // this check inside `canLogin` so an operator can never lock
     // themselves out by toggling the flags off.
-    const tenantId = await this.userService.getDefaultTenantId(user.id);
+    const tenantId = await this.resolveLoginTenant(user.id);
     const roles = await this.userService.getRoles(user.id, tenantId);
     if (tenantId && !(await this.tenants.canLogin(tenantId, roles))) {
       throw new ForbiddenException(LOGIN_DISABLED_ERROR);
@@ -218,7 +218,7 @@ export class AuthService {
     }
     await this.users.save(user);
 
-    const tenantId = await this.userService.getDefaultTenantId(user.id);
+    const tenantId = await this.resolveLoginTenant(user.id);
     const roles = await this.userService.getRoles(user.id, tenantId);
     await this.assertSubdomainPolicy(user.id, tenantId, meta.origin);
     return this.buildAuthResponse(user, roles, tenantId, meta);
@@ -258,10 +258,33 @@ export class AuthService {
         true,
       );
     }
-    const tenantId = await this.userService.getDefaultTenantId(user.id);
+    const tenantId = await this.resolveLoginTenant(user.id);
     const roles = await this.userService.getRoles(user.id, tenantId);
     await this.assertSubdomainPolicy(user.id, tenantId, meta.origin);
     return this.buildAuthResponse(user, roles, tenantId, meta);
+  }
+
+  // Which tenant a sign-in lands in. Each SPA runs on a clinic subdomain and
+  // sends that clinic as X-Tenant-Id on every request (see
+  // web-shared/tenant-bootstrap.ts), so the request context already names the
+  // clinic the user is signing in to. Use it whenever the user holds a
+  // membership there; otherwise fall back to the default membership (bare
+  // hosts, curl/Swagger, or a subdomain the user doesn't belong to).
+  //
+  // Before this, every sign-in resolved to the default membership. A doctor
+  // working in several clinics therefore always landed in the default one,
+  // and when that clinic had requireSubdomain enabled, the login page of
+  // every OTHER clinic rejected them with SUBDOMAIN_REQUIRED_ERROR — the
+  // Origin check compared the current subdomain against the wrong tenant.
+  // The membership check keeps a client from picking an arbitrary tenant via
+  // the header: only tenants the user already belongs to are selectable.
+  private async resolveLoginTenant(userId: string): Promise<string | null> {
+    const requested = this.tenantContext.get()?.tenantId ?? null;
+    if (requested) {
+      const rolesThere = await this.userService.getMembershipRolesInTenant(userId, requested);
+      if (rolesThere.length > 0) return requested;
+    }
+    return this.userService.getDefaultTenantId(userId);
   }
 
   // loginPolicy.requireSubdomain: the tenant only accepts logins started
@@ -297,7 +320,7 @@ export class AuthService {
     const { session, payload } = await this.tokens.refresh(refreshToken);
     const user = await this.userService.getByIdOrThrow(payload.sub);
     await this.tokens.revoke(session.id);
-    const tenantId = await this.userService.getDefaultTenantId(user.id);
+    const tenantId = await this.resolveLoginTenant(user.id);
     const roles = await this.userService.getRoles(user.id, tenantId);
     // Same gate as `login()` — without this, a refresh token issued
     // before the operator disabled the login channel would keep
