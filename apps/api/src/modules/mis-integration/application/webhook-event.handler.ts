@@ -25,6 +25,7 @@ import { UserTenantMembership } from '../../identity/domain/entities/user-tenant
 import { Tenant } from '../../tenant/domain/entities/tenant.entity';
 import { ConsultationService } from '../../consultation/application/consultation.service';
 import { ConsultationInviteService } from './consultation-invite.service';
+import { misDoctorEmail, misPatientEmail } from './mis-identity';
 import { PasswordService } from '../../identity/application/password.service';
 import { AppConfig } from '../../../config/env.config';
 
@@ -417,6 +418,7 @@ export class WebhookEventHandler {
         const userId = await this.ensureDoctorHasRealUser(
           doctor,
           tenantId,
+          connectorId,
           payload,
         );
         await this.ensureDoctorTenantProfile(tenantId, doctor);
@@ -431,6 +433,7 @@ export class WebhookEventHandler {
   private async ensureDoctorHasRealUser(
     doctor: Doctor,
     tenantId: string,
+    connectorId: string,
     payload: OnlineAppointmentPayload,
   ): Promise<string> {
     if (doctor.userId !== PLACEHOLDER_USER_ID) {
@@ -447,7 +450,7 @@ export class WebhookEventHandler {
     }
 
     // Replace placeholder with a real user
-    const email = `doctor.${payload.doctorExternalId}@mis-import.local`;
+    const email = misDoctorEmail({ tenantId, connectorId, externalId: payload.doctorExternalId });
     const user = await this.findOrCreateUser({
       email,
       firstName: doctor.firstName,
@@ -466,7 +469,7 @@ export class WebhookEventHandler {
     connectorId: string,
     payload: OnlineAppointmentPayload,
   ): Promise<{ doctorId: string; doctorUserId: string }> {
-    const email = `doctor.${payload.doctorExternalId}@mis-import.local`;
+    const email = misDoctorEmail({ tenantId, connectorId, externalId: payload.doctorExternalId });
     const user = await this.findOrCreateUser({
       email,
       firstName: payload.doctorFirstName,
@@ -608,7 +611,8 @@ export class WebhookEventHandler {
     // Replaces the old `Date.now()`-based fallback that produced a fresh
     // synthetic email — and a duplicate User/Patient — on every webhook.
     const email =
-      payload.patientEmail ?? `patient.${patientExternalId}@mis-import.local`;
+      payload.patientEmail ??
+      misPatientEmail({ tenantId, connectorId, externalId: patientExternalId });
     const user = await this.findOrCreateUser({
       email,
       phone: payload.patientPhone,
