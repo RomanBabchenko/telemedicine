@@ -563,7 +563,7 @@ export class WebhookEventHandler {
         return { patientId: patient.id, patientUserId: patient.userId };
       }
       if (patient) {
-        const userId = await this.createUserForPatient(patient, tenantId, payload);
+        const userId = await this.createUserForPatient(patient, tenantId, connectorId, payload);
         return { patientId: patient.id, patientUserId: userId };
       }
     }
@@ -574,12 +574,18 @@ export class WebhookEventHandler {
   private async createUserForPatient(
     patient: Patient,
     tenantId: string,
+    connectorId: string,
     payload: OnlineAppointmentPayload,
   ): Promise<string> {
-    // Named path only — anonymous payloads never reach createUserForPatient.
+    // Named path only — anonymous payloads never reach createUserForPatient,
+    // so patientExternalId is present (validated at the handler entry).
     const email =
       payload.patientEmail ??
-      `patient.${patient.id.slice(0, 8)}@mis-import.local`;
+      misPatientEmail({
+        tenantId,
+        connectorId,
+        externalId: payload.patientExternalId as string,
+      });
     const user = await this.findOrCreateUser({
       email,
       phone: payload.patientPhone,
